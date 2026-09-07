@@ -12,3 +12,12 @@ services:
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
+
+# 显式指定容器子网，避免 NAS 的 Docker 默认地址池耗尽时无法创建网络。
+# 这是容器内部网络，不是 NAS 的局域网地址；如与现有 LAN/VPN/Docker 子网重叠，请更换。
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.253.231.0/24
