@@ -1,0 +1,5 @@
+# 与 docker-compose.yaml 合并供开发者构建；NAS 直接使用 docker-compose.yaml 拉镜像。
+services:
+  ktv:
+    build: .
+    image: haohaochang:dev

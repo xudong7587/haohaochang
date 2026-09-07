@@ -14,7 +14,7 @@ NAS 保存曲库、下载资源、处理伴奏并输出视频流。电视安装�
 
 ## NAS 部署：只需要一个 Compose 文件
 
-公开镜像已经发布：`ghcr.io/xudong7587/haohaochang:latest`。NAS 无需登录，不需要 .env 或手工创建配置文件。直接在 UGOS Docker 项目里粘贴项目根目录的 compose.yaml，修改管理密码、宿主机端口、数据目录和曲库目录即可。
+公开镜像已经发布：`ghcr.io/xudong7587/haohaochang:latest`。NAS 无需登录，不需要 .env 或手工创建配置文件。直接在 UGOS Docker 项目里粘贴项目根目录的 docker-compose.yaml，修改管理密码、宿主机端口、数据目录和曲库目录即可。
 
 默认端口映射为 3210:3210。左侧可换成 NAS 空闲端口，右侧固定 3210。数据目录映射到 /data，曲库映射到 /media:ro。曲库路径须替换成 NAS 的真实路径。
 
@@ -30,6 +30,20 @@ docker compose up -d
 ```
 
 源码和发布流程位于 [GitHub 仓库](https://github.com/xudong7587/haohaochang)。目前镜像支持 linux/amd64，适用于当前这台 Intel NAS。
+
+## 仓库中的 YAML 文件是做什么的？
+
+普通 NAS 部署只需要 `docker-compose.yaml`，其余文件不需要导入 UGOS。
+
+| 文件 | 用途 | 什么时候需要 |
+| --- | --- | --- |
+| `docker-compose.yaml` | 启动 KTV 主服务，包含后台、点歌、曲库和媒体处理 | NAS 部署必需 |
+| `docker-compose.ai.yaml` | 额外启动本地 Demucs 人声/伴奏分离容器，消耗 NAS 的 CPU 和内存 | 希望由 NAS 本地运行 AI 分离时，与主文件合并；使用第三方 AI 不需要 |
+| `docker-compose.build.yaml` | 从源码构建主服务镜像 | 开发者使用；NAS 拉取现成镜像不需要 |
+| `.github/workflows/check.yml` | GitHub 自动检查代码并构建测试 APK | GitHub 自动运行，NAS 不使用 |
+| `.github/workflows/publish.yml` | GitHub 自动构建并发布容器镜像 | GitHub 自动运行，NAS 不使用 |
+
+AI 附加文件只负责启动分离服务；是否启用分离、服务地址、模型和密钥仍在后台管理页面设置。
 
 ## 使用曲库
 
@@ -78,8 +92,8 @@ docker compose up -d
 项目附带可选 Demucs CPU 服务，可在 NAS 本地试用：
 
 ```sh
-docker compose -f compose.yaml -f compose.ai.yaml pull
-docker compose -f compose.yaml -f compose.ai.yaml up -d
+docker compose -f docker-compose.yaml -f docker-compose.ai.yaml pull
+docker compose -f docker-compose.yaml -f docker-compose.ai.yaml up -d
 ```
 
 后台填写地址 `http://separator:8000`、模型 `htdemucs`。本地分离服务不映射公网端口，默认 API Key 留空。该服务首次使用会下载模型，CPU 分离可能耗时较长；16 GB 内存并不能使 CPU 分离变成即时操作。默认只处理一个任务，可把兼容服务部署到其他有 GPU 的机器。
@@ -101,7 +115,7 @@ npm test
 
 开发前端默认在 `5173`，后端在 `3210`。可用 `FFMPEG`、`FFPROBE`、`YTDLP` 指定程序路径，用 `MEDIA_ROOTS` 指定多个媒体目录，目录之间用 `|` 分隔。二维码地址在后台配置并保存到 settings.json。
 
-开发者若需要本地构建 Docker，可使用 `docker compose -f compose.yaml -f compose.build.yaml up -d --build`。NAS 日常部署使用默认 `compose.yaml` 拉镜像。
+开发者若需要本地构建 Docker，可使用 `docker compose -f docker-compose.yaml -f docker-compose.build.yaml up -d --build`。NAS 日常部署使用默认 `docker-compose.yaml` 拉镜像。
 
 `npm test` 包含真实媒体测试，使用开发依赖中的 FFmpeg/ffprobe 二进制。如果包管理器阻止安装脚本，需要先允许 `ffmpeg-static` 的安装脚本或执行 `node node_modules/ffmpeg-static/install.js`。
 
