@@ -1,0 +1,23 @@
+# 开发者本地构建使用；NAS 正式使用 compose.yaml 拉取 GHCR 镜像。
+services:
+  ktv:
+    build: .
+    ports: ["3210:3210"]
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?请设置管理密码}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      MEDIA_ROOTS: /media
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data:/data
+      - ${MEDIA_PATH:-./media}:/media:ro
+    restart: unless-stopped
+    init: true
+  separator:
+    profiles: [ai-local]
+    build: ./separator
+    environment:
+      SEPARATION_API_KEY: ${SEPARATION_API_KEY:-}
+    volumes: ["./data/separator:/data"]
+    restart: unless-stopped
+    init: true

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+data/
+data-preview/
+release/*.zip
+media/
+.env
+test-results/
+*.log
+.npm-cache/
+.tools/
+android/.gradle/
+android/local.properties
+android/**/build/

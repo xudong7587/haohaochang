@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.env
+.npm-cache
+.tools
+data
+data-preview
+preview
+release
+media
+android
+test-results

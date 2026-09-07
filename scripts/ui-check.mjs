@@ -1,0 +1,35 @@
+import { createRequire } from 'node:module';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createApp} from '../server/app.js';
+import {searchText} from '../server/media.js';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+await mkdir('test-results/ui',{recursive:true});
+const {app,store,close}=createApp({adminToken:'ui-test-password',dataDir:'test-results/ui/db',roots:['test-results/ui/media'],worker:false});
+store.db.exec('DELETE FROM queue; DELETE FROM songs; DELETE FROM jobs;');
+const titles=['合成测试曲 · 清晨','合成测试曲 · 夏夜','合成测试曲 · 远方'];
+titles.forEach((title,i)=>store.db.prepare('INSERT INTO songs (id,path,title,artist,search,status,duration,created,mode) VALUES (?,?,?,?,?,?,?,?,?)').run(String(i+1).repeat(24),`test-results/ui/${i}.mp4`,title,'测试歌手',searchText(title,'测试歌手'),'ready',180+i,Date.now()-i,'tracks'));
+const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
+const browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true});
+const errors=[];
+try{
+  const context=await browser.newContext({viewport:{width:1440,height:1000}});
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(base+'/tv');await page.getByLabel('管理密码').fill('ui-test-password');await page.getByRole('button',{name:'进入好好唱'}).click();
+  await page.getByText('今晚，唱点开心的。').waitFor();await page.getByRole('button',{name:'点歌 '+titles[0],exact:true}).waitFor();
+  await page.screenshot({path:'test-results/ui/tv.png',fullPage:true});
+  await page.getByRole('button',{name:'歌名点歌',exact:true}).focus();await page.keyboard.press('ArrowDown');assert.equal(await page.locator(':focus').innerText(),'歌星点歌');
+  await page.getByLabel('搜索歌名或歌手').fill('不存在的歌曲');await page.getByText('还没找到这首歌').waitFor();await page.getByRole('button',{name:'清空搜索'}).click();
+  await page.getByRole('button',{name:'扫码点歌',exact:true}).click();await page.getByRole('dialog').waitFor();assert.equal(await page.getByRole('dialog').locator('img').count(),1);await page.getByRole('button',{name:'关闭',exact:true}).click();
+  const token=store.get('roomToken');const mobileContext=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const mobile=await mobileContext.newPage();mobile.on('pageerror',e=>errors.push(e.message));
+  await mobile.goto(base+'/mobile#'+token);await mobile.getByRole('button',{name:'点歌 '+titles[0],exact:true}).waitFor();await mobile.screenshot({path:'test-results/ui/mobile.png',fullPage:true});
+  await mobile.getByRole('button',{name:'点歌 '+titles[0],exact:true}).click();await page.locator('.now-playing strong').filter({hasText:titles[0]}).waitFor();
+  await mobile.getByRole('button',{name:'发送 👏',exact:true}).click();await page.locator('.reaction-layer').getByText('👏').waitFor();
+  await page.goto(base+'/admin');await page.getByRole('button',{name:'设置与任务',exact:true}).click();await page.getByText('AI 伴奏分离',{exact:true}).waitFor();
+  await page.screenshot({path:'test-results/ui/admin.png',fullPage:true});
+  await page.getByRole('button',{name:'曲库管理',exact:true}).click();await page.getByRole('button',{name:'编辑 '+titles[1],exact:true}).click();await page.getByRole('dialog').waitFor();await page.getByLabel('歌名',{exact:true}).fill('编辑后的测试歌曲');await page.getByRole('button',{name:'保存',exact:true}).click();await page.getByText('编辑后的测试歌曲',{exact:true}).waitFor();
+  assert.deepEqual(errors,[]);console.log('UI passed: TV navigation, search, QR, mobile queue, reactions, admin, editing; no page errors.');
+  await writeFile('test-results/ui/result.json',JSON.stringify({passed:true,checks:8,pageErrors:errors},null,2));
+}finally{await browser.close();close();server.closeAllConnections();await new Promise(r=>server.close(r));}

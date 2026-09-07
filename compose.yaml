@@ -1,0 +1,25 @@
+services:
+  ktv:
+    image: ${KTV_IMAGE:?请填写 GitHub Actions 发布的 GHCR 镜像地址}
+    ports:
+      - "3210:3210"
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?请在 .env 设置至少12位管理密码}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      MEDIA_ROOTS: /media
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data:/data
+      - ${MEDIA_PATH:-./media}:/media:ro
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+  separator:
+    profiles: [ai-local]
+    image: ${SEPARATOR_IMAGE:-ghcr.io/replace-owner/haohaochang-separator:latest}
+    environment:
+      SEPARATION_API_KEY: ${SEPARATION_API_KEY:-}
+    volumes:
+      - ./data/separator:/data
+    restart: unless-stopped
+    init: true

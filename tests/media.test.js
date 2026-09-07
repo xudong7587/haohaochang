@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm, stat, readFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import express from 'express';
+import ffmpeg from 'ffmpeg-static';
+import ffprobe from 'ffprobe-static';
+import { openStore } from '../server/db.js';
+import { run, prepareSong, probe } from '../server/media.js';
+import { separateSong, testProvider } from '../server/separation.js';
+process.env.FFMPEG=ffmpeg;process.env.FFPROBE=ffprobe.path;
+test('real FFmpeg: audio fallback, dual tracks, persistent cache, AI adapter round trip',async t=>{
+  const dir=await mkdtemp(path.join(os.tmpdir(),'ktv-media-')),cache=path.join(dir,'cache');await mkdir(cache);
+  const store=openStore(path.join(dir,'db'));t.after(async()=>{store.db.close();await rm(dir,{recursive:true,force:true});});
+  const audio=path.join(dir,'test.wav');await run(ffmpeg,['-y','-v','error','-f','lavfi','-i','sine=frequency=440:duration=2',audio]);
+  const add=(id,file,mode='original',backing=0,vocal=0)=>store.db.prepare('INSERT INTO songs (id,path,title,artist,mode,backing,vocal,created) VALUES (?,?,?,?,?,?,?,?)').run(id,file,'测试','测试',mode,backing,vocal,Date.now());
+  const a='a'.repeat(24);add(a,audio);await prepareSong(store,a,[dir],cache);
+  assert.equal(store.db.prepare('SELECT needs_video FROM songs WHERE id=?').get(a).needs_video,1);
+  const out=path.join(cache,a+'-vocal.mp4'),info=await probe(out);assert.equal(info.hasVideo,true);assert.equal(info.audio[0].codec,'aac');assert.ok(Math.abs(info.duration-2)<.3);
+  const first=(await stat(out)).mtimeMs;await prepareSong(store,a,[dir],cache);assert.equal((await stat(out)).mtimeMs,first);
+  const dual=path.join(dir,'dual.mkv');await run(ffmpeg,['-y','-v','error','-f','lavfi','-i','color=c=purple:s=320x180:d=2','-f','lavfi','-i','sine=frequency=440:duration=2','-f','lavfi','-i','sine=frequency=880:duration=2','-map','0:v','-map','1:a','-map','2:a','-c:v','libx264','-c:a','aac','-shortest',dual]);
+  const b='b'.repeat(24);add(b,dual,'tracks',0,1);await prepareSong(store,b,[dir],cache);
+  const x=await readFile(path.join(cache,b+'-backing.mp4')),y=await readFile(path.join(cache,b+'-vocal.mp4'));assert.notDeepEqual(x,y);
+  // Mock only the remote AI computation; upload, result download and muxing are real.
+  let requests=0;const remote=express();remote.use((req,res,next)=>{assert.equal(req.get('authorization'),'Bearer private-key');next();});
+  remote.get('/health',(req,res)=>res.json({protocol:'ktv-separation-v1'}));
+  remote.post('/separate',express.raw({type:()=>true,limit:'5mb'}),(req,res)=>{requests++;assert.match(req.get('content-type'),/multipart/);assert.ok(req.body.length>1000);res.json({status:'done',instrumental_url:'/result'});});
+  remote.get('/result',(req,res)=>res.sendFile(audio));const server=remote.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
+  store.set('ai',{enabled:true,endpoint:`http://127.0.0.1:${server.address().port}`,model:'test',apiKey:'private-key'});assert.equal((await testProvider(store.get('ai'))).ok,true);
+  await separateSong(store,store.db.prepare('SELECT * FROM songs WHERE id=?').get(a),cache);assert.equal(requests,1);assert.equal(store.db.prepare('SELECT mode FROM songs WHERE id=?').get(a).mode,'separated');assert.ok((await stat(path.join(cache,a+'-backing.mp4'))).size>1000);
+  await prepareSong(store,a,[dir],cache);assert.equal(requests,1);
+});
