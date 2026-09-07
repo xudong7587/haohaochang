@@ -9,6 +9,7 @@ jobs:
         with: {node-version: '24', cache: npm}
       - run: npm ci
       - run: npm test
+        timeout-minutes: 3
       - run: npm run build
       - run: docker build -t haohaochang:test .
   apk:

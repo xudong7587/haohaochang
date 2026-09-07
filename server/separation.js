@@ -53,7 +53,8 @@ export async function separateSong(store,song,cache){
   if(result.status!=='done'||!result.instrumental_url)throw new Error('AI 分离失败或缺少伴奏结果');
   await saveResult(result.instrumental_url,config,backing);
   const output=path.join(cache,`${song.id}-backing.mp4`);
-  await run(process.env.FFMPEG||'ffmpeg',['-y','-v','error','-i',vocal,'-i',backing,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-af','apad','-shortest','-movflags','+faststart','-f','mp4',output+'.tmp'],600000);
+  if(!Number.isFinite(song.duration)||song.duration<=0)throw new Error('无法读取歌曲时长');
+  await run(process.env.FFMPEG||'ffmpeg',['-y','-v','error','-i',vocal,'-i',backing,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-af','apad','-t',String(song.duration),'-shortest','-movflags','+faststart','-f','mp4',output+'.tmp'],600000);
   await rename(output+'.tmp',output);
   store.db.prepare("UPDATE songs SET mode='separated',status='ready',error='' WHERE id=?").run(song.id);
   return true;

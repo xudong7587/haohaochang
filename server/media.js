@@ -75,7 +75,7 @@ export async function prepareSong(store, id, roots, cache) {
       if(cover)args.push('-loop','1','-i',cover);else args.push('-f','lavfi','-i','color=c=0x272433:s=1280x720:r=15');
     }
     args.push('-map',info.hasVideo?'0:v:0':'1:v:0','-map', `0:a:${track}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-vf', "scale=w='min(1920,iw)':h=-2", '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k');
-    if(!info.hasVideo)args.push('-shortest');
+    if(!info.hasVideo){if(!Number.isFinite(info.duration)||info.duration<=0)throw new Error('无法读取音频时长，不能生成背景视频');args.push('-t',String(info.duration),'-shortest');}
     if (song.mode === 'channels') args.push('-af', `pan=stereo|c0=c${song[variant]}|c1=c${song[variant]}`);
     args.push('-movflags', '+faststart', '-f', 'mp4', output + '.tmp');
     await run(process.env.FFMPEG || 'ffmpeg', args, 3600000);
