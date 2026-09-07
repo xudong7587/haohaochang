@@ -12,31 +12,24 @@ NAS 保存曲库、下载资源、处理伴奏并输出视频流。电视安装�
 
 电视模拟器运行与 APK 相同的网页和播放器，但不模拟 Android 系统解码器。UI 调整和大多数业务流程可在电脑测试，电视硬件兼容性留到最后验收。
 
-## GitHub 构建、NAS 拉取部署
+## NAS 部署：只需要一个 Compose 文件
 
-1. 将源码推送到自己的 GitHub 仓库，运行 `Publish NAS images` 工作流，或推送 `v*` 标签。工作流发布 `ghcr.io/账户/仓库` 和 `ghcr.io/账户/仓库-separator`，当前构建 `linux/amd64`。仓库创建和首次发布尚未执行。
-2. NAS 只需要 `compose.yaml` 和 `.env`，不需要源码或编译工具。将 `.env.example` 复制为 `.env`，填写实际发布的镜像地址及下方配置。UGOS 的存储路径随存储池而变化，请从文件管理器取得真实路径。
+公开镜像已经发布：`ghcr.io/xudong7587/haohaochang:latest`。NAS 无需登录，不需要 .env 或手工创建配置文件。直接在 UGOS Docker 项目里粘贴项目根目录的 compose.yaml，修改管理密码、宿主机端口、数据目录和曲库目录即可。
 
-   ```dotenv
-   KTV_IMAGE=ghcr.io/你的账户/你的仓库:latest
-   SEPARATOR_IMAGE=ghcr.io/你的账户/你的仓库-separator:latest
-   MEDIA_PATH=/volume1/media/ktv
-   ADMIN_TOKEN=填写至少12位的管理密码
-   PUBLIC_URL=http://192.168.1.100:3210
-   ```
+默认端口映射为 3210:3210。左侧可换成 NAS 空闲端口，右侧固定 3210。数据目录映射到 /data，曲库映射到 /media:ro。曲库路径须替换成 NAS 的真实路径。
 
-3. 在 UGOS Docker 的项目功能中导入 `compose.yaml`，或执行：
+启动后，浏览器打开 http://NAS-IP:端口/admin，用 Compose 中的管理密码登录。NAS 访问地址、在线搜索开关、AI 地址、模型和密钥都在后台设置。首次运行会自动创建 /data/settings.json；点击保存时原子更新，重启后继续读取。旧版数据库中的设置会自动迁移。
 
-   ```sh
-   docker compose pull
-   docker compose up -d
-   ```
+电视安装 release/haohaochang-tv-0.1.0-debug.apk，填写同一个 NAS 地址并登录。手机连接相同局域网，扫描电视二维码即可点歌。更换映射端口后，可在后台填写完整访问地址以更新二维码。
 
-4. 打开 `http://NAS-IP:3210/admin`，输入管理密码，点击“扫描曲库”。GHCR 镜像需要设为公开，或者在 NAS 上先完成容器仓库登录。实际镜像地址必须等待仓库创建和 Actions 发布成功后取得。
-5. 安装 `release/haohaochang-tv-0.1.0-debug.apk`。可用 U 盘安装，或在已授权 ADB 的电视上执行 `adb install -r 文件路径`。首次启动填写 `http://NAS-IP:3210`，再输入管理密码。菜单键可修改 NAS 地址。
-6. 用手机扫描电视二维码。手机与 NAS 必须互通；访客 Wi-Fi 的设备隔离可能阻止连接。
+更新镜像可在 UGOS Docker 中重新拉取，也可执行：
 
-端口只需开放 `3210/tcp` 到家庭局域网。这个版本面向家庭内网，没有设计公网多租户访问。建议给 NAS 设置固定 DHCP 地址。
+```sh
+docker compose pull
+docker compose up -d
+```
+
+源码和发布流程位于 [GitHub 仓库](https://github.com/xudong7587/haohaochang)。目前镜像支持 linux/amd64，适用于当前这台 Intel NAS。
 
 ## 使用曲库
 
@@ -78,18 +71,18 @@ NAS 保存曲库、下载资源、处理伴奏并输出视频流。电视安装�
 
 ## AI 分离
 
-后台提供地址、模型和 API Key。密钥只保存在 NAS 数据库，不下发给电视或手机；数据卷应当按凭证资料备份和保护。检测只验证服务连通及接口协议，不代表音质或模型推理速度已经验证。
+后台提供地址、模型和 API Key。密钥只保存在 NAS 的 settings.json，不下发给电视或手机；数据卷应当按凭证资料备份和保护。检测只验证服务连通及接口协议，不代表音质或模型推理速度已经验证。
 
 普通聊天模型 API 不能直接做人声分离。本项目定义了 `ktv-separation-v1`，第三方服务需要直接兼容该协议，或通过适配器接入。协议和示例在 [docs/AI-SEPARATION.md](docs/AI-SEPARATION.md)。
 
 项目附带可选 Demucs CPU 服务，可在 NAS 本地试用：
 
 ```sh
-docker compose --profile ai-local pull
-docker compose --profile ai-local up -d
+docker compose -f compose.yaml -f compose.ai.yaml pull
+docker compose -f compose.yaml -f compose.ai.yaml up -d
 ```
 
-后台填写地址 `http://separator:8000`、模型 `htdemucs`。若 `.env` 中设置了 `SEPARATION_API_KEY`，后台填写相同密钥。该服务首次使用会下载模型，CPU 分离可能耗时较长；16 GB 内存并不能使 CPU 分离变成即时操作。默认只处理一个任务，可把兼容服务部署到其他有 GPU 的机器。
+后台填写地址 `http://separator:8000`、模型 `htdemucs`。本地分离服务不映射公网端口，默认 API Key 留空。该服务首次使用会下载模型，CPU 分离可能耗时较长；16 GB 内存并不能使 CPU 分离变成即时操作。默认只处理一个任务，可把兼容服务部署到其他有 GPU 的机器。
 
 开启分离后，第一次点播普通 MV 或原唱音频，会发送音频到指定服务；NAS 保存分离伴奏并复用原始混音作为原唱。两个播放版本永久缓存，后续播放不再请求 AI。AI 失败会保留任务错误供重试，不把失败结果标记为可用伴奏。
 
@@ -99,16 +92,16 @@ docker compose --profile ai-local up -d
 
 ```sh
 npm ci
-# 设置 ADMIN_TOKEN 环境变量后：
+# 设置 ADMIN_PASSWORD 环境变量后：
 npm run dev
 npm run build
 npm start
 npm test
 ```
 
-开发前端默认在 `5173`，后端在 `3210`。可用 `FFMPEG`、`FFPROBE`、`YTDLP` 指定程序路径，用 `MEDIA_ROOTS` 指定多个媒体目录，目录之间用 `|` 分隔。`PUBLIC_URL` 环境变量优先于后台地址设置。
+开发前端默认在 `5173`，后端在 `3210`。可用 `FFMPEG`、`FFPROBE`、`YTDLP` 指定程序路径，用 `MEDIA_ROOTS` 指定多个媒体目录，目录之间用 `|` 分隔。二维码地址在后台配置并保存到 settings.json。
 
-开发者若需要本地构建 Docker，可使用 `docker compose -f compose.build.yaml up -d --build`。NAS 日常部署使用默认 `compose.yaml` 拉镜像。
+开发者若需要本地构建 Docker，可使用 `docker compose -f compose.yaml -f compose.build.yaml up -d --build`。NAS 日常部署使用默认 `compose.yaml` 拉镜像。
 
 `npm test` 包含真实媒体测试，使用开发依赖中的 FFmpeg/ffprobe 二进制。如果包管理器阻止安装脚本，需要先允许 `ffmpeg-static` 的安装脚本或执行 `node node_modules/ffmpeg-static/install.js`。
 
@@ -126,7 +119,7 @@ gradle -p android assembleDebug
 
 ## 数据与维护
 
-`data/ktv.sqlite` 保存曲库、客厅凭证、队列、配置和任务；`data/downloads` 保存在线原文件；`data/cache` 保存电视播放版本及分离中间文件；可选 AI 服务的数据位于 `data/separator`。原始媒体通过只读挂载保护。
+`data/settings.json` 保存后台设置和 AI 密钥；`data/ktv.sqlite` 保存曲库、客厅凭证、队列和任务；`data/downloads` 保存在线原文件；`data/cache` 保存电视播放版本及分离中间文件；可选 AI 服务的数据位于 `data/separator`。原始媒体通过只读挂载保护。
 
 备份前建议停止服务或使用 SQLite 一致性备份，避免只复制正在使用的数据库主文件而遗漏 WAL。任务记录和缓存当前没有自动容量回收策略，管理员需要关注 NAS 剩余空间；普通视频双版本通常占用两份视频存储。首版限制单任务、1080p 输出，尚未接入 Intel QSV/VAAPI 硬件转码。
 

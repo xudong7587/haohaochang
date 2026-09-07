@@ -5,10 +5,10 @@ import {run,searchText} from '../server/media.js';
 import ffmpeg from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 process.env.FFMPEG=ffmpeg;process.env.FFPROBE=ffprobe.path;
-process.env.PUBLIC_URL='http://127.0.0.1:3210';
 const dataDir=path.resolve('data-preview'),media=path.join(dataDir,'media'),cache=path.join(dataDir,'cache');
 await fs.mkdir(media,{recursive:true});await fs.mkdir(cache,{recursive:true});
 const {app,store}=createApp({adminToken:'preview-ktv-2026',dataDir,roots:[media]});
+store.set('publicUrl','http://127.0.0.1:3210');
 const samples=[
   {title:'客厅试音 · 双版本',artist:'好好唱实验室',color:'0x514368',mode:'tracks'},
   {title:'晚风练习曲',artist:'合成音频',color:'0x314b50',mode:'tracks'},

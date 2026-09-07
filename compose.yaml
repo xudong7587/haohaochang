@@ -1,25 +1,14 @@
+# 只需修改管理密码、左侧端口、两个目录映射；不需要 .env 文件。
 services:
   ktv:
-    image: ${KTV_IMAGE:?请填写 GitHub Actions 发布的 GHCR 镜像地址}
+    image: ghcr.io/xudong7587/haohaochang:latest
     ports:
-      - "3210:3210"
+      - "3210:3210" # 左侧为 NAS 访问端口，右侧保持 3210
     environment:
-      ADMIN_TOKEN: ${ADMIN_TOKEN:?请在 .env 设置至少12位管理密码}
-      PUBLIC_URL: ${PUBLIC_URL:-}
-      MEDIA_ROOTS: /media
-      TZ: Asia/Shanghai
+      ADMIN_PASSWORD: "change-this-password-123" # 请改为至少 12 位的管理密码
     volumes:
-      - ./data:/data
-      - ${MEDIA_PATH:-./media}:/media:ro
+      - ./data:/data # 持久化目录，自动生成 settings.json、数据库和媒体缓存
+      - /volume1/media/ktv:/media:ro # 左侧改为 NAS 的实际曲库路径
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
-  separator:
-    profiles: [ai-local]
-    image: ${SEPARATOR_IMAGE:-ghcr.io/replace-owner/haohaochang-separator:latest}
-    environment:
-      SEPARATION_API_KEY: ${SEPARATION_API_KEY:-}
-    volumes:
-      - ./data/separator:/data
-    restart: unless-stopped
-    init: true

@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 
@@ -18,10 +18,25 @@ export function openStore(dir) {
   const columns=db.prepare('PRAGMA table_info(songs)').all().map(c=>c.name);
   if(!columns.includes('needs_video'))db.exec("ALTER TABLE songs ADD COLUMN needs_video INTEGER DEFAULT 0");
   if(!columns.includes('lyrics'))db.exec("ALTER TABLE songs ADD COLUMN lyrics TEXT DEFAULT ''");
-  const get = (key, fallback) => { const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key); return row ? JSON.parse(row.value) : fallback; };
-  const set = (key, value) => db.prepare('INSERT OR REPLACE INTO settings VALUES (?,?)').run(key, JSON.stringify(value));
+  const readDb = (key, fallback) => { const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key); return row ? JSON.parse(row.value) : fallback; };
+  const configPath=path.join(dir,'settings.json');
+  const defaults={version:1,publicUrl:'',onlineEnabled:false,ai:{enabled:false,endpoint:'',model:'',apiKey:''}};
+  let config;
+  try {
+    if(existsSync(configPath)){
+      config=JSON.parse(readFileSync(configPath,'utf8').replace(/^\uFEFF/,''));
+      if(!config || typeof config!=='object' || Array.isArray(config))throw new Error('配置格式错误');
+      config={...defaults,...config};
+    }else config={...defaults,publicUrl:readDb('publicUrl',''),onlineEnabled:readDb('onlineEnabled',false),ai:readDb('ai',defaults.ai)};
+  }catch(e){db.close();throw new Error(`无法读取 ${configPath}：${e.message}。原配置未被覆盖。`);}
+  const flush = value => {writeFileSync(configPath+'.tmp',JSON.stringify(value,null,2)+'\n',{encoding:'utf8',mode:0o600});renameSync(configPath+'.tmp',configPath);};
+  flush(config);
+  const keys=new Set(['publicUrl','onlineEnabled','ai']);
+  db.prepare("DELETE FROM settings WHERE key IN ('publicUrl','onlineEnabled','ai')").run();
+  const get = (key, fallback) => keys.has(key) ? (config[key]??fallback) : readDb(key,fallback);
+  const set = (key, value) => {if(keys.has(key)){const next={...config,[key]:value};flush(next);config=next;}else db.prepare('INSERT OR REPLACE INTO settings VALUES (?,?)').run(key,JSON.stringify(value));};
   if (!get('roomToken')) set('roomToken', randomBytes(24).toString('hex'));
   if (!get('playback')) set('playback', { paused: false, vocal: false, revision: 0 });
   db.prepare("UPDATE jobs SET status='queued',error='' WHERE status='running'").run();
-  return { db, get, set };
+  return { db, get, set, configPath };
 }

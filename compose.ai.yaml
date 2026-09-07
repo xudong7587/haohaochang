@@ -1,0 +1,9 @@
+# 可选的本地 AI 服务，与 compose.yaml 合并使用；只用第三方 AI 时不需要它。
+# docker compose -f compose.yaml -f compose.ai.yaml up -d
+services:
+  separator:
+    image: ghcr.io/xudong7587/haohaochang-separator:latest
+    volumes:
+      - ./data/separator:/data
+    restart: unless-stopped
+    init: true

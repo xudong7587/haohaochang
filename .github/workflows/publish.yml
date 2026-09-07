@@ -51,12 +51,13 @@ jobs:
         run: |
           docker pull "$IMAGE"
           if [ -z "$KIND" ]; then
-            docker run -d --name verify -e ADMIN_TOKEN=ci-smoke-password-123 -p 3210:3210 "$IMAGE"
+            docker run -d --name verify -e ADMIN_PASSWORD=ci-smoke-password-123 -p 3210:3210 "$IMAGE"
             for n in $(seq 1 20); do
               if curl -fsS http://localhost:3210/api/health; then break; fi
               sleep 2
             done
             curl -fsS http://localhost:3210/api/health
+            docker exec verify node -e "const c=JSON.parse(require('fs').readFileSync('/data/settings.json'));if(c.version!==1)process.exit(1);console.log('settings.json initialized')"
             docker exec verify ffmpeg -version
             docker exec verify /opt/ytdlp/bin/yt-dlp --version
           else

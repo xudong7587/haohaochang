@@ -18,8 +18,8 @@ export function createApp(options = {}) {
   const downloads = path.join(dir, 'downloads'), cache = path.join(dir, 'cache');
   [downloads, cache].forEach(p => mkdirSync(p, { recursive: true }));
   const store = openStore(dir), { db, get, set } = store;
-  const adminToken = options.adminToken || process.env.ADMIN_TOKEN;
-  if (!adminToken || adminToken.length < 12) throw new Error('请设置至少 12 位的 ADMIN_TOKEN（管理密码）');
+  const adminToken = options.adminToken || process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN;
+  if (!adminToken || adminToken.length < 12) throw new Error('请设置至少 12 位的 ADMIN_PASSWORD（管理密码）');
   const app = express();
   const clients = new Set(), limits = new Map();
   let running = false, stopped = false, player = null;
@@ -173,7 +173,7 @@ export function createApp(options = {}) {
   });
   app.get('/api/join', member, async (req,res) => {
     const lan = Object.values(os.networkInterfaces()).flat().find(n=>n?.family==='IPv4' && !n.internal)?.address;
-    const configured = process.env.PUBLIC_URL || get('publicUrl','');
+    const configured = get('publicUrl','');
     const base = configured || (req.hostname==='localhost' || req.hostname==='127.0.0.1' ? `http://${lan || req.hostname}:${process.env.PORT || 3210}` : `${req.protocol}://${req.get('host')}`);
     const url = `${base.replace(/\/$/,'')}/mobile#${get('roomToken')}`;
     res.json({url, qr:await QRCode.toDataURL(url,{width:220,margin:2}), configured:!!configured});
@@ -189,7 +189,7 @@ export function createApp(options = {}) {
     const payload = {url:canonicalVideo(req.body.url),title:clean(req.body.title)||'在线歌曲',artist:clean(req.body.artist)||'未知歌手',enqueue:!!req.body.enqueue,name:clean(req.body.name,24)||'家人',isBacking:req.body.isBacking===true};
     res.json({id:addJob('download',payload)});
   });
-  app.get('/api/admin', admin, (req,res) => res.json({roots, downloads, cache, publicUrl:get('publicUrl',''), onlineEnabled:get('onlineEnabled',false), songs:db.prepare('SELECT COUNT(*) AS n FROM songs').get().n, ready:db.prepare("SELECT COUNT(*) AS n FROM songs WHERE status='ready'").get().n,jobs:db.prepare('SELECT * FROM jobs ORDER BY created DESC LIMIT 50').all()}));
+  app.get('/api/admin', admin, (req,res) => res.json({roots, downloads, cache, configPath:store.configPath, publicUrl:get('publicUrl',''), onlineEnabled:get('onlineEnabled',false), songs:db.prepare('SELECT COUNT(*) AS n FROM songs').get().n, ready:db.prepare("SELECT COUNT(*) AS n FROM songs WHERE status='ready'").get().n,jobs:db.prepare('SELECT * FROM jobs ORDER BY created DESC LIMIT 50').all()}));
   app.post('/api/admin/settings', admin, (req,res) => {
     const value=clean(req.body.publicUrl,200);
     if(value) { const url=new URL(value); if(!['http:','https:'].includes(url.protocol) || url.username || url.password || url.pathname!=='/' || url.search || url.hash) throw fail(400,'请输入 NAS 的完整访问地址，不要包含路径'); }
