@@ -24,10 +24,18 @@ export function createApp(options = {}) {
   const clients = new Set(), limits = new Map();
   let running = false, stopped = false, player = null;
   app.disable('x-powered-by');
+  // HTTPS may terminate at a reverse proxy. Only accept the current Host or
+  // the administrator's saved public origin; never trust arbitrary forwarded hosts.
+  function allowedOrigin(req, origin) {
+    return typeof origin === 'string' && [
+      `${req.protocol}://${req.get('host')}`, `https://${req.get('host')}`,
+      get('publicUrl','').replace(/\/$/,'')
+    ].filter(Boolean).includes(origin);
+  }
   app.use(express.json({ limit: '32kb' }));
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
-    if (!['GET','HEAD'].includes(req.method) && req.headers.origin && req.headers.origin !== `${req.protocol}://${req.get('host')}`) return next(fail(403, '跨站请求已拒绝'));
+    if (!['GET','HEAD'].includes(req.method) && req.headers.origin && !allowedOrigin(req,req.headers.origin)) return next(fail(403, '访问地址不匹配，请在 NAS 后台保存反代访问地址，并让反代保留 Host 请求头'));
     next();
   });
   const token = req => req.get('authorization')?.replace(/^Bearer /, '') || req.query.token;
@@ -174,7 +182,8 @@ export function createApp(options = {}) {
   app.get('/api/join', member, async (req,res) => {
     const lan = Object.values(os.networkInterfaces()).flat().find(n=>n?.family==='IPv4' && !n.internal)?.address;
     const configured = get('publicUrl','');
-    const base = configured || (req.hostname==='localhost' || req.hostname==='127.0.0.1' ? `http://${lan || req.hostname}:${process.env.PORT || 3210}` : `${req.protocol}://${req.get('host')}`);
+    const browserOrigin = allowedOrigin(req,req.query.origin) ? req.query.origin : '';
+    const base = configured || browserOrigin || (req.hostname==='localhost' || req.hostname==='127.0.0.1' ? `http://${lan || req.hostname}:${process.env.PORT || 3210}` : `${req.protocol}://${req.get('host')}`);
     const url = `${base.replace(/\/$/,'')}/mobile#${get('roomToken')}`;
     res.json({url, qr:await QRCode.toDataURL(url,{width:220,margin:2}), configured:!!configured});
   });
@@ -225,6 +234,7 @@ export function createApp(options = {}) {
     if(db.prepare('SELECT id FROM queue WHERE song_id=?').get(req.params.id)) throw fail(409,'请先从队列移除歌曲');
     res.json({id:addJob('prepare',{id:req.params.id})});
   });
+  app.get('/', (req,res) => res.redirect(302,'/admin'));
   app.use(express.static(path.resolve('dist')));
   app.get(['/', '/tv', '/mobile', '/admin'], (req,res) => existsSync(path.resolve('dist/index.html')) ? res.sendFile(path.resolve('dist/index.html')) : res.status(503).send('请先运行 npm run build，或访问 Vite 开发服务'));
   app.use((err,req,res,next) => { if(res.headersSent) return next(err); res.status(err.status || 400).json({error:err.message || '请求失败'}); });

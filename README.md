@@ -140,3 +140,15 @@ gradle -p android assembleDebug
 备份前建议停止服务或使用 SQLite 一致性备份，避免只复制正在使用的数据库主文件而遗漏 WAL。任务记录和缓存当前没有自动容量回收策略，管理员需要关注 NAS 剩余空间；普通视频双版本通常占用两份视频存储。首版限制单任务、1080p 输出，尚未接入 Intel QSV/VAAPI 硬件转码。
 
 麦克风接硬件混音器/音响，电视音乐输出也进入同一音响链路。手机只负责点歌，软件没有把麦克风音频绕经浏览器和 NAS；这样可避免网络链路带来的演唱返听延迟。
+
+## TV 连接与 Lucky HTTPS 反代
+
+NAS 根地址默认跳转管理页 /admin，电视点歌页为 /tv。TV APK 首次启动填写服务器根地址，之后按遥控器菜单键修改；连接后输入 Compose 中的管理密码。
+
+Lucky 的外部入口可以使用 https://ktv.example.com:666，后端目标必须填写 http://NAS-IP:宿主机端口。例如端口映射 43210:3210 时，后端端口填 43210。容器自身不提供 HTTPS；如果日志出现 tls: first record does not look like a TLS handshake，请检查后端是否误填为 https。
+
+通过内网进入后台“设置与任务”，把“NAS 访问地址”保存为完整外部地址（包括 HTTPS 和非标准端口，不附加 /admin、/tv）。TV APK 填写相同外部地址，手机二维码也会使用该地址。留空时二维码跟随当前页面地址。
+
+反代应覆盖整个独立域名根路径，保留 Host（包括端口）、Authorization 和 Range 请求头，并允许 /api/events 持续输出 SSE；不要缓冲实时事件或缓存带凭证的接口与媒体。证书需被电视系统信任。应用会接受已保存的外部访问地址，继续拒绝其他跨站写入；不盲目信任任意 X-Forwarded-Host。Nginx 类代理可参考 [官方代理文档](https://nginx.org/en/docs/http/ngx_http_proxy_module.html) 的 proxy_buffering 和 proxy_read_timeout 设置。
+
+外网开唱仍由 NAS 准备媒体，电视接收视频流；流畅度取决于家庭上行和电视网络。同一个后端目前只有一个共享客厅队列、一个活跃播放器，家里和外地不能同时独立开唱。

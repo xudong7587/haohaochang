@@ -1,3 +1,5 @@
+import { request as httpRequest } from 'node:http';
+import { Readable } from 'node:stream';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -70,4 +72,31 @@ test('URL allowlist and filesystem containment',()=>{
   for(const url of ['http://youtube.com/watch?v=abcdefghijk','https://youtube.com.evil.test/watch?v=abcdefghijk','file:///etc/passwd','https://127.0.0.1/a','https://user:pass@youtube.com/watch?v=abcdefghijk','https://youtube.com:443/watch?v=oops'])assert.throws(()=>canonicalVideo(url));
   assert.equal(inside(path.resolve('/media'),path.resolve('/media2/a')),false);
   assert.throws(()=>providerConfig({enabled:true,endpoint:'https://example.com',model:''}));
+});
+
+test('admin landing and HTTPS proxy login, QR and events',async t=>{
+  // Node fetch rewrites Host; use HTTP directly to simulate a proxy preserving it.
+  const fetch=(url,options={})=>new Promise((resolve,reject)=>{
+    const req=httpRequest(url,{method:options.method||'GET',headers:options.headers,signal:options.signal},res=>resolve(new Response(Readable.toWeb(res),{status:res.statusCode,headers:res.headers})));
+    req.on('error',reject);req.end(options.body);
+  });
+  const f=await fixture(t);
+  const origin='https://ktv.example.test:666';
+  const headers={Host:'ktv.example.test:666',Origin:origin,Authorization:'Bearer test-password-12345','Content-Type':'application/json'};
+  const landing=await fetch(f.base+'/',{redirect:'manual'});
+  assert.equal(landing.status,302);assert.equal(landing.headers.get('location'),'/admin');
+  assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers,body:'{}'})).status,200);
+  const join=await fetch(f.base+'/api/join?origin='+encodeURIComponent(origin),{headers});
+  assert.equal((await join.json()).url,origin+'/mobile#'+f.store.get('roomToken'));
+  assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers:{...headers,Origin:'https://evil.test','X-Forwarded-Host':'evil.test','X-Forwarded-Proto':'https'},body:'{}'})).status,403);
+  const rejected=await fetch(f.base+'/api/join?origin='+encodeURIComponent('https://evil.test'),{headers});
+  assert.equal((await rejected.json()).url.startsWith('https://evil.test'),false);
+  f.store.set('publicUrl',origin+'/');
+  assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers:{...headers,Host:'nas.internal:3210'},body:'{}'})).status,200);
+  const configured=await fetch(f.base+'/api/join',{headers:{...headers,Host:'nas.internal:3210'}});
+  assert.equal((await configured.json()).url,origin+'/mobile#'+f.store.get('roomToken'));
+  const controller=new AbortController();
+  const events=await fetch(f.base+'/api/events',{headers,signal:controller.signal});
+  assert.equal(events.headers.get('x-accel-buffering'),'no');
+  const reader=events.body.getReader();const first=await reader.read();assert.match(new TextDecoder().decode(first.value),/event: state/);await reader.cancel();controller.abort();
 });
