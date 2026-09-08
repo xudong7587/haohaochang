@@ -29,3 +29,9 @@ NAS 每三秒请求 `GET /jobs/example`，直到 `status` 为 `done` 或 `failed
 NAS 不自动适配聊天补全接口、Gradio 的任意应用或各家私有任务协议。若服务商返回云存储签名地址、回调或不同的字段，请在适配器中转换，并由适配器代理读取结果。不要把 OpenAI 兼容聊天地址误当成分离地址。
 
 附带的 `separator/` 服务使用 Demucs，模型和说明可参考 [Demucs 官方仓库](https://github.com/adefossez/demucs)。远程供应商未指定，因此开发验证使用兼容协议的模拟服务完成 HTTP 上传、结果下载及真实 FFmpeg 封装；尚未验证任何收费服务商的推理结果。
+
+## PC 优先与 API 后备
+
+后台 pcEndpoint/pcModel/pcApiKey 对应 Windows 助手；endpoint/model/apiKey 对应备用服务。优先探测 PC，PC 忙时另一首可走 API；PC 不可用或失败时转 API。备用服务仍需本协议。OpenAI Key 仅供单独的信息识别功能使用，OpenAI Audio API 没有音乐伴奏分离端点。参考 [OpenAI 音频文档](https://developers.openai.com/api/docs/guides/audio)。
+
+4070 Super 建议先用 htdemucs，试听后比较 htdemucs_ft；PC 运行期间保持可达。模型初次下载和 Windows GPU 推理待实际设备验收。若选择商业分离 API，MVSEP 提供 [公开 API 文档](https://mvsep.com/en/full_api)，但其协议不同，当前需另外编写适配器，不能直接填入此版本的备用地址。

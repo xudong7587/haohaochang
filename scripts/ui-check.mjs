@@ -18,7 +18,7 @@ try{
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/tv');await page.getByLabel('管理密码').fill('ui-test-password');await page.getByRole('button',{name:'进入好好唱'}).click();
-  await page.getByText('今晚，唱点开心的。').waitFor();await page.getByRole('button',{name:'点歌 '+titles[0],exact:true}).waitFor();
+  await page.locator('.stage-card').first().waitFor();await page.screenshot({path:'test-results/ui/stage.png',fullPage:true});await page.getByRole('button',{name:'我要点歌',exact:true}).click();await page.getByText('今晚，唱点开心的。').waitFor();await page.getByRole('button',{name:'点歌 '+titles[0],exact:true}).waitFor();
   await page.screenshot({path:'test-results/ui/tv.png',fullPage:true});
   await page.getByRole('button',{name:'歌名点歌',exact:true}).focus();await page.keyboard.press('ArrowDown');assert.equal(await page.locator(':focus').innerText(),'歌星点歌');
   await page.getByLabel('搜索歌名或歌手').fill('不存在的歌曲');await page.getByText('还没找到这首歌').waitFor();await page.getByRole('button',{name:'清空搜索'}).click();

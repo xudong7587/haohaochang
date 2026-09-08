@@ -102,3 +102,29 @@ test('admin landing and HTTPS proxy login, QR and events',async t=>{
   assert.equal(events.headers.get('x-accel-buffering'),'no');
   const reader=events.body.getReader();const first=await reader.read();assert.match(new TextDecoder().decode(first.value),/event: state/);await reader.cancel();controller.abort();
 });
+
+test('random original opening stays outside queue and yields to requested songs',async t=>{
+ const f=await fixture(t);f.seed('one','第一首');f.seed('two','第二首');f.seed('backing','纯伴奏');f.store.db.prepare("UPDATE songs SET mode='instrumental' WHERE id='backing'").run();
+ await f.call('/player/heartbeat',{id:'tv'},'POST');let state=(await f.call('/state')).data;assert.equal(state.queue.length,0);assert.ok(state.ambient);assert.notEqual(state.ambient.mode,'instrumental');const first=state.ambient;
+ await f.call('/player/ended',{entryId:first.id,playerId:'tv'},'POST');state=(await f.call('/state')).data;assert.notEqual(state.ambient.song_id,first.song_id);
+ await f.call('/queue',{songId:'one'},'POST');state=(await f.call('/state')).data;assert.equal(state.ambient,null);assert.equal(state.queue[0].song_id,'one');assert.equal(state.playback.vocal,false);
+ await f.call('/player/ended',{entryId:first.id,playerId:'tv'},'POST');assert.equal((await f.call('/state')).data.queue.length,1);
+});
+
+test('organizer saves reviewed names and tags; filtering and rescans preserve manual labels',async t=>{
+ const f=await fixture(t);f.seed('tagged','旧歌名');await writeFile(path.join(f.root,'tagged.mp4'),'source');
+ const admin='test-password-12345';let result=await f.call('/admin/organize',{songs:[{id:'tagged',title:'新歌名',artist:'新歌手',tags:['女声','港台','无效标签']}],prepare:false},'POST',admin);assert.equal(result.status,200);
+ const song=f.store.db.prepare('SELECT * FROM songs WHERE id=?').get('tagged');assert.deepEqual(JSON.parse(song.tags),['女声','港台']);assert.equal(song.title,'新歌名');
+ assert.equal((await f.call('/songs?tag='+encodeURIComponent('女声'))).data.length,1);assert.equal((await f.call('/songs?tag='+encodeURIComponent('男声'))).data.length,0);
+ const preview=(await f.call('/admin/organize',undefined,'GET',admin)).data;assert.deepEqual(preview[0].tags,['女声','港台']);
+ assert.equal((await f.call('/admin/organize',{songs:[{id:'tagged',title:'',artist:'x'}]},'POST',admin)).status,400);
+});
+
+test('scoped integration review API cannot access admin and resolves only pending metadata',async t=>{
+ const f=await fixture(t);const id=f.addJob('import',{file:'ignored',metadata:{title:'待确认',artist:'未知歌手',tags:[]}});f.store.db.prepare("UPDATE jobs SET status='review' WHERE id=?").run(id);
+ const admin='test-password-12345';const key=(await f.call('/admin/integration',undefined,'GET',admin)).data.token;
+ assert.equal((await f.call('/admin',undefined,'GET',key)).status,401);assert.equal((await f.call('/integrations/reviews',undefined,'GET',key)).data.length,1);
+ assert.equal((await f.call('/integrations/reviews/'+id,{artist:'歌手',title:'歌名',tags:['男声']},'POST',key)).status,200);
+ const job=f.store.db.prepare('SELECT * FROM jobs WHERE id=?').get(id);assert.equal(job.status,'queued');assert.equal(JSON.parse(job.payload).approved,true);
+ assert.equal((await f.call('/integrations/reviews/'+id,{artist:'歌手',title:'歌名'},'POST',key)).status,409);
+});

@@ -1,3 +1,4 @@
+import { metadata } from './library.js';
 import { spawn } from 'node:child_process';
 import { readdir, realpath, stat, mkdir, rename, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -34,10 +35,11 @@ export async function scanLibrary(store, roots) {
       if (entry.isDirectory()) await walk(file, root);
       else if (/\.(mp4|mkv|avi|mov|webm|m4v|mpg|mpeg|ts|mp3|flac|wav|m4a|ogg|aac)$/i.test(entry.name)) {
         const id = createHash('sha256').update(file).digest('hex').slice(0, 24);
-        const parts = path.parse(entry.name).name.split(' - ');
-        const artist = parts.length > 1 ? parts.shift() : '未知歌手';
-        const title = parts.join(' - ');
+        const {artist,title,poster,tags,metadata_source,needs_review}=await metadata(file,[root]);
         count += Number(store.db.prepare('INSERT OR IGNORE INTO songs (id,path,title,artist,search,created) VALUES (?,?,?,?,?,?)').run(id, file, title, artist, searchText(title, artist), Date.now()).changes);
+        store.db.prepare("UPDATE songs SET title=?,artist=?,search=?,metadata_source=?,needs_review=? WHERE id=? AND metadata_source NOT IN ('手动','AI')").run(title,artist,searchText(title,artist),metadata_source,needs_review,id);
+        store.db.prepare('UPDATE songs SET poster=? WHERE id=?').run(poster,id);
+        store.db.prepare("UPDATE songs SET tags=? WHERE id=? AND tags_manual=0 AND metadata_source!='AI'").run(JSON.stringify(tags),id);
         if(/\.(mp3|flac|wav|m4a|ogg|aac)$/i.test(entry.name))store.db.prepare('UPDATE songs SET needs_video=1 WHERE id=?').run(id);
         try {const lrc=await safeMedia(path.join(dir,path.parse(entry.name).name+'.lrc'),[root]);if((await stat(lrc)).size<100000)store.db.prepare("UPDATE songs SET lyrics=? WHERE id=? AND lyrics=''").run(await readFile(lrc,'utf8'),id);}catch{}
       }
@@ -71,7 +73,7 @@ export async function prepareSong(store, id, roots, cache) {
     const args = ['-y', '-v', 'error', '-i', file];
     if(!info.hasVideo){
       let cover;
-      for(const candidate of [path.join(path.dirname(file),path.parse(file).name+'.jpg'),path.join(path.dirname(file),'cover.jpg')]){try{cover=await safeMedia(candidate,roots);break;}catch{}}
+      for(const candidate of [...(song.poster?[song.poster]:[]),path.join(path.dirname(file),path.parse(file).name+'.jpg'),path.join(path.dirname(file),'cover.jpg')]){try{cover=await safeMedia(candidate,roots);break;}catch{}}
       if(cover)args.push('-loop','1','-i',cover);else args.push('-f','lavfi','-i','color=c=0x272433:s=1280x720:r=15');
     }
     args.push('-map',info.hasVideo?'0:v:0':'1:v:0','-map', `0:a:${track}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-vf', "scale=w='min(1920,iw)':h=-2", '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k');
@@ -114,17 +116,17 @@ export async function onlineSearch(query, provider) {
   const data = JSON.parse(await run(process.env.YTDLP || 'yt-dlp', ['--ignore-config', '--flat-playlist', '--dump-single-json', '--no-warnings', '--', `ytsearch12:${query}`], 45000));
   return (data.entries || []).map(v => ({ title: v.title, artist: v.channel || v.uploader || 'YouTube', url: `https://www.youtube.com/watch?v=${v.id}`, provider: 'youtube' }));
 }
-export async function downloadVideo(url, dir) {
+export async function downloadVideo(url, dir, cookieFile) {
   await mkdir(dir, { recursive: true });
   const id = createHash('sha256').update(canonicalVideo(url)).digest('hex').slice(0, 24);
   const file = path.join(dir, `${id}.mp4`);
   try {await stat(file);return {id,file};}catch{}
   try {
-    await run(process.env.YTDLP || 'yt-dlp', ['--ignore-config', '--no-playlist', '--no-warnings', '--socket-timeout', '20', '--retries', '2', '--max-filesize', '2G', '-f', 'bv*[height<=1080]+ba/b[height<=1080]', '--merge-output-format', 'mp4', '--recode-video', 'mp4', '-o', file, '--', canonicalVideo(url)], 1800000);
+    await run(process.env.YTDLP || 'yt-dlp', [...(cookieFile?['--cookies',cookieFile]:[]),'--ignore-config', '--no-playlist', '--no-warnings', '--socket-timeout', '20', '--retries', '2', '--max-filesize', '2G', '-f', 'bv*[height<=1080]+ba/b[height<=1080]', '--merge-output-format', 'mp4', '--recode-video', 'mp4', '-o', file, '--', canonicalVideo(url)], 1800000);
     await stat(file);return {id,file};
   } catch {
     const audio=path.join(dir,`${id}.m4a`);
-    await run(process.env.YTDLP||'yt-dlp',['--ignore-config','--no-playlist','--socket-timeout','20','--max-filesize','200M','-x','--audio-format','m4a','-o',path.join(dir,`${id}.%(ext)s`),'--',canonicalVideo(url)],1800000);
+    await run(process.env.YTDLP||'yt-dlp',[...(cookieFile?['--cookies',cookieFile]:[]),'--ignore-config','--no-playlist','--socket-timeout','20','--max-filesize','200M','-x','--audio-format','m4a','-o',path.join(dir,`${id}.%(ext)s`),'--',canonicalVideo(url)],1800000);
     await stat(audio);return {id,file:audio};
   }
 }

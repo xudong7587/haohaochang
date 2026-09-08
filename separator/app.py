@@ -6,10 +6,11 @@ import os
 from pathlib import Path
 import subprocess
 import uuid
+import sys
 from fastapi import FastAPI, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-ROOT = Path('/data/jobs')
+ROOT = Path(os.getenv('SEPARATION_DATA_DIR', '/data')) / 'jobs'
 ROOT.mkdir(parents=True, exist_ok=True)
 pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 app = FastAPI()
@@ -32,7 +33,14 @@ for state in ROOT.glob('*/state.json'):
 def separate(job, model):
     status(job, dict(status='running'))
     try:
-        subprocess.run(['python', '-m', 'demucs', '--two-stems=vocals', '-n', model, '-d', 'cpu', '-j', '1', '-o', str(ROOT / job / 'out'), str(ROOT / job / 'input.m4a')], check=True, timeout=1800, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        device = os.getenv('SEPARATION_DEVICE', 'cpu')
+        if device == 'auto':
+            import torch
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        flags = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+        with (ROOT / job / 'worker.log').open('w', encoding='utf-8') as log:
+            subprocess.run([os.getenv('FFMPEG', 'ffmpeg'), '-y', '-v', 'error', '-i', str(ROOT / job / 'input.m4a'), str(ROOT / job / 'input.wav')], check=True, timeout=300, stdout=log, stderr=log, **flags)
+            subprocess.run([sys.executable, '-m', 'demucs', '--two-stems=vocals', '-n', model, '-d', device, '-j', '1', '-o', str(ROOT / job / 'out'), str(ROOT / job / 'input.wav')], check=True, timeout=1800, stdout=log, stderr=log, **flags)
         source = ROOT / job / 'out' / model / 'input' / 'no_vocals.wav'
         source.replace(ROOT / job / 'instrumental.wav')
         status(job, dict(status='done', instrumental_url=f'/artifacts/{job}'))
@@ -41,7 +49,7 @@ def separate(job, model):
 
 @app.get('/health', dependencies=[Depends(auth)])
 def health():
-    return dict(protocol='ktv-separation-v1', models=['htdemucs', 'htdemucs_ft'])
+    return dict(protocol='ktv-separation-v1', models=['htdemucs', 'htdemucs_ft'], device=os.getenv('SEPARATION_DEVICE', 'cpu'))
 
 @app.post('/separate', dependencies=[Depends(auth)])
 async def submit(file: UploadFile = File(...), model: str = Form(...)):

@@ -1,3 +1,4 @@
+import {createApp} from '../server/app.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, stat, readFile, mkdir } from 'node:fs/promises';
@@ -30,4 +31,21 @@ test('real FFmpeg: audio fallback, dual tracks, persistent cache, AI adapter rou
   store.set('ai',{enabled:true,endpoint:`http://127.0.0.1:${server.address().port}`,model:'test',apiKey:'private-key'});assert.equal((await testProvider(store.get('ai'))).ok,true);
   console.log('Media: AI result mux');await separateSong(store,store.db.prepare('SELECT * FROM songs WHERE id=?').get(a),cache);assert.equal(requests,1);assert.equal(store.db.prepare('SELECT mode FROM songs WHERE id=?').get(a).mode,'separated');assert.ok((await stat(path.join(cache,a+'-backing.mp4'))).size>1000);
   await prepareSong(store,a,[dir],cache);assert.equal(requests,1);
+  let pcRequests=0;
+  remote.get('/pc/health',(req,res)=>res.json({protocol:'ktv-separation-v1'}));
+  remote.post('/pc/separate',express.raw({type:()=>true,limit:'5mb'}),(req,res)=>{pcRequests++;setTimeout(()=>res.json({status:'done',instrumental_url:'/result'}),150);});
+  const fallback=store.get('ai');store.set('ai',{...fallback,pcEndpoint:fallback.endpoint+'/pc',pcModel:'test',pcApiKey:'private-key'});
+  await Promise.all([separateSong(store,{...store.db.prepare('SELECT * FROM songs WHERE id=?').get(a),mode:'original'},cache),separateSong(store,store.db.prepare('SELECT * FROM songs WHERE id=?').get(b),cache)]);
+  assert.equal(pcRequests,1);assert.equal(requests,2);
+  store.set('ai',{...fallback,pcEndpoint:fallback.endpoint+'/offline',pcModel:'test',pcApiKey:'private-key'});
+  await separateSong(store,{...store.db.prepare('SELECT * FROM songs WHERE id=?').get(a),mode:'original'},cache);assert.equal(requests,3);store.set('ai',fallback);
+  const library=path.join(dir,'formal');await mkdir(library);
+  const service=createApp({dataDir:path.join(dir,'import-db'),downloads:dir,roots:[library],adminToken:'test-password-123'});
+  service.store.set('autoImport',false);service.store.set('ai',store.get('ai'));
+  try{
+    const source=await stat(audio);const job=service.addJob('import',{file:audio,signature:source.size+':'+source.mtimeMs,approved:true,metadata:{artist:'测试歌手',title:'测试歌曲',tags:[],needs_review:0}});
+    const deadline=Date.now()+30000;let status;
+    do{await new Promise(r=>setTimeout(r,30));status=service.store.db.prepare('SELECT * FROM jobs WHERE id=?').get(job);}while(['queued','running'].includes(status.status)&&Date.now()<deadline);
+    assert.equal(status.status,'done',status.error);const imported=service.store.db.prepare('SELECT * FROM songs').get();assert.equal(imported.mode,'separated');assert.ok(imported.path.startsWith(library));assert.ok((await stat(path.join(dir,'import-db/cache',imported.id+'-vocal.mp4'))).size>1000);assert.ok((await stat(path.join(dir,'import-db/cache',imported.id+'-backing.mp4'))).size>1000);assert.equal(requests,4);
+  }finally{service.close();}
 });

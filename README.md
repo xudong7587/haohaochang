@@ -14,9 +14,9 @@ NAS 保存曲库、下载资源、处理伴奏并输出视频流。电视安装�
 
 ## NAS 部署：只需要一个 Compose 文件
 
-公开镜像已经发布：`ghcr.io/xudong7587/haohaochang:latest`。NAS 无需登录，不需要 .env 或手工创建配置文件。直接在 UGOS Docker 项目里粘贴项目根目录的 docker-compose.yaml，修改管理密码、宿主机端口、数据目录和曲库目录即可。
+公开镜像已经发布：`ghcr.io/xudong7587/haohaochang:latest`。NAS 无需登录，不需要 .env 或手工创建配置文件。直接在 UGOS Docker 项目里粘贴项目根目录的 docker-compose.yaml，修改管理密码、宿主机端口、数据目录、曲库目录和下载目录即可。
 
-默认端口映射为 3210:3210。左侧可换成 NAS 空闲端口，右侧固定 3210。数据目录映射到 /data，曲库映射到 /media:ro。曲库路径须替换成 NAS 的真实路径。
+默认端口映射为 3210:3210。左侧可换成 NAS 空闲端口，右侧固定 3210。数据目录映射到 /data，曲库映射到 /media。曲库路径须替换成 NAS 的真实路径。
 
 部署文件显式使用容器子网 `10.253.231.0/24`，绕过 Docker 默认地址池耗尽导致的 `all predefined address pools have been fully subnetted`。该地址不需要填入电视或浏览器。如果提示 `Pool overlaps`，或该子网与现有局域网/VPN 重叠，请改为未使用的私有子网；不要删除其他项目的网络。可选 AI 服务合并后也使用此网络。
 
@@ -135,7 +135,7 @@ gradle -p android assembleDebug
 
 ## 数据与维护
 
-`data/settings.json` 保存后台设置和 AI 密钥；`data/ktv.sqlite` 保存曲库、客厅凭证、队列和任务；`data/downloads` 保存在线原文件；`data/cache` 保存电视播放版本及分离中间文件；可选 AI 服务的数据位于 `data/separator`。原始媒体通过只读挂载保护。
+`data/settings.json` 保存后台设置和 AI 密钥；`data/ktv.sqlite` 保存曲库、客厅凭证、队列和任务；`data/downloads` 保存在线原文件；`data/cache` 保存电视播放版本及分离中间文件；可选 AI 服务的数据位于 `data/separator`。下载源文件保留，正式曲库需要可写挂载以接收自动整理结果。
 
 备份前建议停止服务或使用 SQLite 一致性备份，避免只复制正在使用的数据库主文件而遗漏 WAL。任务记录和缓存当前没有自动容量回收策略，管理员需要关注 NAS 剩余空间；普通视频双版本通常占用两份视频存储。首版限制单任务、1080p 输出，尚未接入 Intel QSV/VAAPI 硬件转码。
 
@@ -152,3 +152,17 @@ Lucky 的外部入口可以使用 https://ktv.example.com:666，后端目标必�
 反代应覆盖整个独立域名根路径，保留 Host（包括端口）、Authorization 和 Range 请求头，并允许 /api/events 持续输出 SSE；不要缓冲实时事件或缓存带凭证的接口与媒体。证书需被电视系统信任。API 通过管理密码或客厅凭证验证身份，不限制请求 Origin，避免反代改写地址后误拒绝登录。Nginx 类代理可参考 [官方代理文档](https://nginx.org/en/docs/http/ngx_http_proxy_module.html) 的 proxy_buffering 和 proxy_read_timeout 设置。
 
 外网开唱仍由 NAS 准备媒体，电视接收视频流；流畅度取决于家庭上行和电视网络。同一个后端目前只有一个共享客厅队列、一个活跃播放器，家里和外地不能同时独立开唱。
+
+## 收藏到开唱：自动整理更新
+
+TV 默认进入音乐现场，无人点歌时随机播放原唱，准备好的点歌优先接管。浏览器可能需要第一次点击播放，APK 允许自动播放。扫描后的旧资源可在“整理曲库”预览歌手、歌名和标签，批量准备原唱与伴奏。
+
+Compose 新增独立的 /download 下载目录，/media 改为可写。已有用户需要添加下载映射，并去掉曲库映射的 :ro。自动入库每 30 秒检查，文件连续两次稳定且最后修改超过 60 秒后，复制到 /media/歌手/歌手 - 歌名；保留下载源。启用兼容 AI 后串行生成伴奏。
+
+与 bili-sync 共用同一个 NAS 下载文件夹即可对接收藏夹下载，不需要迁移其配置和登录信息。目录不要与正式曲库嵌套。NFO 只从明确字段识别歌手，不把 UP 主当歌手。已实现范围、对接步骤和后续功能见 [后台功能规划](docs/PRODUCT-PLAN.md)。
+
+## 内置收藏夹、信息 AI 和 PC 分离助手
+
+新版可直接监控 B 站收藏夹，无需 bili-sync。在后台填写收藏夹 ID/链接，按需填写自己的 Cookie，启用同步。信息识别与刮削可接 OpenAI Responses API（模型需支持结构化输出，可选联网查证）；不确定的歌曲会进入待核对，填写歌手后继续。
+
+Windows PC 支持包位于 Release 的 haohaochang-pc-worker.zip。解压双击 start.cmd，首次安装独立环境，之后显示局域网地址和密钥；NAS 的分离设置填写 PC 地址、htdemucs 和连接密钥。4070 Super 由本地 Demucs 使用，不需要 OpenAI Key。可以另外设置 ktv-separation-v1 备用 API，PC 忙/离线时使用。详情见 [PC 助手说明](pc-worker/README.md)。

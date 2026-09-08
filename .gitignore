@@ -13,3 +13,10 @@ test-results/
 android/.gradle/
 android/local.properties
 android/**/build/
+
+pc-worker/.venv/
+pc-worker/runtime/
+pc-worker/data/
+pc-worker/worker.json
+release/pc-worker/
+__pycache__/

@@ -9,8 +9,9 @@ import { run } from './media.js';
 export function providerConfig(input, old = {}) {
   const endpoint = String(input.endpoint || '').trim().replace(/\/$/, '');
   if(endpoint){const url=new URL(endpoint);if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw new Error('分离服务地址格式错误');}
-  if(input.enabled && (!endpoint || !String(input.model||'').trim()))throw new Error('启用 AI 分离前请填写地址和模型');
-  return {enabled:input.enabled===true,endpoint,model:String(input.model||'').slice(0,120),apiKey:input.clearKey?'':String(input.apiKey||old.apiKey||'').slice(0,2000)};
+  const pcEndpoint=String(input.pcEndpoint||'').trim().replace(/\/$/,'');if(pcEndpoint){const pc=new URL(pcEndpoint);if(!['http:','https:'].includes(pc.protocol)||pc.username||pc.password||pc.search||pc.hash)throw new Error('PC 服务地址格式错误');}
+  if(input.enabled && !(pcEndpoint || (endpoint && String(input.model||'').trim())))throw new Error('启用 AI 分离前请填写地址和模型');
+  return {enabled:input.enabled===true,pcEndpoint,pcModel:String(input.pcModel||'htdemucs').slice(0,120),pcApiKey:input.clearPcKey?'':String(input.pcApiKey||old.pcApiKey||'').slice(0,2000),endpoint,model:String(input.model||'').slice(0,120),apiKey:input.clearKey?'':String(input.apiKey||old.apiKey||'').slice(0,2000)};
 }
 const headers = config => config.apiKey ? {Authorization:`Bearer ${config.apiKey}`} : {};
 export async function testProvider(config) {
@@ -31,8 +32,22 @@ async function saveResult(value, config, target) {
   await pipeline(Readable.fromWeb(response.body),limit,createWriteStream(target+'.tmp'));
   await rename(target+'.tmp',target);
 }
+const pcActive=new Map();
 export async function separateSong(store,song,cache){
-  const config=store.get('ai',{});if(!config.enabled) return false;
+  const config=store.get('ai',{});if(!config.enabled)return false;if(song.mode==='separated')return true;
+  const pc=config.pcEndpoint?{endpoint:config.pcEndpoint,model:config.pcModel||'htdemucs',apiKey:config.pcApiKey,pc:true}:null;
+  const cloud=config.endpoint?{endpoint:config.endpoint,model:config.model,apiKey:config.apiKey}:null;
+  const candidates=pc&&pcActive.get(pc.endpoint)&&cloud?[cloud]:[pc,cloud].filter(Boolean);let last;
+  for(const candidate of candidates){
+    if(candidate.pc)pcActive.set(candidate.endpoint,(pcActive.get(candidate.endpoint)||0)+1);
+    try{
+      if(candidate.pc){const r=await fetch(candidate.endpoint+'/health',{headers:headers(candidate),signal:AbortSignal.timeout(3000),redirect:'error'});if(!r.ok||(await r.json()).protocol!=='ktv-separation-v1')throw new Error('PC 分离服务不可用');}
+      return await separateWithConfig(store,song,cache,candidate);
+    }catch(error){last=error;}finally{if(candidate.pc)pcActive.set(candidate.endpoint,Math.max(0,pcActive.get(candidate.endpoint)-1));}
+  }
+  throw last||new Error('没有可用的分离服务');
+}
+async function separateWithConfig(store,song,cache,config){
   const dir=path.join(cache,'stems',song.id);await mkdir(dir,{recursive:true});
   const backing=path.join(dir,'backing.wav');
   const vocal=path.join(cache,`${song.id}-vocal.mp4`);

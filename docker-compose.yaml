@@ -1,4 +1,4 @@
-# 只需修改管理密码、左侧端口、两个目录映射；不需要 .env 文件。
+# 只需修改管理密码、左侧端口、三个目录映射；不需要 .env 文件。
 services:
   ktv:
     image: ghcr.io/xudong7587/haohaochang:latest
@@ -8,7 +8,8 @@ services:
       ADMIN_PASSWORD: "change-this-password-123" # 请改为至少 12 位的管理密码
     volumes:
       - ./data:/data # 持久化目录，自动生成 settings.json、数据库和媒体缓存
-      - /volume1/media/ktv:/media:ro # 左侧改为 NAS 的实际曲库路径
+      - /volume1/media/ktv:/media # 正式曲库，自动整理需要写入权限
+      - ./download:/download # 下载暂存目录，完成后自动复制整理到正式曲库
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
