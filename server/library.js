@@ -1,4 +1,5 @@
 import {createReadStream} from 'node:fs';
+import {withKeyLock} from './song-writes.js';
 import {resourceRoot} from './assets.js';
 import {identifyTitle} from '../shared/catalog.js';
 import {normalizeTags} from '../shared/tags.js';
@@ -6,7 +7,7 @@ import path from 'node:path';
 import { readdir, readFile, stat, mkdir, copyFile, writeFile, link, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { safeMedia, inside, searchText } from './media.js';
+import { safeMedia, inside, searchText } from './media-utils.js';
 
 export const mediaExtension = /\.(mp4|mkv|avi|mov|webm|m4v|mpg|mpeg|ts|mp3|flac|wav|m4a|ogg|aac)$/i;
 const field = (xml, tag) => {
@@ -40,6 +41,7 @@ export async function importMedia(store, file, downloads, root, overrides={}) {
   const key=importKey(file,info);
   const existing=store.get(key);if(existing&&store.db.prepare('SELECT id FROM songs WHERE id=?').get(existing))return existing;
   const hash=createHash('sha256');for await(const chunk of createReadStream(file))hash.update(chunk);const contentId=hash.digest('hex').slice(0,24);
+  return withKeyLock(store,'import:'+contentId,async()=>{
   const duplicate=store.db.prepare('SELECT id FROM songs WHERE id=?').get(contentId);if(duplicate){store.set(key,duplicate.id);return duplicate.id;}
   const meta={...await metadata(file,[downloads]),...overrides};meta.needs_review=meta.artist==='未知歌手'?1:0;
   const dir=path.join(resourceRoot(root),'歌曲',component(meta.artist)+' - '+component(meta.title)+' ['+contentId.slice(0,8)+']');await mkdir(dir,{recursive:true});await safeMedia(dir,[root]);
@@ -55,7 +57,7 @@ export async function importMedia(store, file, downloads, root, overrides={}) {
     await link(temporary,target);
   }finally{await rm(temporary,{force:true});}
   const id=contentId;store.set('package:'+id,dir);
-  store.db.prepare('INSERT INTO songs (id,path,title,artist,search,created,mode,metadata_source,needs_review) VALUES (?,?,?,?,?,?,?,?,?)').run(id,target,meta.title,meta.artist,searchText(meta.title,meta.artist),Date.now(),overrides.mode||'original',meta.metadata_source,meta.needs_review);
+  store.db.prepare("INSERT INTO songs (id,path,title,artist,search,created,mode,metadata_source,needs_review,status) VALUES (?,?,?,?,?,?,?,?,?,'preparing')").run(id,target,meta.title,meta.artist,searchText(meta.title,meta.artist),Date.now(),overrides.mode||'original',meta.metadata_source,meta.needs_review);
   store.db.prepare('UPDATE songs SET tags=? WHERE id=?').run(JSON.stringify(meta.tags),id);
   store.set(key,id);
   const outStem=path.join(dir,path.parse(target).name);
@@ -63,4 +65,5 @@ export async function importMedia(store, file, downloads, root, overrides={}) {
   if(meta.poster){const poster=outStem+'-poster'+path.extname(meta.poster);await copyFile(meta.poster,poster,constants.COPYFILE_EXCL);store.db.prepare('UPDATE songs SET poster=? WHERE id=?').run(poster,id);}
   try{const lrc=await safeMedia(path.join(path.dirname(file),path.parse(file).name+'.lrc'),[downloads]);if((await stat(lrc)).size<100000){await copyFile(lrc,outStem+'.lrc',constants.COPYFILE_EXCL);store.db.prepare('UPDATE songs SET lyrics=? WHERE id=?').run(await readFile(lrc,'utf8'),id);}}catch{}
   return id;
+  });
 }

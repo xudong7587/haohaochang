@@ -1,3 +1,8 @@
+import {resourceManifest,canEnqueue} from './resource-manifest.js';
+import {assertSongIdle,withSongWrite,checkRevision,currentSong} from './song-writes.js';
+import {saveSongMetadata} from './song-metadata.js';
+import {replaceVideo} from './video-replacement.js';
+import {createScheduler} from './scheduler.js';
 import {libraryApi} from './library-api.js';
 import {runJob} from './jobs.js';
 import {resourceRoot,migrateSongAssets} from './assets.js';
@@ -30,7 +35,7 @@ export function createApp(options = {}) {
   if (!adminToken || adminToken.length < 12) throw new Error('请设置至少 12 位的 ADMIN_PASSWORD（管理密码）');
   const app = express();
   const clients = new Set(), limits = new Map();
-  let running = 0, stopped = false, player = null, ambient = null;
+  let stopped = false, player = null, ambient = null;
   app.disable('x-powered-by');
   // Validate only the optional QR origin hint; API access uses explicit credentials.
   function allowedOrigin(req, origin) {
@@ -65,48 +70,15 @@ export function createApp(options = {}) {
   const revise = (patch = {}) => { const old = get('playback'); set('playback', { ...old, ...patch, revision: old.revision + 1 }); emit(); };
   function enqueue(id, name) {
     const song = db.prepare('SELECT * FROM songs WHERE id=?').get(id);
-    if (!song || song.status !== 'ready') throw fail(409, '歌曲尚未就绪，请先在后台准备播放');
+    if (!canEnqueue(store,song,cache)) throw fail(409, '歌曲尚未就绪，请先在后台准备播放');
     if (db.prepare('SELECT id FROM queue WHERE song_id=?').get(id)) return;
     if (db.prepare('SELECT count(*) AS n FROM queue').get().n >= 100) throw fail(409, '已点列表已满');
     const position = db.prepare('SELECT COALESCE(MAX(position),0)+1 AS p FROM queue').get().p;
     db.prepare('INSERT INTO queue VALUES (?,?,?,?)').run(randomUUID(), id, name, position);
     if (snapshot().queue.length === 1) revise({ paused: false, vocal: false }); else emit();
   }
-  function addJob(kind, payload) {
-    if(kind==='acquire'){const existing=db.prepare("SELECT id,payload FROM jobs WHERE kind='acquire' AND status IN ('queued','running','review')").all().find(j=>{const p=JSON.parse(j.payload);return p.title===payload.title&&p.artist===payload.artist;});if(existing)return existing.id;}
-    if(['download','favorite-download'].includes(kind)) {
-      const duplicate=db.prepare("SELECT id,payload FROM jobs WHERE kind IN ('download','favorite-download') AND status IN ('queued','running')").all().find(j=>JSON.parse(j.payload).url===payload.url);
-      if(duplicate){if(payload.enqueue)db.prepare('UPDATE jobs SET payload=? WHERE id=?').run(JSON.stringify({...JSON.parse(duplicate.payload),enqueue:true,name:payload.name}),duplicate.id);return duplicate.id;}
-    }
-    if(kind==='prepare') {
-      const duplicate=db.prepare("SELECT id,payload FROM jobs WHERE kind='prepare' AND status IN ('queued','running')").all().find(j=>JSON.parse(j.payload).id===payload.id);
-      if(duplicate){if(!payload.ambientOnly)db.prepare('UPDATE jobs SET payload=? WHERE id=?').run(JSON.stringify({...JSON.parse(duplicate.payload),ambientOnly:false}),duplicate.id);if(payload.enqueue){const merged={...JSON.parse(duplicate.payload),enqueue:true,name:payload.name,ambientOnly:false};db.prepare('UPDATE jobs SET payload=? WHERE id=?').run(JSON.stringify(merged),duplicate.id);}return duplicate.id;}
-    }
-    const existing = db.prepare("SELECT id FROM jobs WHERE kind=? AND payload=? AND status IN ('queued','running')").get(kind, JSON.stringify(payload));
-    if (existing) return existing.id;
-    const id = randomUUID();
-    db.prepare('INSERT INTO jobs (id,kind,payload,status,created) VALUES (?,?,?,?,?)').run(id, kind, JSON.stringify(payload), 'queued', Date.now());
-    emit();setImmediate(work);
-    return id;
-  }
-  async function work() {
-    if (running >= 2 || stopped || options.worker === false) return;
-    const jobSong=j=>{const p=JSON.parse(j.payload);return p.id||p.existingId;};
-    const activeSongs=new Set(db.prepare("SELECT payload FROM jobs WHERE status='running'").all().map(jobSong).filter(Boolean));
-    const job = db.prepare("SELECT * FROM jobs WHERE status='queued' ORDER BY created").all().find(j=>!jobSong(j)||!activeSongs.has(jobSong(j)));
-    if (!job) return;
-    running++;setImmediate(work);
-    db.prepare("UPDATE jobs SET status='running',started=?,finished=NULL WHERE id=?").run(Date.now(),job.id); emit('library', {});
-    const payload = JSON.parse(job.payload);
-    try {
-      const outcome=await runJob(job,payload,{db,get,set,store,dir,roots,downloads,cache,legacyCache,emit,addJob,enqueue,fail});
-      if(outcome==='review')return;
-      db.prepare("UPDATE jobs SET status='done',error='' WHERE id=?").run(job.id);
-    } catch (e) {
-      db.prepare("UPDATE jobs SET status='failed',error=? WHERE id=?").run(e.message.slice(-1800), job.id);
-      if (job.kind === 'prepare') db.prepare("UPDATE songs SET status='error',error=? WHERE id=?").run(e.message.slice(-1800), payload.id);
-    } finally { db.prepare('UPDATE jobs SET finished=? WHERE id=?').run(Date.now(),job.id);running--; emit('library', {});emit(); if(stopped&&!running)db.close();else setImmediate(work); }
-  }
+  const scheduler=createScheduler({db,get,set,store,dir,roots,downloads,cache,legacyCache,emit,enqueue,fail},{enabled:options.worker!==false,onIdle:()=>db.close()});
+  const {addJob,work}=scheduler;
   libraryApi({app,admin,member,store,cache,downloads,addJob,emit});
   app.get('/api/health', (req,res) => res.json({ ok: true }));
   app.post('/api/login', admin, (req,res) => res.json({ token: get('roomToken') }));
@@ -120,12 +92,14 @@ export function createApp(options = {}) {
   app.get('/api/songs', member, (req,res) => {
     const q = clean(req.query.q).toLowerCase().replace(/[%_!]/g, '!$&');
     const artist = clean(req.query.artist);
-    res.json(db.prepare("SELECT id,title,artist,duration,mode,status,error,source,backing,vocal,audio,needs_video,lyrics,metadata_source,needs_review,tags,CASE WHEN poster!='' THEN 1 ELSE 0 END AS hasPoster FROM songs WHERE search LIKE ? ESCAPE '!' AND (?='' OR artist=?) AND (?='' OR EXISTS (SELECT 1 FROM json_each(songs.tags) WHERE value=?)) ORDER BY created DESC LIMIT 300").all(`%${q}%`, artist, artist,clean(req.query.tag),clean(req.query.tag)).filter(s=>!get('hidden:'+s.id)));
+    res.json(db.prepare("SELECT id,title,artist,duration,mode,status,error,source,backing,vocal,audio,metadataRevision,resourceRevision,needs_video,lyrics,metadata_source,needs_review,tags,CASE WHEN poster!='' THEN 1 ELSE 0 END AS hasPoster FROM songs WHERE search LIKE ? ESCAPE '!' AND (?='' OR artist=?) AND (?='' OR EXISTS (SELECT 1 FROM json_each(songs.tags) WHERE value=?)) ORDER BY created DESC LIMIT 300").all(`%${q}%`, artist, artist,clean(req.query.tag),clean(req.query.tag)).filter(s=>!get('hidden:'+s.id)));
   });
-  app.get('/api/artists', member, (req,res) => res.json(db.prepare('SELECT artist,COUNT(*) AS count FROM songs GROUP BY artist ORDER BY artist').all()));
+  app.get('/api/artists',member,(req,res)=>{const counts=new Map();for(const s of db.prepare('SELECT id,artist FROM songs').all())if(!get('hidden:'+s.id))counts.set(s.artist,(counts.get(s.artist)||0)+1);res.json([...counts].map(([artist,count])=>({artist,count})).sort((a,b)=>a.artist.localeCompare(b.artist)));});
   app.post('/api/queue', member, (req,res) => {
     const id=clean(req.body.songId),name=clean(req.body.name,24)||'家人';
     const song=db.prepare('SELECT * FROM songs WHERE id=?').get(id);if(!song)throw fail(404,'歌曲不存在');
+    if(get('hidden:'+id))throw fail(409,'歌曲已隐藏，请在后台恢复后点歌');
+    if(song.status==='ready'&&!canEnqueue(store,song,cache))throw fail(409,'播放文件缺失，请先在后台重新整理');
     if(db.prepare('SELECT id FROM queue WHERE song_id=?').get(id))return res.json(snapshot());
     if(song.status!=='ready'||(song.mode==='original'&&get('ai',{}).enabled)) { addJob('prepare',{id,enqueue:true,name});res.json({...snapshot(),preparing:true}); }
     else {enqueue(id,name);res.json(snapshot());}
@@ -169,7 +143,7 @@ export function createApp(options = {}) {
     res.json(snapshot());
   });
   function pickAmbient() {
-    const song=db.prepare("SELECT id,title,artist,mode,duration,needs_video,lyrics FROM songs WHERE status='ready' AND mode!='instrumental' ORDER BY (id=?) ASC,RANDOM()").all(ambient?.song_id||'').find(s=>!get('hidden:'+s.id));
+    const song=db.prepare("SELECT * FROM songs WHERE status='ready' AND mode!='instrumental' ORDER BY (id=?) ASC,RANDOM()").all(ambient?.song_id||'').find(s=>canEnqueue(store,s,cache));
     ambient=song?{...song,song_id:song.id,id:'ambient-'+randomUUID(),ambient:true}:null;emit();
     if(!song&&!db.prepare("SELECT id FROM jobs WHERE kind='prepare' AND status IN ('queued','running') LIMIT 1").get()){const candidate=db.prepare("SELECT id FROM songs WHERE status='new' AND mode!='instrumental' ORDER BY RANDOM() LIMIT 1").get();if(candidate)addJob('prepare',{id:candidate.id,ambientOnly:true});}
   }
@@ -227,8 +201,27 @@ export function createApp(options = {}) {
   app.get('/api/admin/favorites',admin,(req,res)=>{const c=get('favorites',{});res.json({enabled:!!c.enabled,favoriteId:c.favoriteId||'',intervalMinutes:c.intervalMinutes||10,hasCookie:!!c.cookie,lastSync:get('favorite-last',null)});});
   app.post('/api/admin/favorites',admin,(req,res)=>{set('favorites',favoriteConfig(req.body,get('favorites',{})));res.json({ok:true});});
   app.post('/api/admin/favorites/sync',admin,(req,res)=>res.json({id:addJob('favorite-sync',{})}));
-  const reviewList=()=>db.prepare("SELECT id,kind,payload,error,created FROM jobs WHERE status='review' ORDER BY created").all().map(j=>{const p=JSON.parse(j.payload);return {id:j.id,kind:j.kind,candidatePath:p.candidatePath||'',title:p.metadata?.title||p.title||'',artist:p.metadata?.artist||'',tags:p.metadata?.tags||[],lyrics:p.metadata?.lyrics||'',note:j.error,sourceUrl:p.sourceUrl||'',created:j.created};});
-  function resolveReview(req,res){const job=db.prepare("SELECT * FROM jobs WHERE id=? AND status='review'").get(req.params.id);if(!job)throw fail(409,'该任务已处理或不存在');if(job.kind==='find-video'&&req.body.dismissed===true){db.prepare("UPDATE jobs SET status='done' WHERE id=?").run(job.id);emit('library',{});return res.json({ok:true});}const title=clean(req.body.title),artist=clean(req.body.artist);if(!title||!artist||artist==='未知歌手')throw fail(400,'请填写歌手和歌名');const payload=JSON.parse(job.payload);db.prepare("UPDATE jobs SET status='queued',payload=?,error='' WHERE id=?").run(JSON.stringify({...payload,replacementUrl:job.kind==='import'&&req.body.sourceUrl&&req.body.sourceUrl!==payload.sourceUrl?canonicalVideo(req.body.sourceUrl):payload.replacementUrl,sourceUrl:req.body.sourceUrl?canonicalVideo(req.body.sourceUrl):payload.sourceUrl,approved:true,metadata:{...payload.metadata,lyrics:String(req.body.lyrics||payload.metadata?.lyrics||'').slice(0,25000),title,artist,tags:normalizeTags(req.body.tags),needs_review:0,metadata_source:'手动'}}),job.id);setImmediate(work);emit('library',{});res.json({ok:true});}
+  const reviewList=()=>db.prepare("SELECT id,kind,payload,error,created FROM jobs WHERE status='review' ORDER BY created").all().map(j=>{const p=JSON.parse(j.payload);return {id:j.id,kind:j.kind,candidatePath:p.candidatePath||'',candidate:p.candidate,title:p.metadata?.title||p.title||'',artist:p.metadata?.artist||p.artist||'',tags:p.metadata?.tags||[],lyrics:p.metadata?.lyrics||'',lyricsSource:p.metadata?.lyricsSource,note:j.error,sourceUrl:p.candidate?.canonicalUrl||p.sourceUrl||p.url||'',created:j.created};});
+  function resolveReview(req,res){
+    const job=db.prepare("SELECT * FROM jobs WHERE id=? AND status='review'").get(req.params.id);if(!job)throw fail(409,'该任务已处理或不存在');
+    const payload=JSON.parse(job.payload),songId=payload.id||payload.existingId;
+    if(songId)assertSongIdle(store,songId);
+    if(job.kind==='find-video'){
+      const action=req.body.dismissed?'reject':req.body.action||'confirm';
+      if(!['confirm','reject','research'].includes(action))throw fail(400,'请选择确认、拒绝或重新搜索');
+      if(action==='confirm'&&req.body.confirmed!==true)throw fail(400,'请先确认录音版本与偏移');
+      const sourceUrl=req.body.sourceUrl?canonicalVideo(req.body.sourceUrl):undefined;
+      const changed=sourceUrl&&sourceUrl!==(payload.candidate?.canonicalUrl||payload.sourceUrl);
+      const next={...payload,action,confirmed:action==='confirm',approved:false,offset:Number(req.body.offset)||0,expectedRevision:currentSong(store,songId).metadataRevision,...(sourceUrl?{sourceUrl}:{}),...(changed?{candidate:undefined,candidatePath:undefined}:{})};
+      if(action==='research'){delete next.candidate;delete next.candidatePath;delete next.sourceUrl;delete next.url;}
+      db.prepare("UPDATE jobs SET status='queued',payload=?,error='' WHERE id=?").run(JSON.stringify(next),job.id);
+    }else{
+      const title=clean(req.body.title),artist=clean(req.body.artist);if(!title||!artist||artist==='未知歌手')throw fail(400,'请填写歌手和歌名');
+      const next={...payload,...(songId?{expectedRevision:currentSong(store,songId).metadataRevision}:{}),replacementUrl:job.kind==='import'&&req.body.sourceUrl&&req.body.sourceUrl!==payload.sourceUrl?canonicalVideo(req.body.sourceUrl):payload.replacementUrl,sourceUrl:req.body.sourceUrl?canonicalVideo(req.body.sourceUrl):payload.sourceUrl,approved:true,metadata:{...payload.metadata,lyrics:String(req.body.lyrics??payload.metadata?.lyrics??'').slice(0,25000),lyricsSource:req.body.lyricsSource||payload.metadata?.lyricsSource,title,artist,tags:normalizeTags(req.body.tags),needs_review:0,metadata_source:'手动'}};
+      db.prepare("UPDATE jobs SET status='queued',payload=?,error='' WHERE id=?").run(JSON.stringify(next),job.id);
+    }
+    setImmediate(work);emit('library',{});res.json({ok:true});
+  }
   app.get('/api/admin/reviews',admin,(req,res)=>res.json(reviewList()));
   app.post('/api/admin/reviews/:id',admin,resolveReview);
   app.get('/api/admin/integration',admin,(req,res)=>{if(!get('integrationToken'))set('integrationToken',randomUUID()+randomUUID());res.json({token:get('integrationToken')});});
@@ -237,39 +230,34 @@ export function createApp(options = {}) {
   app.post('/api/integrations/reviews/:id',integration,resolveReview);
   app.post('/api/admin/import-settings',admin,(req,res)=>{set('autoImport',req.body.enabled===true);res.json({ok:true});});
   app.get('/api/admin/organize',admin,async(req,res)=>{
-    const rows=db.prepare('SELECT id,path,title,artist,metadata_source,tags,tags_manual FROM songs ORDER BY created DESC LIMIT 500').all();
-    const results=[];for(const song of rows){try{const meta=await metadata(song.path,[...roots,downloads,path.join(dir,'downloads')]);results.push({id:song.id,oldTitle:song.title,oldArtist:song.artist,...meta,tags:song.tags_manual?JSON.parse(song.tags):meta.tags,poster:!!meta.poster});}catch(e){results.push({id:song.id,oldTitle:song.title,oldArtist:song.artist,title:song.title,artist:song.artist,error:e.message});}}
+    const rows=db.prepare('SELECT id,path,title,artist,metadataRevision,metadata_source,tags,tags_manual FROM songs ORDER BY created DESC LIMIT 500').all();
+    const results=[];for(const song of rows){try{const meta=await metadata(song.path,[...roots,downloads,path.join(dir,'downloads')]);results.push({id:song.id,expectedRevision:song.metadataRevision,oldTitle:song.title,oldArtist:song.artist,...meta,tags:song.tags_manual?JSON.parse(song.tags):meta.tags,poster:!!meta.poster});}catch(e){results.push({id:song.id,expectedRevision:song.metadataRevision,oldTitle:song.title,oldArtist:song.artist,title:song.title,artist:song.artist,error:e.message});}}
     res.json(results);
   });
-  app.post('/api/admin/organize',admin,(req,res)=>{
+  app.post('/api/admin/organize',admin,async(req,res)=>{
     const rows=req.body.songs;if(!Array.isArray(rows)||rows.length>500)throw fail(400,'每次最多整理 500 首');
-    for(const row of rows){if(!clean(row.title)||!clean(row.artist)||!db.prepare('SELECT id FROM songs WHERE id=?').get(row.id))throw fail(400,'请检查歌手和歌名');}
-    db.exec('BEGIN');try{for(const row of rows)db.prepare("UPDATE songs SET title=?,artist=?,search=?,metadata_source='手动',needs_review=?,tags=?,tags_manual=1 WHERE id=?").run(clean(row.title),clean(row.artist),searchText(clean(row.title),clean(row.artist)),clean(row.artist)==='未知歌手'?1:0,JSON.stringify(normalizeTags(row.tags)),row.id);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}
-    if(req.body.prepare)for(const row of rows)if(!db.prepare('SELECT id FROM queue WHERE song_id=?').get(row.id))addJob('prepare',{id:row.id});
-    emit('library',{});res.json({ok:true,count:rows.length});
+    const results=[];for(const row of rows){try{const song=await saveSongMetadata(store,row.id,{title:clean(row.title),artist:clean(row.artist),expectedRevision:row.expectedRevision,tags:JSON.stringify(normalizeTags(row.tags)),tags_manual:1,metadata_source:'手动',needs_review:clean(row.artist)==='未知歌手'?1:0},cache);if(req.body.prepare)addJob('prepare',{id:row.id});results.push({id:row.id,ok:true,metadataRevision:song.metadataRevision});}catch(e){results.push({id:row.id,ok:false,error:e.message,code:e.code});}}
+    emit('library',{});res.json({ok:results.every(r=>r.ok),count:results.filter(r=>r.ok).length,results});
   });
   app.post('/api/admin/scan', admin, (req,res) => res.json({id:addJob('scan',{})}));
   app.post('/api/admin/jobs/:id/retry', admin, (req,res) => { const job=db.prepare('SELECT * FROM jobs WHERE id=?').get(req.params.id); if(!job || job.status!=='failed') throw fail(409,'仅失败任务可重试'); db.prepare("UPDATE jobs SET status='queued',error='' WHERE id=?").run(job.id);setImmediate(work);res.json({ok:true}); });
   app.post('/api/admin/songs/:id/probe', admin, async (req,res) => {
     const song=db.prepare('SELECT * FROM songs WHERE id=?').get(req.params.id); if(!song) throw fail(404,'歌曲不存在');
-    const info=await probe(await safeMedia(song.path,[...roots,downloads,path.join(dir,'downloads')])); db.prepare('UPDATE songs SET audio=?,duration=? WHERE id=?').run(JSON.stringify(info.audio),info.duration,song.id);res.json(info);
+    const info=await probe(await safeMedia(song.path,[...roots,downloads,path.join(dir,'downloads')]));res.json(info);
   });
-  app.put('/api/admin/songs/:id/lyrics',admin,(req,res)=>{if(!db.prepare('SELECT id FROM songs WHERE id=?').get(req.params.id))throw fail(404,'歌曲不存在');const lyrics=clean(req.body.lyrics,25000);db.prepare('UPDATE songs SET lyrics=? WHERE id=?').run(lyrics,req.params.id);emit();res.json({ok:true});});
+  app.put('/api/admin/songs/:id/lyrics',admin,async(req,res)=>{const song=await saveSongMetadata(store,req.params.id,{lyrics:clean(req.body.lyrics,25000),expectedRevision:req.body.expectedRevision},cache);emit('library',{});emit();res.json({ok:true,metadataRevision:song.metadataRevision});});
   app.post('/api/admin/songs/:id/replace',admin,async(req,res)=>{
     const song=db.prepare('SELECT * FROM songs WHERE id=?').get(req.params.id);if(!song)throw fail(404,'歌曲不存在');
-    if(db.prepare('SELECT id FROM queue WHERE song_id=?').get(song.id)||db.prepare("SELECT payload FROM jobs WHERE kind='prepare' AND status IN ('queued','running')").all().some(j=>JSON.parse(j.payload).id===song.id))throw fail(409,'请先结束歌曲排队或后台处理');
-    const file=await safeMedia(clean(req.body.path,1000),roots);const info=await probe(file);if(!info.hasVideo)throw fail(400,'补充的文件必须包含视频轨道');
-    db.prepare("UPDATE songs SET path=?,needs_video=0,mode='original',status='new',error='' WHERE id=?").run(file,song.id);res.json({ok:true});
+    await withSongWrite(store,song.id,async()=>{if(db.prepare('SELECT id FROM queue WHERE song_id=?').get(song.id))throw fail(409,'请先移出播放队列');const file=await safeMedia(clean(req.body.path,1000),roots);await replaceVideo(store,song,file,'local',cache,{confirmed:req.body.confirmed===true,offset:req.body.offset});},{expectedRevision:req.body.expectedRevision,required:true,idle:true});res.json({ok:true});
   });
-  app.patch('/api/admin/songs/:id', admin, (req,res) => {
+  app.patch('/api/admin/songs/:id', admin, async (req,res) => {
     const song=db.prepare('SELECT * FROM songs WHERE id=?').get(req.params.id); if(!song) throw fail(404,'歌曲不存在');
     if(db.prepare('SELECT id FROM queue WHERE song_id=?').get(song.id) || db.prepare("SELECT payload FROM jobs WHERE kind='prepare' AND status IN ('queued','running')").all().some(j=>JSON.parse(j.payload).id===song.id)) throw fail(409,'歌曲正在排队或处理中，请结束后再编辑');
     const title=clean(req.body.title), artist=clean(req.body.artist), mode=req.body.mode;
     const backing=Number(req.body.backing),vocal=Number(req.body.vocal);
     if(!title||!artist||!['original','instrumental','tracks','channels','separated'].includes(mode)||(mode==='separated'&&song.mode!=='separated')||![backing,vocal].every(n=>Number.isInteger(n)&&n>=0&&n<32)||(mode==='channels' && (backing>1||vocal>1||backing===vocal))) throw fail(400,'请检查歌曲名称和音轨配置');
-    db.prepare("UPDATE songs SET metadata_source='手动',needs_review=? WHERE id=?").run(artist==='未知歌手'?1:0,song.id);
     const changed=song.mode!==mode || song.backing!==backing || song.vocal!==vocal;
-    db.prepare('UPDATE songs SET title=?,artist=?,search=?,mode=?,backing=?,vocal=?,status=? WHERE id=?').run(title,artist,searchText(title,artist),mode,backing,vocal,changed?'new':song.status,song.id);res.json({ok:true});
+    const updated=await saveSongMetadata(store,song.id,{title,artist,mode,backing,vocal,lyrics:req.body.lyrics,status:changed?'new':song.status,metadata_source:'手动',needs_review:artist==='未知歌手'?1:0,expectedRevision:req.body.expectedRevision},cache);emit('library',{});res.json({ok:true,metadataRevision:updated.metadataRevision});
   });
   app.post('/api/admin/songs/:id/prepare', admin, (req,res) => {
     if(!db.prepare('SELECT id FROM songs WHERE id=?').get(req.params.id)) throw fail(404,'歌曲不存在');
@@ -279,7 +267,7 @@ export function createApp(options = {}) {
   app.get('/', (req,res) => res.redirect(302,'/admin'));
   app.use(express.static(path.resolve('dist')));
   app.get(['/', '/tv', '/play', '/mobile', '/control', '/admin'], (req,res) => existsSync(path.resolve('dist/index.html')) ? res.sendFile(path.resolve('dist/index.html')) : res.status(503).send('请先运行 npm run build，或访问 Vite 开发服务'));
-  app.use((err,req,res,next) => { if(res.headersSent) return next(err); res.status(err.status || 400).json({error:err.message || '请求失败'}); });
+  app.use((err,req,res,next) => { if(res.headersSent) return next(err); res.status(err.status || 400).json({error:err.message || '请求失败',code:err.code,currentRevision:err.currentRevision}); });
   const favoritesTimer=setInterval(()=>{const c=get('favorites',{});if(stopped||options.worker===false||!c.enabled)return;const recent=db.prepare("SELECT created FROM jobs WHERE kind='favorite-sync' ORDER BY created DESC LIMIT 1").get();if(!recent||Date.now()-recent.created>c.intervalMinutes*60000)addJob('favorite-sync',{});},30000);favoritesTimer.unref();
   let checking=false;const observed=new Map();
   const importer=setInterval(async()=>{
@@ -295,5 +283,5 @@ export function createApp(options = {}) {
   },30000);importer.unref();
   const heartbeat = setInterval(()=> { for(const client of clients) client.write(': heartbeat\n\n'); },20000); heartbeat.unref();
   setImmediate(work);
-  return {app,store,addJob,close:()=>{stopped=true;clearInterval(heartbeat);clearInterval(importer);clearInterval(favoritesTimer);clients.forEach(c=>c.end());if(!running) db.close();}};
+  return {app,store,addJob,close:()=>{stopped=true;clearInterval(heartbeat);clearInterval(importer);clearInterval(favoritesTimer);clients.forEach(c=>c.end());scheduler.stop();}};
 }

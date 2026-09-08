@@ -14,6 +14,7 @@ test('NFO and artwork import, duplicate safety and source preservation',async t=
  const meta=await metadata(source,[download]);assert.equal(meta.title,'晴天 & 雨天');assert.equal(meta.artist,'测试歌手');assert.equal(meta.metadata_source,'NFO');assert.ok(meta.poster);assert.deepEqual(meta.tags,['女声','港台']);
  const id=await importMedia(store,source,download,media);assert.equal(await importMedia(store,source,download,media),id);
  const song=store.db.prepare('SELECT * FROM songs WHERE id=?').get(id);assert.match(song.path,/画面.mp4$/);assert.equal(await readFile(song.path,'utf8'),'video source');assert.equal(await readFile(source,'utf8'),'video source');assert.ok((await stat(song.poster)).size);
+ assert.equal(song.status,'preparing','an in-flight import must not be selected by ambient preparation');
  const second=path.join(download,'second.mp4');await writeFile(second,'a different performance');const other=await importMedia(store,second,download,media,{title:meta.title,artist:meta.artist});assert.notEqual(other,id);assert.equal(await readFile(song.path,'utf8'),'video source');
  await scanLibrary(store,[media]);assert.equal(store.db.prepare('SELECT COUNT(*) n FROM songs').get().n,2);
  await writeFile(path.join(download,'unfinished.mp4.part'),'not done');assert.equal((await filesUnder(download)).length,2);

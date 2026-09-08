@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {writeFileSync} from 'node:fs';
+import {resourceRoot} from '../server/assets.js';
 import { createApp } from '../server/app.js';
 import { canonicalVideo, scanLibrary, searchText, inside } from '../server/media.js';
 import { providerConfig, testProvider } from '../server/separation.js';
@@ -16,7 +18,7 @@ async function fixture(t){
   const base=`http://127.0.0.1:${server.address().port}`;
   t.after(async()=>{service.close();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});});
   const call=async(url,body,method='GET',token=service.store.get('roomToken'))=>{const r=await fetch(base+'/api'+url,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(body!==undefined?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json()};};
-  const seed=(id,title,status='ready')=>service.store.db.prepare('INSERT INTO songs (id,path,title,artist,search,created,status) VALUES (?,?,?,?,?,?,?)').run(id,path.join(root,id+'.mp4'),title,'测试歌手',searchText(title,'测试歌手'),Date.now(),status);
+  const seed=(id,title,status='ready')=>{service.store.db.prepare('INSERT INTO songs (id,path,title,artist,search,created,status) VALUES (?,?,?,?,?,?,?)').run(id,path.join(root,id+'.mp4'),title,'测试歌手',searchText(title,'测试歌手'),Date.now(),status);if(status==='ready')writeFileSync(path.join(resourceRoot(root),id+'-vocal.mp4'),'fixture for HTTP state tests');};
   return {...service,base,root,dir,call,seed};
 }
 test('authentication, admin isolation, proxy origin independence and UTF-8 token safety',async t=>{
@@ -62,7 +64,7 @@ test('provider secrets stay server-side and validation rejects malformed modes',
   f.seed('a','测试');assert.equal((await f.call('/admin/songs/a',{title:'测试',artist:'我',mode:'channels',backing:0,vocal:0},'PATCH',admin)).status,400);
 });
 test('media Range streaming, room credential persists across restart',async t=>{
-  const f=await fixture(t);const id='a'.repeat(24);f.seed(id,'测试');await mkdir(path.join(f.dir,'data','cache'),{recursive:true});await writeFile(path.join(f.dir,'data','cache',id+'-vocal.mp4'),'0123456789');
+  const f=await fixture(t);const id='a'.repeat(24);f.seed(id,'测试');await rm(path.join(resourceRoot(f.root),id+'-vocal.mp4'));await mkdir(path.join(f.dir,'data','cache'),{recursive:true});await writeFile(path.join(f.dir,'data','cache',id+'-vocal.mp4'),'0123456789');
   const response=await fetch(`${f.base}/api/media/${id}/backing?token=${f.store.get('roomToken')}`,{headers:{Range:'bytes=2-5'}});assert.equal(response.status,206);assert.equal(await response.text(),'2345');
   assert.equal((await fetch(`${f.base}/api/media/${id}/vocal`)).status,401);
 });
@@ -113,11 +115,11 @@ test('random original opening stays outside queue and yields to requested songs'
 
 test('organizer saves reviewed names and tags; filtering and rescans preserve manual labels',async t=>{
  const f=await fixture(t);f.seed('tagged','旧歌名');await writeFile(path.join(f.root,'tagged.mp4'),'source');
- const admin='test-password-12345';let result=await f.call('/admin/organize',{songs:[{id:'tagged',title:'新歌名',artist:'新歌手',tags:['女声','港台','无效标签']}],prepare:false},'POST',admin);assert.equal(result.status,200);
+ const admin='test-password-12345';let result=await f.call('/admin/organize',{songs:[{id:'tagged',expectedRevision:0,title:'新歌名',artist:'新歌手',tags:['女声','港台','无效标签']}],prepare:false},'POST',admin);assert.equal(result.status,200);assert.equal(result.data.results[0].ok,true);
  const song=f.store.db.prepare('SELECT * FROM songs WHERE id=?').get('tagged');assert.deepEqual(JSON.parse(song.tags),['女声','港台']);assert.equal(song.title,'新歌名');
  assert.equal((await f.call('/songs?tag='+encodeURIComponent('女声'))).data.length,1);assert.equal((await f.call('/songs?tag='+encodeURIComponent('男声'))).data.length,0);
  const preview=(await f.call('/admin/organize',undefined,'GET',admin)).data;assert.deepEqual(preview[0].tags,['女声','港台']);
- assert.equal((await f.call('/admin/organize',{songs:[{id:'tagged',title:'',artist:'x'}]},'POST',admin)).status,400);
+ assert.equal((await f.call('/admin/organize',{songs:[{id:'tagged',expectedRevision:song.metadataRevision,title:'',artist:'x'}]},'POST',admin)).data.results[0].ok,false);
 });
 
 test('scoped integration review API cannot access admin and resolves only pending metadata',async t=>{

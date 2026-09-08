@@ -21,6 +21,11 @@ export function openStore(dir) {
   if(!columns.includes('needs_video'))db.exec("ALTER TABLE songs ADD COLUMN needs_video INTEGER DEFAULT 0");
   if(!columns.includes('lyrics'))db.exec("ALTER TABLE songs ADD COLUMN lyrics TEXT DEFAULT ''");
   for(const [name,type] of [['evidence',"TEXT DEFAULT '[]'"],['tags',"TEXT DEFAULT '[]'"],['tags_manual','INTEGER DEFAULT 0'],['poster',"TEXT DEFAULT ''"],['metadata_source',"TEXT DEFAULT '文件名'"],['needs_review','INTEGER DEFAULT 0']])if(!columns.includes(name))db.exec('ALTER TABLE songs ADD COLUMN '+name+' '+type);
+  for(const name of ['metadataRevision','resourceRevision'])if(!columns.includes(name))db.exec('ALTER TABLE songs ADD COLUMN '+name+' INTEGER NOT NULL DEFAULT 0');
+  db.exec(`DROP TRIGGER IF EXISTS songs_metadata_revision;
+    CREATE TRIGGER songs_metadata_revision AFTER UPDATE OF title,artist,lyrics,mode,backing,vocal,tags,needs_review,path,metadata_source,evidence ON songs
+    WHEN OLD.title IS NOT NEW.title OR OLD.artist IS NOT NEW.artist OR OLD.lyrics IS NOT NEW.lyrics OR OLD.mode IS NOT NEW.mode OR OLD.backing IS NOT NEW.backing OR OLD.vocal IS NOT NEW.vocal OR OLD.tags IS NOT NEW.tags OR OLD.needs_review IS NOT NEW.needs_review OR OLD.path IS NOT NEW.path OR OLD.metadata_source IS NOT NEW.metadata_source OR OLD.evidence IS NOT NEW.evidence
+    BEGIN UPDATE songs SET metadataRevision=OLD.metadataRevision+1 WHERE id=NEW.id; END;`);
   const readDb = (key, fallback) => { const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key); return row ? JSON.parse(row.value) : fallback; };
   const configPath=path.join(dir,'settings.json');
   const defaults={version:1,autoImport:true,publicUrl:'',onlineEnabled:false,ai:{enabled:false,endpoint:'',model:'',apiKey:''}};

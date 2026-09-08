@@ -1,4 +1,4 @@
-import { probe } from '../media.js';
+import { probe } from '../media-utils.js';
 import { run } from '../process.js';
 
 // Check actual decoded stream metadata before any encoding can pad/truncate it.

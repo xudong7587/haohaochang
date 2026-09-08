@@ -1,3 +1,4 @@
+import {withSongWrite} from './song-writes.js';
 import {findLyrics} from './lyrics-source.js';
 import path from 'node:path';
 import {stat,mkdir,copyFile} from 'node:fs/promises';
@@ -50,6 +51,7 @@ export async function acquireSong(payload,{store,downloads,roots,outputs,search=
       if(!lyrics){try{lyricsMatch=await findLyrics(title,artist,(await probe(file)).duration,{version:candidate.identity.version});lyrics=lyricsMatch.lyrics;}catch{}}
       if(!lyrics)return {review:'已下载音频，缺少匹配歌词，请补充 LRC 后继续',metadata:{title,artist,lyrics:''},candidate};
       const songId=await importMedia(store,file,downloads,roots[0],{...metadataFromCandidate(candidate),title,artist,tags:[],mode,metadata_source:'点歌信息',needs_review:0});
+      return await withSongWrite(store,songId,async()=>{
       store.db.prepare('UPDATE songs SET lyrics=? WHERE id=?').run(lyrics,songId);
       store.set('source:'+songId,{url:candidate.canonicalUrl,title:candidate.externalTitle,candidate});
       if(lyricsMatch)store.set('lyrics-match:'+songId,{...lyricsMatch,lyrics:undefined});
@@ -58,6 +60,7 @@ export async function acquireSong(payload,{store,downloads,roots,outputs,search=
       if(mode==='original'&&store.get('ai',{}).enabled)await separateSong(store,song,outputs);
       if(store.db.prepare('SELECT mode FROM songs WHERE id=?').get(songId).mode==='original')return {review:'音频与歌词已保存，请连接 PC 或分离 API 后重试',metadata:{title,artist,lyrics},candidate};
       return {id:songId,title,artist};
+      },{wait:true,jobId:payload.jobId});
     }catch(error){last=error;}
   }
   return {review:'资源处理失败：'+(last?.message||'请检查下载源'),metadata:{title,artist}};

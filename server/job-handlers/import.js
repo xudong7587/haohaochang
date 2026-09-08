@@ -1,0 +1,59 @@
+import {metadataFromCandidate} from '../../shared/source-candidate.js';
+import {withSongWrite} from '../song-writes.js';
+import {identifyTitle} from '../../shared/catalog.js';
+import {findLyrics} from '../lyrics-source.js';
+import {sourceMetadata,withBiliCookie} from '../sources.js';
+import {readFile} from 'node:fs/promises';
+import path from 'node:path';
+import {stat} from 'node:fs/promises';
+import {enrichSong} from '../enrichment.js';
+import {metadata,importMedia,importKey} from '../library.js';
+import {downloadVideo,prepareSong} from '../media.js';
+import {separateSong} from '../separation.js';
+
+
+export async function importJob(job,payload,context){
+  const {db,get,set,store,dir,roots,downloads,cache,legacyCache,emit,addJob,enqueue,fail}=context;
+      if (job.kind === 'import') {
+        if(payload.replacementUrl){
+          const originalFile=payload.file,originalInfo=await stat(originalFile);
+          const replacement=await withBiliCookie(get('favorites',{}).cookie,dir,cookieFile=>downloadVideo(payload.replacementUrl,downloads,cookieFile));
+          const downloaded=await stat(replacement.file);
+          set(importKey(originalFile,originalInfo),'replaced-by:'+job.id);
+          payload={...payload,file:replacement.file,signature:downloaded.size+':'+downloaded.mtimeMs,sourceUrl:payload.replacementUrl,replacementUrl:undefined,metadata:{...payload.metadata,lyrics:''}};
+          db.prepare('UPDATE jobs SET payload=? WHERE id=?').run(JSON.stringify(payload),job.id);
+        }
+        const sourceInfo=await stat(payload.file);if(payload.signature!==sourceInfo.size+':'+sourceInfo.mtimeMs)throw fail(409,'下载文件仍在变化，等待下次检查');
+        let meta=payload.approved?payload.metadata:payload.candidate?{...await metadata(payload.file,[downloads]),...metadataFromCandidate(payload.candidate)}:await metadata(payload.file,[downloads]);
+        if(!payload.approved&&!payload.candidate){
+          let videoTitle=payload.title;
+          const bv=path.basename(payload.file).match(/(BV[a-zA-Z0-9]+).*S\d+E(\d+)/i);
+          if(!videoTitle&&bv){try{const info=await sourceMetadata('https://www.bilibili.com/video/'+bv[1]+'?p='+Number(bv[2]),get('favorites',{}).cookie);videoTitle=info.title;}catch{}}
+          if(videoTitle)meta={...meta,...identifyTitle(videoTitle)};
+        }
+        if(!payload.approved&&!payload.candidate&&get('enrichment',{}).enabled)meta={...meta,...await enrichSong(get('enrichment'),{title:payload.title||meta.title,artist:meta.artist,tags:meta.tags,sourceUrl:payload.sourceUrl||''})};
+        let lyrics=meta.lyrics||'';
+        if(!lyrics){try{lyrics=await readFile(path.join(path.dirname(payload.file),path.parse(payload.file).name+'.lrc'),'utf8');}catch{}}
+        if(!lyrics&&!meta.needs_review){try{const result=await findLyrics(meta.title,meta.artist,(await (await import('../media-utils.js')).probe(payload.file)).duration);lyrics=result.lyrics;meta.lyricsSource={...result,lyrics:undefined};}catch{}}
+        meta.lyrics=lyrics;
+        if(!lyrics){meta.needs_review=1;meta.note='缺少歌词，请自动查找或导入 LRC 后继续';}
+        if(meta.needs_review){db.prepare("UPDATE jobs SET status='review',payload=?,error=? WHERE id=?").run(JSON.stringify({...payload,metadata:meta}),meta.note||'请补充歌手、歌名后继续',job.id);emit('library',{});return 'review';}
+        if(payload.isBacking)meta.mode='instrumental';
+        if((meta.mode==='instrumental'||!get('ai',{}).enabled)&&!['tracks','channels'].includes(meta.mode)){
+          db.prepare("UPDATE jobs SET status='review',payload=?,error=? WHERE id=?").run(JSON.stringify({...payload,metadata:meta}),meta.mode==='instrumental'?'仅有伴奏，仍需补充原唱资源':'请先配置 PC 或云端分离服务，再继续制作双版本',job.id);return 'review';
+        }
+        const id=await importMedia(store,payload.file,downloads,roots[0],meta);
+        await withSongWrite(store,id,async()=>{
+        db.prepare('UPDATE jobs SET payload=? WHERE id=?').run(JSON.stringify({...payload,id}),job.id);
+        if(payload.candidate)set('source:'+id,payload.candidate);
+        if(meta.lyricsSource)set('lyrics-match:'+id,meta.lyricsSource);
+        db.prepare('UPDATE songs SET evidence=?,lyrics=? WHERE id=?').run(JSON.stringify(meta.evidence||[]),meta.lyrics||'',id);
+        await prepareSong(store,id,[...roots,downloads,path.join(dir,'downloads')],cache);
+        const song=db.prepare('SELECT * FROM songs WHERE id=?').get(id);
+        if(song.mode==='original'&&get('ai',{}).enabled)await separateSong(store,song,cache);
+        if(payload.enqueue)enqueue(id,payload.name||'在线点歌');
+        },{wait:true,jobId:job.id});
+      }
+
+}
+

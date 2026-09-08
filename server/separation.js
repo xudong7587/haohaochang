@@ -2,6 +2,7 @@
 import { packageDir, publishBacking, present } from './song-package.js';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import {inspectPackage} from './resource-health.js';
 import { checkProvider, runProviderJob, hasProviderCheckpoint } from './separation/protocol.js';
 import { validateResult } from './separation/validation.js';
 export { providerConfig } from './separation/config.js';
@@ -11,7 +12,7 @@ const pcActive = new Map();
 export async function separateSong(store, song, cache) {
   const config = store.get('ai', {});
   if (!config.enabled) return false;
-  if (song.mode === 'separated' && await present(path.join(await packageDir(store, song, cache), '伴奏.m4a'))) return true;
+  if (song.mode === 'separated' && (await inspectPackage(store,song,await packageDir(store,song,cache))).backing.available) return true;
   const pc = config.pcEndpoint ? {endpoint:config.pcEndpoint, model:config.pcModel || 'htdemucs', apiKey:config.pcApiKey, pc:true} : null;
   const cloud = config.endpoint ? {endpoint:config.endpoint, model:config.model, apiKey:config.apiKey} : null;
   const resumingPc = pc && hasProviderCheckpoint(store, song, pc);
