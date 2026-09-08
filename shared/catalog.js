@@ -26,16 +26,24 @@ const artists={
  '张碧晨':['年轮'], '汪峰':['春天里','北京北京'], '朴树':['平凡之路','那些花儿']
 };
 export const catalogSeed=Object.entries(artists).flatMap(([artist,titles])=>[...new Set(titles)].map(title=>({title,artist})));
+export function recordingVersion(text){
+ const value=String(text||'');
+ return [['cover',/翻唱|\bcover\b/i],['live',/现场|演唱会|\blive\b/i],['rerecording',/重录|\brerecording\b/i],['acoustic',/不插电|\bacoustic\b/i],['remix',/混音|\bremix\b/i]].filter(([,pattern])=>pattern.test(value)).map(([name])=>name).join(' / ');
+}
 export function identifyTitle(text){
  const cleaned=String(text||'').replace(/【[^】]*】|\[[^\]]*\]/g,' ').trim();
  const match=catalogSeed.filter(s=>cleaned.toLowerCase().includes(s.artist.toLowerCase())&&cleaned.includes(s.title)).sort((a,b)=>b.title.length-a.title.length)[0];
- if(match)return {...match,needs_review:0};
+ if(match){const version=recordingVersion(text);return {...match,...(version?{version,reviewReasons:['recording-version-needs-review']}:{}),needs_review:version?1:0};}
  const pieces=cleaned.split(/\s*[-–—]\s*/);
  return {artist:pieces.length>1?pieces[0]:'未知歌手',title:pieces.length>1?pieces.slice(1).join(' - '):cleaned,needs_review:1};
 }
 export function identifyVideo(info){
- const direct=identifyTitle(info.title);if(!direct.needs_review)return direct;
- const names=[...new Set(catalogSeed.map(s=>s.artist))].filter(name=>String(info.videoTitle||'').includes(name));
- if(names.length===1){const matched=identifyTitle(names[0]+' - '+info.title);return {...matched,title:matched.needs_review?direct.title:matched.title,artist:names[0]};}
- return direct;
+ const direct=identifyTitle(info.title);
+ let result=direct;
+ if(direct.needs_review){
+  const names=[...new Set(catalogSeed.map(s=>s.artist))].filter(name=>String(info.videoTitle||'').includes(name));
+  if(names.length===1){const matched=identifyTitle(names[0]+' - '+info.title);result={...matched,title:matched.needs_review?direct.title:matched.title,artist:names[0]};}
+ }
+ const version=recordingVersion(`${info.title||''} ${info.videoTitle||''}`);
+ return version?{...result,version,needs_review:1,reviewReasons:[...new Set([...(result.reviewReasons||[]),'recording-version-needs-review'])]}:result;
 }
