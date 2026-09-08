@@ -1,3 +1,4 @@
+import {archiveVersion} from './assets.js';
 import { mkdir, rename, stat } from 'node:fs/promises';
 import { createWriteStream, openAsBlob } from 'node:fs';
 import { Readable, Transform } from 'node:stream';
@@ -54,7 +55,7 @@ async function separateWithConfig(store,song,cache,config){
   const source=path.join(dir,'input.m4a');
   await run(process.env.FFMPEG||'ffmpeg',['-y','-v','error','-i',vocal,'-vn','-c:a','aac','-b:a','192k',source],600000);
   if((await stat(source)).size>100*1024*1024)throw new Error('待分离音频超过 100 MB');
-  const form=new FormData();form.set('file',await openAsBlob(source,{type:'audio/mp4'}),'input.m4a');form.set('model',config.model);
+  const form=new FormData();form.set('file',await openAsBlob(source,{type:'audio/mp4'}),'input.m4a');form.set('model',config.model);form.set('title',`${song.artist} - ${song.title}`);
   const response=await fetch(`${config.endpoint}/separate`,{method:'POST',headers:headers(config),body:form,signal:AbortSignal.timeout(120000),redirect:'error'});
   if(!response.ok)throw new Error(`AI 分离请求失败 (${response.status})`);
   let result=await response.json();const deadline=Date.now()+1800000;
@@ -70,6 +71,7 @@ async function separateWithConfig(store,song,cache,config){
   const output=path.join(cache,`${song.id}-backing.mp4`);
   if(!Number.isFinite(song.duration)||song.duration<=0)throw new Error('无法读取歌曲时长');
   await run(process.env.FFMPEG||'ffmpeg',['-y','-v','error','-i',vocal,'-i',backing,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-af','apad','-t',String(song.duration),'-shortest','-movflags','+faststart','-f','mp4',output+'.tmp'],600000);
+  await archiveVersion(output);
   await rename(output+'.tmp',output);
   store.db.prepare("UPDATE songs SET mode='separated',status='ready',error='' WHERE id=?").run(song.id);
   return true;

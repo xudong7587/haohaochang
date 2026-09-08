@@ -1,21 +1,13 @@
+import {run} from './process.js';
+export {run} from './process.js';
+import {resourceFolder,preserveSource,archiveVersion} from './assets.js';
+import {audioVisualArgs} from './visualization.js';
 import { metadata } from './library.js';
-import { spawn } from 'node:child_process';
 import { readdir, realpath, stat, mkdir, rename, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pinyin } from 'pinyin-pro';
 
-export function run(binary, args, timeout = 120000, maxOutput = 8 * 1024 * 1024) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '', err = '', failure;
-    const timer = setTimeout(() => { failure = new Error('处理超时，请稍后重试'); child.kill('SIGKILL'); }, timeout);
-    child.stdout.on('data', d => { out += d; if (out.length > maxOutput) { failure = new Error('工具输出过大'); child.kill('SIGKILL'); } });
-    child.stderr.on('data', d => { err = (err + d).slice(-4000); });
-    child.on('error', e => { clearTimeout(timer); reject(new Error(e.code === 'ENOENT' ? `${binary} 未安装；请使用 Docker 运行完整媒体功能` : e.message)); });
-    child.on('close', code => { clearTimeout(timer); code === 0 && !failure ? resolve(out) : reject(failure || new Error(err || `${binary} 处理失败 (${code})`)); });
-  });
-}
 export function searchText(title, artist) {
   const text = `${title} ${artist}`;
   return `${text} ${pinyin(text, { toneType: 'none' })} ${pinyin(text, { pattern: 'first', toneType: 'none' }).replaceAll(' ', '')}`.toLowerCase();
@@ -30,11 +22,11 @@ export async function scanLibrary(store, roots) {
   let count = 0;
   async function walk(dir, root) {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
-      if (entry.isSymbolicLink()) continue;
+      if (entry.isSymbolicLink() || entry.name===resourceFolder) continue;
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) await walk(file, root);
       else if (/\.(mp4|mkv|avi|mov|webm|m4v|mpg|mpeg|ts|mp3|flac|wav|m4a|ogg|aac)$/i.test(entry.name)) {
-        const id = createHash('sha256').update(file).digest('hex').slice(0, 24);
+        const id = store.db.prepare('SELECT id FROM songs WHERE path=?').get(file)?.id || createHash('sha256').update(file).digest('hex').slice(0, 24);
         const {artist,title,poster,tags,metadata_source,needs_review}=await metadata(file,[root]);
         count += Number(store.db.prepare('INSERT OR IGNORE INTO songs (id,path,title,artist,search,created) VALUES (?,?,?,?,?,?)').run(id, file, title, artist, searchText(title, artist), Date.now()).changes);
         store.db.prepare("UPDATE songs SET title=?,artist=?,search=?,metadata_source=?,needs_review=? WHERE id=? AND metadata_source NOT IN ('手动','AI')").run(title,artist,searchText(title,artist),metadata_source,needs_review,id);
@@ -56,10 +48,11 @@ export async function prepareSong(store, id, roots, cache) {
   const song = store.db.prepare('SELECT * FROM songs WHERE id=?').get(id);
   if (!song) throw new Error('歌曲不存在');
   const file = await safeMedia(song.path, roots);
+  await preserveSource({...song,path:file},cache);
   const fileStat=await stat(file);
   const fingerprint=JSON.stringify([fileStat.size,fileStat.mtimeMs,song.mode,song.backing,song.vocal]);
   if(store.get(`cache:${id}`)===fingerprint || song.mode==='separated') {
-    try { if(song.mode!=='instrumental')await stat(path.join(cache,`${id}-vocal.mp4`));if(song.mode!=='original')await stat(path.join(cache,`${id}-backing.mp4`));store.db.prepare("UPDATE songs SET status='ready',error='' WHERE id=?").run(id);return; } catch {if(song.mode==='separated')throw new Error('分离缓存缺失，请将资源类型改为普通 MV 后重新准备');}
+    try { if(song.mode!=='instrumental')await stat(path.join(cache,`${id}-vocal.mp4`));if(song.mode!=='original')await stat(path.join(cache,`${id}-backing.mp4`));store.db.prepare("UPDATE songs SET status='ready',error='' WHERE id=?").run(id);return; } catch {if(song.mode==='separated')throw new Error('正式伴奏文件缺失，请将资源类型改为普通 MV 后重新准备');}
   }
   const info = await probe(file);
   if (!info.audio.length) throw new Error('文件没有音频轨道');
@@ -70,63 +63,24 @@ export async function prepareSong(store, id, roots, cache) {
   for (const variant of song.mode === 'original' ? ['vocal'] : song.mode==='instrumental'?['backing']:['backing', 'vocal']) {
     const track = song.mode === 'tracks' ? song[variant] : 0;
     const output = path.join(cache, `${id}-${variant}.mp4`);
-    const args = ['-y', '-v', 'error', '-i', file];
+    let args;
     if(!info.hasVideo){
       let cover;
       for(const candidate of [...(song.poster?[song.poster]:[]),path.join(path.dirname(file),path.parse(file).name+'.jpg'),path.join(path.dirname(file),'cover.jpg')]){try{cover=await safeMedia(candidate,roots);break;}catch{}}
-      if(cover)args.push('-loop','1','-i',cover);else args.push('-f','lavfi','-i','color=c=0x272433:s=1280x720:r=15');
+      const images=cover?[cover]:[];
+      const backgrounds=path.join(path.dirname(file),path.parse(file).name+'.images');
+      try{for(const name of (await readdir(backgrounds)).sort()){if(!/\.(png|jpe?g)$/i.test(name)||images.length>=5)continue;images.push(await safeMedia(path.join(backgrounds,name),roots));}}catch{}
+      args=audioVisualArgs(file,images,info.duration,track,song.mode==='channels'?song[variant]:null);
+    }else{
+      args=['-y','-v','error','-i',file,'-map','0:v:0','-map',`0:a:${track}`,'-c:v','libx264','-preset','veryfast','-crf','22','-vf',"scale=w='min(1920,iw)':h=-2",'-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-ac','2'];
+      if(song.mode==='channels')args.push('-af',`pan=stereo|c0=c${song[variant]}|c1=c${song[variant]}`);
     }
-    args.push('-map',info.hasVideo?'0:v:0':'1:v:0','-map', `0:a:${track}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-vf', "scale=w='min(1920,iw)':h=-2", '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k');
-    if(!info.hasVideo){if(!Number.isFinite(info.duration)||info.duration<=0)throw new Error('无法读取音频时长，不能生成背景视频');args.push('-t',String(info.duration),'-shortest');}
-    if (song.mode === 'channels') args.push('-af', `pan=stereo|c0=c${song[variant]}|c1=c${song[variant]}`);
     args.push('-movflags', '+faststart', '-f', 'mp4', output + '.tmp');
     await run(process.env.FFMPEG || 'ffmpeg', args, 3600000);
+    await archiveVersion(output);
     await rename(output + '.tmp', output);
   }
   store.db.prepare("UPDATE songs SET duration=?,audio=?,status='ready',error='' WHERE id=?").run(info.duration, JSON.stringify(info.audio), id);
   store.set(`cache:${id}`,fingerprint);
 }
-export function canonicalVideo(input) {
-  let url;
-  try { url = new URL(input); } catch { throw new Error('请输入完整视频链接'); }
-  if (url.protocol !== 'https:' || url.port || url.username || url.password) throw new Error('只支持 HTTPS 平台视频链接');
-  const host = url.hostname.toLowerCase();
-  if (['www.youtube.com','youtube.com','m.youtube.com','youtu.be'].includes(host)) {
-    const id = host === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v');
-    if (!/^[\w-]{11}$/.test(id || '')) throw new Error('请输入 YouTube watch 视频链接');
-    return `https://www.youtube.com/watch?v=${id}`;
-  }
-  if (['www.bilibili.com','bilibili.com'].includes(host)) {
-    const id = url.pathname.match(/^\/video\/(BV[0-9A-Za-z]+|av\d+)\/?$/)?.[1];
-    if (!id) throw new Error('请输入 Bilibili /video/BV… 链接');
-    return `https://www.bilibili.com/video/${id}`;
-  }
-  throw new Error('仅支持 Bilibili 和 YouTube 视频');
-}
-export async function onlineSearch(query, provider) {
-  if (provider === 'bilibili') {
-    const url = new URL('https://api.bilibili.com/x/web-interface/search/type');
-    url.search = new URLSearchParams({ search_type: 'video', keyword: query, page: '1' }).toString();
-    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://www.bilibili.com/' }, signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error('Bilibili 搜索暂时不可用，可粘贴视频链接');
-    const data = await response.json();
-    if (data.code !== 0) throw new Error('Bilibili 拒绝了搜索请求，可粘贴视频链接');
-    return (data.data?.result || []).slice(0, 12).map(v => ({ title: v.title.replace(/<[^>]*>/g, ''), artist: v.author, url: `https://www.bilibili.com/video/${v.bvid}`, provider }));
-  }
-  const data = JSON.parse(await run(process.env.YTDLP || 'yt-dlp', ['--ignore-config', '--flat-playlist', '--dump-single-json', '--no-warnings', '--', `ytsearch12:${query}`], 45000));
-  return (data.entries || []).map(v => ({ title: v.title, artist: v.channel || v.uploader || 'YouTube', url: `https://www.youtube.com/watch?v=${v.id}`, provider: 'youtube' }));
-}
-export async function downloadVideo(url, dir, cookieFile) {
-  await mkdir(dir, { recursive: true });
-  const id = createHash('sha256').update(canonicalVideo(url)).digest('hex').slice(0, 24);
-  const file = path.join(dir, `${id}.mp4`);
-  try {await stat(file);return {id,file};}catch{}
-  try {
-    await run(process.env.YTDLP || 'yt-dlp', [...(cookieFile?['--cookies',cookieFile]:[]),'--ignore-config', '--no-playlist', '--no-warnings', '--socket-timeout', '20', '--retries', '2', '--max-filesize', '2G', '-f', 'bv*[height<=1080]+ba/b[height<=1080]', '--merge-output-format', 'mp4', '--recode-video', 'mp4', '-o', file, '--', canonicalVideo(url)], 1800000);
-    await stat(file);return {id,file};
-  } catch {
-    const audio=path.join(dir,`${id}.m4a`);
-    await run(process.env.YTDLP||'yt-dlp',[...(cookieFile?['--cookies',cookieFile]:[]),'--ignore-config','--no-playlist','--socket-timeout','20','--max-filesize','200M','-x','--audio-format','m4a','-o',path.join(dir,`${id}.%(ext)s`),'--',canonicalVideo(url)],1800000);
-    await stat(audio);return {id,file:audio};
-  }
-}
+export {canonicalVideo,onlineSearch,downloadVideo} from './sources.js';

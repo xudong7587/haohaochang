@@ -62,7 +62,7 @@ test('provider secrets stay server-side and validation rejects malformed modes',
   f.seed('a','测试');assert.equal((await f.call('/admin/songs/a',{title:'测试',artist:'我',mode:'channels',backing:0,vocal:0},'PATCH',admin)).status,400);
 });
 test('media Range streaming, room credential persists across restart',async t=>{
-  const f=await fixture(t);const id='a'.repeat(24);f.seed(id,'测试');await writeFile(path.join(f.dir,'data','cache',id+'-vocal.mp4'),'0123456789');
+  const f=await fixture(t);const id='a'.repeat(24);f.seed(id,'测试');await mkdir(path.join(f.dir,'data','cache'),{recursive:true});await writeFile(path.join(f.dir,'data','cache',id+'-vocal.mp4'),'0123456789');
   const response=await fetch(`${f.base}/api/media/${id}/backing?token=${f.store.get('roomToken')}`,{headers:{Range:'bytes=2-5'}});assert.equal(response.status,206);assert.equal(await response.text(),'2345');
   assert.equal((await fetch(`${f.base}/api/media/${id}/vocal`)).status,401);
 });

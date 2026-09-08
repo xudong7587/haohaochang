@@ -46,6 +46,6 @@ test('real FFmpeg: audio fallback, dual tracks, persistent cache, AI adapter rou
     const source=await stat(audio);const job=service.addJob('import',{file:audio,signature:source.size+':'+source.mtimeMs,approved:true,metadata:{artist:'测试歌手',title:'测试歌曲',tags:[],needs_review:0}});
     const deadline=Date.now()+30000;let status;
     do{await new Promise(r=>setTimeout(r,30));status=service.store.db.prepare('SELECT * FROM jobs WHERE id=?').get(job);}while(['queued','running'].includes(status.status)&&Date.now()<deadline);
-    assert.equal(status.status,'done',status.error);const imported=service.store.db.prepare('SELECT * FROM songs').get();assert.equal(imported.mode,'separated');assert.ok(imported.path.startsWith(library));assert.ok((await stat(path.join(dir,'import-db/cache',imported.id+'-vocal.mp4'))).size>1000);assert.ok((await stat(path.join(dir,'import-db/cache',imported.id+'-backing.mp4'))).size>1000);assert.equal(requests,4);
+    assert.equal(status.status,'done',status.error);const imported=service.store.db.prepare('SELECT * FROM songs').get();assert.equal(imported.mode,'separated');assert.ok(imported.path.startsWith(library));assert.ok((await stat(path.join(library,'好好唱播放资源',imported.id+'-vocal.mp4'))).size>1000);assert.ok((await stat(path.join(library,'好好唱播放资源',imported.id+'-backing.mp4'))).size>1000);assert.equal(requests,4);
   }finally{service.close();}
 });

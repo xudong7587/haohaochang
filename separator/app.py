@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import uuid
 import sys
+import time
 from fastapi import FastAPI, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
@@ -31,7 +32,7 @@ for state in ROOT.glob('*/state.json'):
         status(state.parent.name, dict(status='failed', error='Service restarted; retry from NAS'))
 
 def separate(job, model):
-    status(job, dict(status='running'))
+    status(job, dict(status='running', stage='decoding'))
     try:
         device = os.getenv('SEPARATION_DEVICE', 'cpu')
         if device == 'auto':
@@ -39,8 +40,9 @@ def separate(job, model):
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
         flags = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
         with (ROOT / job / 'worker.log').open('w', encoding='utf-8') as log:
-            subprocess.run([os.getenv('FFMPEG', 'ffmpeg'), '-y', '-v', 'error', '-i', str(ROOT / job / 'input.m4a'), str(ROOT / job / 'input.wav')], check=True, timeout=300, stdout=log, stderr=log, **flags)
-            subprocess.run([sys.executable, '-m', 'demucs', '--two-stems=vocals', '-n', model, '-d', device, '-j', '1', '-o', str(ROOT / job / 'out'), str(ROOT / job / 'input.wav')], check=True, timeout=1800, stdout=log, stderr=log, **flags)
+            subprocess.run([os.getenv('FFMPEG', 'ffmpeg'), '-y', '-v', 'error', '-i', str(ROOT / job / 'input.m4a'), '-ac', '2', '-ar', '44100', str(ROOT / job / 'input.wav')], check=True, timeout=300, stdout=log, stderr=log, **flags)
+            status(job, dict(status='running', stage='separating'))
+            subprocess.run([sys.executable, '-m', 'demucs', '--two-stems=vocals', '-n', model, '-d', device, '-j', '1', '--segment', os.getenv('SEPARATION_SEGMENT', '7'), '-o', str(ROOT / job / 'out'), str(ROOT / job / 'input.wav')], check=True, timeout=1800, stdout=log, stderr=log, **flags)
         source = ROOT / job / 'out' / model / 'input' / 'no_vocals.wav'
         source.replace(ROOT / job / 'instrumental.wav')
         status(job, dict(status='done', instrumental_url=f'/artifacts/{job}'))
@@ -52,7 +54,7 @@ def health():
     return dict(protocol='ktv-separation-v1', models=['htdemucs', 'htdemucs_ft'], device=os.getenv('SEPARATION_DEVICE', 'cpu'))
 
 @app.post('/separate', dependencies=[Depends(auth)])
-async def submit(file: UploadFile = File(...), model: str = Form(...)):
+async def submit(file: UploadFile = File(...), model: str = Form(...), title: str = Form(default="")):
     if model not in ('htdemucs', 'htdemucs_ft'):
         raise HTTPException(400, 'Unsupported model')
     pending = sum(json.loads(s.read_text()).get('status') in ('queued', 'running') for s in ROOT.glob('*/state.json'))
@@ -61,6 +63,7 @@ async def submit(file: UploadFile = File(...), model: str = Form(...)):
     job = uuid.uuid4().hex
     folder = ROOT / job
     folder.mkdir()
+    (folder / "info.json").write_text(json.dumps(dict(title=title[:240], model=model, created=time.time())), encoding="utf-8")
     size = 0
     try:
         with (folder / 'input.m4a').open('wb') as target:

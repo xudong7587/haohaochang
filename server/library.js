@@ -30,10 +30,11 @@ export async function filesUnder(root) {
 }
 const component = value => value.replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,100)||'未命名';
 const escapeXml = value => value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+export const importKey=(file,info)=>'import:'+createHash('sha256').update(JSON.stringify([file,info.size,info.mtimeMs])).digest('hex');
 export async function importMedia(store, file, downloads, root, overrides={}) {
   file=await safeMedia(file,[downloads]);
   const info=await stat(file), signature=JSON.stringify([file,info.size,info.mtimeMs]);
-  const key='import:'+createHash('sha256').update(signature).digest('hex');
+  const key=importKey(file,info);
   const existing=store.get(key);if(existing&&store.db.prepare('SELECT id FROM songs WHERE id=?').get(existing))return existing;
   const meta={...await metadata(file,[downloads]),...overrides};meta.needs_review=meta.artist==='未知歌手'?1:0;
   const dir=path.join(root,component(meta.artist));await mkdir(dir,{recursive:true});await safeMedia(dir,[root]);

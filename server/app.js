@@ -1,7 +1,9 @@
+import {runJob} from './jobs.js';
+import {resourceRoot,migrateSongAssets} from './assets.js';
 import {enrichmentConfig,enrichSong} from './enrichment.js';
 import {favoriteConfig,favoritePage} from './favorites.js';
 import {normalizeTags} from '../shared/tags.js';
-import { metadata, filesUnder, importMedia } from './library.js';
+import { metadata, filesUnder, importMedia, importKey } from './library.js';
 import { stat, writeFile } from 'node:fs/promises';
 import express from 'express';
 import path from 'node:path';
@@ -20,7 +22,7 @@ const clean = (value, max = 120) => typeof value === 'string' ? value.trim().sli
 export function createApp(options = {}) {
   const dir = path.resolve(options.dataDir || process.env.DATA_DIR || './data');
   const roots = (options.roots || (process.env.MEDIA_ROOTS || './media').split('|')).map(p => path.resolve(p));
-  const downloads = path.resolve(options.downloads || process.env.DOWNLOAD_DIR || path.join(dir, 'downloads')), cache = path.join(dir, 'cache');
+  const downloads = path.resolve(options.downloads || process.env.DOWNLOAD_DIR || path.join(dir, 'downloads')), cache = resourceRoot(roots[0]), legacyCache=path.join(dir,'cache');
   [downloads, cache].forEach(p => mkdirSync(p, { recursive: true }));
   const store = openStore(dir), { db, get, set } = store;
   const adminToken = options.adminToken || process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN;
@@ -70,6 +72,7 @@ export function createApp(options = {}) {
     if (snapshot().queue.length === 1) revise({ paused: false, vocal: false }); else emit();
   }
   function addJob(kind, payload) {
+    if(kind==='acquire'){const existing=db.prepare("SELECT id,payload FROM jobs WHERE kind='acquire' AND status IN ('queued','running','review')").all().find(j=>{const p=JSON.parse(j.payload);return p.title===payload.title&&p.artist===payload.artist;});if(existing)return existing.id;}
     if(['download','favorite-download'].includes(kind)) {
       const duplicate=db.prepare("SELECT id,payload FROM jobs WHERE kind IN ('download','favorite-download') AND status IN ('queued','running')").all().find(j=>JSON.parse(j.payload).url===payload.url);
       if(duplicate){if(payload.enqueue)db.prepare('UPDATE jobs SET payload=? WHERE id=?').run(JSON.stringify({...JSON.parse(duplicate.payload),enqueue:true,name:payload.name}),duplicate.id);return duplicate.id;}
@@ -93,59 +96,8 @@ export function createApp(options = {}) {
     db.prepare("UPDATE jobs SET status='running' WHERE id=?").run(job.id); emit('library', {});
     const payload = JSON.parse(job.payload);
     try {
-      if(job.kind==='enrich'){
-        const song=db.prepare('SELECT * FROM songs WHERE id=?').get(payload.existingId);if(!song)throw fail(404,'歌曲不存在');
-        if(song.metadata_source!=='手动'||payload.approved){
-          const meta=payload.approved?payload.metadata:await enrichSong(get('enrichment',{}),{title:song.title,artist:song.artist,tags:JSON.parse(song.tags)});
-          if(meta.needs_review){db.prepare("UPDATE jobs SET status='review',payload=?,error=? WHERE id=?").run(JSON.stringify({...payload,metadata:meta}),meta.note||'AI 信息需要核对',job.id);emit('library',{});return;}
-          db.prepare('UPDATE songs SET title=?,artist=?,search=?,tags=?,metadata_source=?,needs_review=0,evidence=? WHERE id=?').run(meta.title,meta.artist,searchText(meta.title,meta.artist),JSON.stringify(song.tags_manual?JSON.parse(song.tags):meta.tags),payload.approved?'手动':'AI',JSON.stringify(meta.evidence||[]),song.id);
-          if(!db.prepare('SELECT id FROM queue WHERE song_id=?').get(song.id))addJob('prepare',{id:song.id});
-        }
-      }
-      if(job.kind==='favorite-sync'){
-        const config=get('favorites',{});if(!config.favoriteId)throw fail(400,'请先配置收藏夹');
-        let page=get('favorite-page:'+config.favoriteId,1);
-        for(let n=0;n<5;n++){
-          const result=await favoritePage(config,page);
-          for(const item of result.items){const key='favorite-seen:'+config.favoriteId+':'+item.bvid;if(!get(key)){const id=addJob('favorite-download',item);set(key,id);}}
-          page++;if(!result.hasMore){page=1;break;}
-        }
-        set('favorite-page:'+config.favoriteId,page);set('favorite-last',Date.now());
-      }
-      if(job.kind==='favorite-download'){
-        let cookieFile;const cookie=get('favorites',{}).cookie;
-        if(cookie){cookieFile=path.join(dir,'bilibili.cookies.txt');const lines=cookie.split(';').map(v=>v.trim()).filter(v=>v.includes('=')).map(v=>{const n=v.indexOf('=');return '.bilibili.com\tTRUE\t/\tTRUE\t0\t'+v.slice(0,n)+'\t'+v.slice(n+1);});await writeFile(cookieFile,'# Netscape HTTP Cookie File\n'+lines.join('\n'),{mode:0o600});}
-        const {file}=await downloadVideo(payload.url,downloads,cookieFile);const info=await stat(file);
-        addJob('import',{file,signature:info.size+':'+info.mtimeMs,title:payload.title,sourceUrl:payload.url,enqueue:payload.enqueue,name:payload.name});
-      }
-      if (job.kind === 'import') {
-        const sourceInfo=await stat(payload.file);if(payload.signature!==sourceInfo.size+':'+sourceInfo.mtimeMs)throw fail(409,'下载文件仍在变化，等待下次检查');
-        let meta=payload.approved?payload.metadata:await metadata(payload.file,[downloads]);
-        if(!payload.approved&&payload.title){const match=payload.title.match(/^(.{1,50}?)\s+[-–—]\s+(.+)$/);meta={...meta,title:match?match[2]:payload.title,artist:match?match[1]:'未知歌手',needs_review:match?0:1};}
-        if(!payload.approved&&get('enrichment',{}).enabled)meta={...meta,...await enrichSong(get('enrichment'),{title:payload.title||meta.title,artist:meta.artist,tags:meta.tags,sourceUrl:payload.sourceUrl||''})};
-        if(meta.needs_review){db.prepare("UPDATE jobs SET status='review',payload=?,error=? WHERE id=?").run(JSON.stringify({...payload,metadata:meta}),meta.note||'请补充歌手、歌名后继续',job.id);emit('library',{});return;}
-        if(payload.isBacking)meta.mode='instrumental';
-        const id=await importMedia(store,payload.file,downloads,roots[0],meta);
-        db.prepare('UPDATE songs SET evidence=? WHERE id=?').run(JSON.stringify(meta.evidence||[]),id);
-        await prepareSong(store,id,[...roots,downloads,path.join(dir,'downloads')],cache);
-        const song=db.prepare('SELECT * FROM songs WHERE id=?').get(id);
-        if(song.mode==='original'&&get('ai',{}).enabled)await separateSong(store,song,cache);
-        if(payload.enqueue)enqueue(id,payload.name||'在线点歌');
-      }
-      if (job.kind === 'scan') await scanLibrary(store, roots);
-      if (job.kind === 'prepare') {
-        db.prepare("UPDATE songs SET status='preparing',error='' WHERE id=?").run(payload.id);
-        let song=db.prepare('SELECT * FROM songs WHERE id=?').get(payload.id);
-        await prepareSong(store, payload.id, [...roots, downloads,path.join(dir,'downloads')], cache);
-        song=db.prepare('SELECT * FROM songs WHERE id=?').get(payload.id);
-        if(song.mode==='original'&&get('ai',{}).enabled&&!JSON.parse(db.prepare('SELECT payload FROM jobs WHERE id=?').get(job.id).payload).ambientOnly) await separateSong(store,song,cache);
-        const latest=JSON.parse(db.prepare('SELECT payload FROM jobs WHERE id=?').get(job.id).payload);
-        if(latest.enqueue)enqueue(payload.id,latest.name||'家人');
-      }
-      if (job.kind === 'download') {
-        const {file}=await downloadVideo(payload.url,downloads);const info=await stat(file);
-        addJob('import',{file,signature:info.size+':'+info.mtimeMs,title:payload.title,sourceUrl:payload.url,enqueue:payload.enqueue,name:payload.name,isBacking:payload.isBacking});
-      }
+      const outcome=await runJob(job,payload,{db,get,set,store,dir,roots,downloads,cache,legacyCache,emit,addJob,enqueue,fail});
+      if(outcome==='review')return;
       db.prepare("UPDATE jobs SET status='done',error='' WHERE id=?").run(job.id);
     } catch (e) {
       db.prepare("UPDATE jobs SET status='failed',error=? WHERE id=?").run(e.message.slice(-1800), job.id);
@@ -221,10 +173,11 @@ export function createApp(options = {}) {
     if(!['👏','🎉','❤️','🌟'].includes(req.body.emoji)) throw fail(400,'不支持的互动');
     emit('reaction', {emoji:req.body.emoji, id:randomUUID()}); res.json({ok:true});
   });
-  app.get('/api/media/:id/:variant', member, (req,res) => {
+  app.get('/api/media/:id/:variant', member, async (req,res) => {
     if(!/^[a-f0-9]{24}$/.test(req.params.id) || !['backing','vocal'].includes(req.params.variant)) throw fail(404,'资源不存在');
     const song = db.prepare('SELECT * FROM songs WHERE id=?').get(req.params.id);
     if(!song || song.status !== 'ready') throw fail(404,'歌曲未就绪');
+    await migrateSongAssets(song.id,legacyCache,cache);
     res.sendFile(path.join(cache, `${song.id}-${song.mode === 'original' ? 'vocal' : song.mode==='instrumental'?'backing':req.params.variant}.mp4`));
   });
   app.get('/api/poster/:id',member,async(req,res)=>{const song=db.prepare('SELECT poster FROM songs WHERE id=?').get(req.params.id);if(!song?.poster)throw fail(404,'没有海报');res.sendFile(await safeMedia(song.poster,[...roots,downloads,path.join(dir,'downloads')]));});
@@ -235,6 +188,11 @@ export function createApp(options = {}) {
     const base = configured || browserOrigin || (req.hostname==='localhost' || req.hostname==='127.0.0.1' ? `http://${lan || req.hostname}:${process.env.PORT || 3210}` : `${req.protocol}://${req.get('host')}`);
     const url = `${base.replace(/\/$/,'')}/mobile#${get('roomToken')}`;
     res.json({url, qr:await QRCode.toDataURL(url,{width:220,margin:2}), configured:!!configured});
+  });
+  app.post('/api/requests',member,(req,res)=>{
+    if(!get('onlineEnabled',false))throw fail(403,'请先在后台启用在线资源');
+    const title=clean(req.body.title),artist=clean(req.body.artist);if(!title)throw fail(400,'请填写歌名');
+    res.json({id:addJob('acquire',{title,artist,enqueue:true,name:clean(req.body.name)||'家人'})});
   });
   app.get('/api/online', member, async (req,res) => {
     if(!get('onlineEnabled',false)) throw fail(403,'请先在后台启用在线资源');
@@ -263,8 +221,8 @@ export function createApp(options = {}) {
   app.get('/api/admin/favorites',admin,(req,res)=>{const c=get('favorites',{});res.json({enabled:!!c.enabled,favoriteId:c.favoriteId||'',intervalMinutes:c.intervalMinutes||10,hasCookie:!!c.cookie,lastSync:get('favorite-last',null)});});
   app.post('/api/admin/favorites',admin,(req,res)=>{set('favorites',favoriteConfig(req.body,get('favorites',{})));res.json({ok:true});});
   app.post('/api/admin/favorites/sync',admin,(req,res)=>res.json({id:addJob('favorite-sync',{})}));
-  const reviewList=()=>db.prepare("SELECT id,payload,error,created FROM jobs WHERE status='review' ORDER BY created").all().map(j=>{const p=JSON.parse(j.payload);return {id:j.id,title:p.metadata?.title||p.title||'',artist:p.metadata?.artist||'',tags:p.metadata?.tags||[],note:j.error,sourceUrl:p.sourceUrl||'',created:j.created};});
-  function resolveReview(req,res){const job=db.prepare("SELECT * FROM jobs WHERE id=? AND status='review'").get(req.params.id);if(!job)throw fail(409,'该任务已处理或不存在');const title=clean(req.body.title),artist=clean(req.body.artist);if(!title||!artist||artist==='未知歌手')throw fail(400,'请填写歌手和歌名');const payload=JSON.parse(job.payload);db.prepare("UPDATE jobs SET status='queued',payload=?,error='' WHERE id=?").run(JSON.stringify({...payload,approved:true,metadata:{...payload.metadata,title,artist,tags:normalizeTags(req.body.tags),needs_review:0,metadata_source:'手动'}}),job.id);setImmediate(work);emit('library',{});res.json({ok:true});}
+  const reviewList=()=>db.prepare("SELECT id,kind,payload,error,created FROM jobs WHERE status='review' ORDER BY created").all().map(j=>{const p=JSON.parse(j.payload);return {id:j.id,kind:j.kind,candidatePath:p.candidatePath||'',title:p.metadata?.title||p.title||'',artist:p.metadata?.artist||'',tags:p.metadata?.tags||[],note:j.error,sourceUrl:p.sourceUrl||'',created:j.created};});
+  function resolveReview(req,res){const job=db.prepare("SELECT * FROM jobs WHERE id=? AND status='review'").get(req.params.id);if(!job)throw fail(409,'该任务已处理或不存在');if(job.kind==='find-video'&&req.body.dismissed===true){db.prepare("UPDATE jobs SET status='done' WHERE id=?").run(job.id);emit('library',{});return res.json({ok:true});}const title=clean(req.body.title),artist=clean(req.body.artist);if(!title||!artist||artist==='未知歌手')throw fail(400,'请填写歌手和歌名');const payload=JSON.parse(job.payload);db.prepare("UPDATE jobs SET status='queued',payload=?,error='' WHERE id=?").run(JSON.stringify({...payload,sourceUrl:req.body.sourceUrl?canonicalVideo(req.body.sourceUrl):payload.sourceUrl,approved:true,metadata:{...payload.metadata,title,artist,tags:normalizeTags(req.body.tags),needs_review:0,metadata_source:'手动'}}),job.id);setImmediate(work);emit('library',{});res.json({ok:true});}
   app.get('/api/admin/reviews',admin,(req,res)=>res.json(reviewList()));
   app.post('/api/admin/reviews/:id',admin,resolveReview);
   app.get('/api/admin/integration',admin,(req,res)=>{if(!get('integrationToken'))set('integrationToken',randomUUID()+randomUUID());res.json({token:get('integrationToken')});});
@@ -324,6 +282,7 @@ export function createApp(options = {}) {
       if(roots.some(root=>inside(root,file))||inside(cache,file))continue;
       const info=await stat(file),signature=info.size+':'+info.mtimeMs,previous=observed.get(file);observed.set(file,signature);
       if(previous!==signature||Date.now()-info.mtimeMs<60000)continue;
+      if(get(importKey(file,info)))continue;
       const handled=db.prepare("SELECT payload FROM jobs WHERE kind='import'").all().some(j=>{const p=JSON.parse(j.payload);return p.file===file&&p.signature===signature;});
       if(!handled)addJob('import',{file,signature});
     }}catch(e){console.error('下载目录检查失败:',e.message);}finally{checking=false;}
