@@ -14,10 +14,14 @@ for(let n=1;n<=3;n++){
 const server=service.app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
 const browser=await chromium.launch({channel:'msedge',headless:true,args:['--autoplay-policy=no-user-gesture-required']});
 try{
- const page=await browser.newPage({viewport:{width:1280,height:720}});await page.goto(base+'/tv');await page.getByLabel('管理密码').fill('stage-test-password');await page.getByRole('button',{name:'进入好好唱'}).click();await page.locator('.stage-card').first().waitFor();
+ const context=await browser.newContext({viewport:{width:1280,height:720}});const admin=await context.newPage();await admin.goto(base+'/admin');await admin.getByLabel('管理密码').fill('stage-test-password');await admin.getByRole('button',{name:'进入好好唱'}).click();
+ const opened=context.waitForEvent('page');await admin.getByRole('link',{name:'打开网页歌房'}).click();const page=await opened;await page.waitForURL(base+'/play');await page.locator('.stage-card').first().waitFor();assert.equal(await page.getByLabel('管理密码').count(),0);
  await page.waitForFunction(()=>{const v=document.querySelector('video');return v&&v.currentTime>.1&&!v.paused;});
  assert.match(await page.locator('video').getAttribute('src'),/\/vocal\?/);await page.screenshot({path:path.join(dir,'tv-720.png')});
+ const token=service.store.get('roomToken');service.store.set('publicUrl','https://ktv.example.test:666');const join=await (await fetch(base+'/api/join',{headers:{Authorization:'Bearer '+token}})).json();assert.equal(join.url,'https://ktv.example.test:666/mobile#'+token);
+ const phoneContext=await browser.newContext({viewport:{width:390,height:844},isMobile:true});const phone=await phoneContext.newPage();await phone.route('https://ktv.example.test:666/**',async route=>{const url=new URL(route.request().url());if(url.pathname==='/api/events')return route.abort();await route.fulfill({response:await route.fetch({url:base+url.pathname+url.search})});});
+ await phone.goto(join.url);await phone.getByRole('button',{name:'发送 👏'}).click();await page.locator('.reaction-layer').getByText('👏').waitFor();assert.equal(await phone.getByLabel('管理密码').count(),0);await phoneContext.close();
  await page.locator('.stage-card').first().click();await page.waitForFunction(()=>document.querySelector('video').src.includes('/backing?'));assert.match(await page.locator('.now-playing').innerText(),/伴奏/);
- await page.goto(base+'/admin');await page.getByRole('button',{name:'设置与任务',exact:true}).click();await page.getByRole('button',{name:'预览整理已有曲库'}).click();await page.locator('.organize-row').first().waitFor();await page.screenshot({path:path.join(dir,'organize.png'),fullPage:true});
- console.log('Stage verified: automatic original playback, requested song takes over with backing, organizer preview, 720p layout.');
+ await admin.getByRole('button',{name:'设置与任务',exact:true}).click();await admin.getByRole('button',{name:'预览整理已有曲库'}).click();await admin.locator('.organize-row').first().waitFor();await admin.screenshot({path:path.join(dir,'organize.png'),fullPage:true});
+ console.log('Stage verified: admin opens independent web room without another password; proxy QR mobile joins without password and sends reaction; original playback, backing takeover, organizer and 720p layout.');
 }finally{await browser.close();service.close();server.closeAllConnections();await new Promise(r=>server.close(r));}

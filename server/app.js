@@ -314,7 +314,7 @@ export function createApp(options = {}) {
   });
   app.get('/', (req,res) => res.redirect(302,'/admin'));
   app.use(express.static(path.resolve('dist')));
-  app.get(['/', '/tv', '/mobile', '/admin'], (req,res) => existsSync(path.resolve('dist/index.html')) ? res.sendFile(path.resolve('dist/index.html')) : res.status(503).send('请先运行 npm run build，或访问 Vite 开发服务'));
+  app.get(['/', '/tv', '/play', '/mobile', '/admin'], (req,res) => existsSync(path.resolve('dist/index.html')) ? res.sendFile(path.resolve('dist/index.html')) : res.status(503).send('请先运行 npm run build，或访问 Vite 开发服务'));
   app.use((err,req,res,next) => { if(res.headersSent) return next(err); res.status(err.status || 400).json({error:err.message || '请求失败'}); });
   const favoritesTimer=setInterval(()=>{const c=get('favorites',{});if(stopped||options.worker===false||!c.enabled)return;const recent=db.prepare("SELECT created FROM jobs WHERE kind='favorite-sync' ORDER BY created DESC LIMIT 1").get();if(!recent||Date.now()-recent.created>c.intervalMinutes*60000)addJob('favorite-sync',{});},30000);favoritesTimer.unref();
   let checking=false;const observed=new Map();
