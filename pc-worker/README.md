@@ -14,3 +14,5 @@
 默认模型先用 `htdemucs` 验证流程；想比较音质可用 `htdemucs_ft`，所需时间更长。先试听几首常用歌曲，确定伴奏中人声残留、乐器损失和耗时是否合适。
 
 Windows GPU 实机推理仍需在你的 4070 Super 上验收。CPU 回退可以运行，但不会有 GPU 的速度。安装包不包含 CUDA 模型与 Python 环境，以免下载一个数 GB 的压缩包；第一次启动会自动获取它们。
+
+四端连接、完整验收顺序与排错见 [四端使用说明](https://github.com/xudong7587/haohaochang/blob/master/docs/USER-GUIDE.md)。
