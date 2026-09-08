@@ -1,0 +1,34 @@
+import {createRequire} from 'node:module';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import express from 'express';
+import {build} from 'esbuild';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const temp=await mkdtemp(path.join(os.tmpdir(),'ktv-player-check-'));
+const sampleRate=16000,frames=sampleRate*30,wav=Buffer.alloc(44+frames*2);
+wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(sampleRate,24);wav.writeUInt32LE(sampleRate*2,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(frames*2,40);for(let i=0;i<frames;i++)wav.writeInt16LE(Math.round(Math.sin(i/sampleRate*440*Math.PI*2)*3000),44+i*2);
+await writeFile(path.join(temp,'tone.wav'),wav);
+await writeFile(path.join(temp,'index.html'),'<html><div id="root"></div><script src="/fixture.js"></script></html>');
+await build({stdin:{contents:`import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {Player} from './src/playback/player.jsx';import './src/style.css';function Fixture(){const [paused,setPaused]=useState(false),[vocal,setVocal]=useState(false),[id,setId]=useState('entry-1');window.setPaused=setPaused;window.setVocal=setVocal;window.setEntry=setId;return <Player current={{id,song_id:'song-1',title:'本地合成测试',artist:'测试',needs_video:1,duration:30,lyrics:'[00:00]首句\\n[00:03]第二句'}} playback={{paused,vocal}} token="fixture" request={async()=>({ok:true})} notify={()=>{}}/>}createRoot(document.getElementById('root')).render(<Fixture/>);`,resolveDir:process.cwd(),loader:'jsx'},bundle:true,outfile:path.join(temp,'fixture.js'),loader:{'.css':'empty'}});
+const app=express();
+app.get('/api/playback-assets/:id',(_req,res)=>res.json({version:2,revision:7,vocal:true,backing:true,video:false,resources:{vocal:{url:'/tone.wav',offset:0},backing:{url:'/tone.wav?backing=1',offset:0}},background:{images:['/image/one.svg','/image/two.svg'],intervalSeconds:3}}));
+app.get('/api/lyrics-style',(_req,res)=>res.json({offset:0}));
+app.get('/image/:name',(_req,res)=>res.type('svg').send('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#445588"/></svg>'));
+app.use(express.static(temp));
+const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+const browser=await chromium.launch({channel:process.env.BROWSER_CHANNEL||'msedge',headless:true,args:['--autoplay-policy=no-user-gesture-required']});
+try{
+ const page=await browser.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(`http://127.0.0.1:${server.address().port}`);
+ await page.waitForFunction(()=>document.querySelector('video')?._playback?.getTime()>0.5);
+ const read=()=>page.evaluate(()=>{const v=document.querySelector('video');return {time:v._playback.getTime(),tracks:v._audioTracks.map(t=>({kind:t.kind,time:t.el.currentTime,paused:t.el.paused,gain:t.gain?.gain.value})),context:v._audioContext.state};});
+ const initial=await read();assert.equal(initial.context,'running');assert.ok(initial.tracks.every(t=>!t.paused));assert.ok(Math.abs(initial.tracks[0].time-initial.tracks[1].time)<.2);
+ await page.evaluate(()=>window.setVocal(true));await page.waitForFunction(()=>document.querySelector('video')._playback.selected().kind==='vocal');
+ await page.evaluate(()=>window.setPaused(true));await page.waitForFunction(()=>document.querySelector('video')._audioTracks.every(t=>t.el.paused));const paused=await read();await page.waitForTimeout(300);assert.ok(Math.abs((await read()).time-paused.time)<.02);
+ await page.evaluate(()=>window.setPaused(false));await page.waitForFunction(()=>document.querySelector('video')._playback.getTime()>1);
+ await page.evaluate(()=>document.querySelector('video')._playback.seek(4));await page.waitForFunction(()=>document.querySelector('.playback-background')?.src.includes('two.svg'));
+ await page.evaluate(()=>{const t=document.querySelector('video')._audioTracks.find(t=>t.kind==='vocal');t.el.src='/missing.wav';t.el.load();});await page.waitForFunction(()=>document.querySelector('video')._playback.selected().kind==='backing');assert.equal((await read()).tracks.find(t=>t.kind==='backing').paused,false);
+ await page.evaluate(()=>{window.oldTracks=document.querySelector('video')._audioTracks;window.setEntry('entry-2');});await page.waitForFunction(()=>document.querySelector('video')._audioTracks!==window.oldTracks&&document.querySelector('video')._playback?.getTime()>.2);assert.equal(await page.evaluate(()=>window.oldTracks.every(t=>t.el.paused)),true);
+ assert.deepEqual(errors,[]);console.log('Player browser passed: real WAV decoding, dual audio, variant, pause/resume, shared timeline slideshow, single-track failure, entry cleanup; no page errors.');
+}finally{await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));if(path.dirname(path.resolve(temp))!==path.resolve(os.tmpdir())||!path.basename(temp).startsWith('ktv-player-check-'))throw new Error('Unexpected test output path');await rm(temp,{recursive:true,force:true});}
