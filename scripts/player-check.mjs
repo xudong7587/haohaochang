@@ -301,16 +301,25 @@ try {
   const legacyStrict = await strictBrowser.newPage();
   legacyStrict.on("pageerror", (error) => errors.push(error.message));
   await legacyStrict.goto(base + "/?song=legacy");
-  // Wait for metadata's own autoplay attempt before acting on its denial UI.
-  // Otherwise a late loadedmetadata event may use the click's activation and
-  // remove the initial denial button between pointer-down and pointer-up.
-  await legacyStrict.waitForFunction(
-    () => document.querySelector("video")?.readyState >= 2,
-  );
-  assert.equal(
-    await legacyStrict.evaluate(() => document.querySelector("video").paused),
-    true,
-  );
+  // Playwright's page.evaluate/waitForFunction may carry userGesture=true.
+  // Read loading state through CDP without granting audio authorization.
+  const legacySession = await legacyStrict
+    .context()
+    .newCDPSession(legacyStrict);
+  let legacyState;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const result = await legacySession.send("Runtime.evaluate", {
+      expression:
+        "JSON.stringify({ready:document.querySelector('video')?.readyState,paused:document.querySelector('video')?.paused,active:navigator.userActivation.isActive})",
+      userGesture: false,
+      returnByValue: true,
+    });
+    legacyState = JSON.parse(result.result.value);
+    if (legacyState.ready >= 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.ok(legacyState.ready >= 2, "legacy media metadata must load");
+  assert.equal(legacyState.paused, true, JSON.stringify(legacyState));
   await legacyStrict
     .getByRole("button", { name: "开始播放", exact: true })
     .click();

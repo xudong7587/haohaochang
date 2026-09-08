@@ -6,7 +6,8 @@ root = Path(__file__).resolve().parents[1]
 release = root / 'release'
 release.mkdir(exist_ok=True)
 guide = (root / 'docs/USER-GUIDE.md').read_text(encoding='utf-8')
-guide = guide.replace('(VALIDATION.md)', '(https://github.com/xudong7587/haohaochang/blob/main/docs/VALIDATION.md)')
+for document in ['VALIDATION.md', 'DEVELOPMENT.md']:
+    guide = guide.replace('(' + document + ')', '(https://github.com/xudong7587/haohaochang/blob/main/docs/' + document + ')')
 guide = guide.replace('(../pc-worker/README.md)', '(https://github.com/xudong7587/haohaochang/blob/main/pc-worker/README.md)')
 
 bundles = {
