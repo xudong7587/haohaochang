@@ -48,46 +48,58 @@ export async function onlineSearch(query, provider, cookie = "") {
   return adapter.search(query, cookie);
 }
 export async function downloadVideo(url, dir, cookieFile) {
-  return lockedDownload(url, dir, cookieFile, false);
+  return defaultDownloader(url, dir, cookieFile, false);
 }
 export async function downloadAudio(url, dir, cookieFile) {
-  return lockedDownload(url, dir, cookieFile, true);
+  return defaultDownloader(url, dir, cookieFile, true);
 }
-const downloadScope = {};
-async function lockedDownload(url, dir, cookieFile, audioOnly) {
-  const canonical = canonicalVideo(url);
-  return withKeyLock(
-    downloadScope,
-    path.resolve(dir) + "\n" + canonical,
-    async () => {
-      await mkdir(dir, { recursive: true });
-      const id = createHash("sha256")
-        .update(canonical)
-        .digest("hex")
-        .slice(0, 24);
-      for (const extension of audioOnly ? [".m4a"] : [".mp4", ".m4a"]) {
-        const file = path.join(dir, id + extension);
+const defaultDownloader = createMediaDownloader();
+// Inject only transport for isolated download contract tests; validation stays real.
+export function createMediaDownloader({
+  video = fetchVideo,
+  audio = fetchAudio,
+} = {}) {
+  const downloadScope = {};
+  return async function lockedDownload(url, dir, cookieFile, audioOnly) {
+    const canonical = canonicalVideo(url);
+    return withKeyLock(
+      downloadScope,
+      path.resolve(dir) + "\n" + canonical,
+      async () => {
+        await mkdir(dir, { recursive: true });
+        const id = createHash("sha256")
+          .update(canonical)
+          .digest("hex")
+          .slice(0, 24);
+        for (const extension of audioOnly ? [".m4a"] : [".mp4"]) {
+          const file = path.join(dir, id + extension);
+          try {
+            const info = await probe(file);
+            if (
+              info.audio.length &&
+              info.duration > 0 &&
+              (audioOnly || info.hasVideo)
+            )
+              return { id, file };
+          } catch {}
+        }
+        const staging = await mkdtemp(path.join(dir, ".ktv-download-"));
         try {
-          const info = await probe(file);
-          if (info.audio.length && info.duration > 0) return { id, file };
-        } catch {}
-      }
-      const staging = await mkdtemp(path.join(dir, ".ktv-download-"));
-      try {
-        const result = audioOnly
-          ? await fetchAudio(canonical, staging, cookieFile)
-          : await fetchVideo(canonical, staging, cookieFile);
-        const info = await probe(result.file);
-        if (!info.audio.length || !(info.duration > 0))
-          throw new Error("下载文件不含有效音频");
-        const target = path.join(dir, path.basename(result.file));
-        await rename(result.file, target);
-        return { id, file: target };
-      } finally {
-        await rm(staging, { recursive: true, force: true });
-      }
-    },
-  );
+          const result = audioOnly
+            ? await audio(canonical, staging, cookieFile)
+            : await video(canonical, staging, cookieFile);
+          const info = await probe(result.file);
+          if (!info.audio.length || !(info.duration > 0))
+            throw new Error("下载文件不含有效音频");
+          const target = path.join(dir, path.basename(result.file));
+          await rename(result.file, target);
+          return { id, file: target };
+        } finally {
+          await rm(staging, { recursive: true, force: true });
+        }
+      },
+    );
+  };
 }
 async function fetchAudio(url, dir, cookieFile) {
   const id = createHash("sha256").update(url).digest("hex").slice(0, 24),

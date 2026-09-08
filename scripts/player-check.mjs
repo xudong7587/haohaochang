@@ -301,6 +301,16 @@ try {
   const legacyStrict = await strictBrowser.newPage();
   legacyStrict.on("pageerror", (error) => errors.push(error.message));
   await legacyStrict.goto(base + "/?song=legacy");
+  // Wait for metadata's own autoplay attempt before acting on its denial UI.
+  // Otherwise a late loadedmetadata event may use the click's activation and
+  // remove the initial denial button between pointer-down and pointer-up.
+  await legacyStrict.waitForFunction(
+    () => document.querySelector("video")?.readyState >= 2,
+  );
+  assert.equal(
+    await legacyStrict.evaluate(() => document.querySelector("video").paused),
+    true,
+  );
   await legacyStrict
     .getByRole("button", { name: "开始播放", exact: true })
     .click();

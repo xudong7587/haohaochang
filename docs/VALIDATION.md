@@ -58,7 +58,7 @@
 
 ## v0.2.0 第 0／1 批 · 2026-09-09
 
-当前验收取代上文旧测试数量：Windows 本地 Node 测试 68 项全部通过，包含真实 FFmpeg；生产前端构建通过。`scripts/ui-check.mjs` 的 11 项工作台／TV／手机联动通过，`tests/library-ui.browser.mjs` 的编辑草稿、候选、来源、核对动作与隐藏恢复通过，`scripts/player-check.mjs` 的双路失败、原唱切换、暂停、租约、画面提前结束、旧格式时间轴、原生声音授权失败与点击恢复通过。Edge 无头运行无页面脚本错误，截图存于 test-results。
+当前验收取代上文旧测试数量：Windows 本地 Node 测试 69 项全部通过，包含真实 FFmpeg；生产前端构建通过。`scripts/ui-check.mjs` 的 11 项工作台／TV／手机联动通过，`tests/library-ui.browser.mjs` 的编辑草稿、候选、来源、核对动作与隐藏恢复通过，`scripts/player-check.mjs` 的双路失败、原唱切换、暂停、租约、画面提前结束、旧格式时间轴、原生声音授权失败与点击恢复通过。Edge 无头运行无页面脚本错误，截图存于 test-results。
 
 CI 配置同步执行 Node、三类浏览器测试、Python 分离协议 9 项测试、Docker 主服务构建以及 Android debug APK 构建。镜像发布按提交 SHA 做启动检查，两套镜像都成功后才更新 latest；最终运行结果随发布记录补充。
 

@@ -63,7 +63,7 @@ manifest.version=2 是格式代际，不是资源修订号；playback.revision �
 
 ### 集成验收与发布
 
-本地 68 项 Node 测试、11 项工作台联动、独立管理组件与播放器异常浏览器测试通过。CI 执行相同的主要检查、Python 协议测试、Docker 和 APK 构建。v0.2.0 的最终发布与实机范围见 [开发状态](PROJECT-STATUS.md) 和 [验证记录](VALIDATION.md)。
+本地 69 项 Node 测试、11 项工作台联动、独立管理组件与播放器异常浏览器测试通过。CI 执行相同的主要检查、Python 协议测试、Docker 和 APK 构建。v0.2.0 的最终发布与实机范围见 [开发状态](PROJECT-STATUS.md) 和 [验证记录](VALIDATION.md)。
 
 ## 任务交接模板
 

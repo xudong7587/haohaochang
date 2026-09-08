@@ -73,6 +73,6 @@ PC、Android、发布配置做了静态检查，未重跑真实 GPU、APK、Dock
 | R8 | 新工作台 UI 夹具和 11 项联动已通过，纳入 CI | scripts/ui-check.mjs |
 | R9 | expectedRevision、草稿保留、显式冲突处理 | library-drafts、contracts、两类管理浏览器测试 |
 
-另补充双路失败和声音授权、PC 重启与幂等上传、并发上传容量、分离输出完整解码与时长校验。`npm test` 本地 68 项通过。历史 adversarial-check 仍只作诊断观察，退出 0 不能视为验收通过。
+另补充双路失败和声音授权、PC 重启与幂等上传、并发上传容量、分离输出完整解码与时长校验。`npm test` 本地 69 项通过。历史 adversarial-check 仍只作诊断观察，退出 0 不能视为验收通过。
 
 仍未覆盖真实 NAS 反代多人压力、长期磁盘占用与电视音响实机，范围见 PROJECT-STATUS.md。
