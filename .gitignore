@@ -20,3 +20,6 @@ pc-worker/data/
 pc-worker/worker.json
 release/pc-worker/
 __pycache__/
+
+release/*.apk
+release/SHA256SUMS.txt
