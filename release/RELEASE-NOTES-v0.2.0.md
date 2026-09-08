@@ -13,3 +13,6 @@
 下载：NAS 用户使用 haohaochang-nas.zip；Windows 分离助手使用 haohaochang-resource-ai.zip；APK 是 0.2.0 debug 测试外壳，旧外壳通常无需重装。SHA256SUMS.txt 用于核对下载。
 
 升级前备份 data 与曲库，保留原密码、端口、映射和 settings.json。镜像为 linux/amd64，提供 v0.2.0 固定版本与 latest。没有代替用户升级实际 NAS。
+
+
+发布验证：提交 f50c823395981343fcff69bbd8740169b84dc408 已合并 main。[标签完整 CI](https://github.com/xudong7587/haohaochang/actions/runs/34250820363) 与 [NAS／分离服务镜像构建和启动检查](https://github.com/xudong7587/haohaochang/actions/runs/34250820961) 全部成功，两套 latest 镜像已提升到该提交。APK 来自同一标签构建，版本 0.2.0。

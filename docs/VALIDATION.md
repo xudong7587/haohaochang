@@ -66,3 +66,6 @@ CI 配置同步执行 Node、三类浏览器测试、Python 分离协议 9 项�
 
 
 发布前 CI：提交 `b59256fad9392bfeff4fc24209e49008e6679b3d` 的 [Validate and build](https://github.com/xudong7587/haohaochang/actions/runs/34250451823) 全部成功：69 项 Node 回归、三类 Chromium 浏览器验收、9 项 Python 协议测试、Docker 主服务构建和 Android debug APK 构建。两次旧失败记录来自播放器测试读取状态时意外授予用户激活；改为不授予激活的 CDP 状态读取后，本地 Chromium／Edge 和 Linux CI 均通过，原生声音授权断言保留。
+
+
+v0.2.0 发布提交为 `f50c823395981343fcff69bbd8740169b84dc408`，已合并 main，并将 main 设为默认分支，master 保留。该标签的 [完整 CI](https://github.com/xudong7587/haohaochang/actions/runs/34250820363) 和 [两套镜像构建／启动／latest 提升](https://github.com/xudong7587/haohaochang/actions/runs/34250820961) 均成功。APK 从该标签 CI 新构建，清单版本 0.2.0，ZIP 完整性与 SHA256 已检查；未重新使用旧 APK。

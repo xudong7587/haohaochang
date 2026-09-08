@@ -1,6 +1,6 @@
 # 开发状态 · v0.2.0
 
-更新于 2026-09-09。第 0 批公共契约和第 1 批 T1–T8 已全部集成，正在完成 GitHub 发布验证。最终发布入口为 [v0.2.0](https://github.com/xudong7587/haohaochang/releases/tag/v0.2.0)；发布结果以该页面和对应 Actions 为准。
+更新于 2026-09-09。第 0 批公共契约和第 1 批 T1–T8 已全部集成，已完成标签 CI 和镜像构建、启动验证。最终发布入口为 [v0.2.0](https://github.com/xudong7587/haohaochang/releases/tag/v0.2.0)；发布结果以该页面和对应 Actions 为准。
 
 ## 已完成
 

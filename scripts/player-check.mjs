@@ -279,15 +279,30 @@ try {
   const strict = await strictBrowser.newPage();
   strict.on("pageerror", (error) => errors.push(error.message));
   await strict.goto(base);
-  await strict.getByRole("button", { name: "开始播放", exact: true }).waitFor();
-  assert.equal(
-    await strict.evaluate(() =>
-      document
-        .querySelector("video")
-        ._audioTracks.every((t) => t.blocked && t.el.paused),
-    ),
-    true,
+  const strictSession = await strict.context().newCDPSession(strict);
+  let deniedState;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const result = await strictSession.send("Runtime.evaluate", {
+      expression:
+        "JSON.stringify({tracks:document.querySelector('video')?._audioTracks?.map(t=>({blocked:t.blocked,paused:t.el.paused,ready:t.el.readyState})),button:[...document.querySelectorAll('button')].some(b=>b.textContent.includes('开始播放'))})",
+      userGesture: false,
+      returnByValue: true,
+    });
+    deniedState = JSON.parse(result.result.value);
+    if (
+      deniedState.tracks?.length === 2 &&
+      deniedState.tracks.every((t) => t.blocked && t.paused && t.ready >= 2) &&
+      deniedState.button
+    )
+      break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(deniedState.tracks?.length, 2);
+  assert.ok(
+    deniedState.tracks.every((t) => t.blocked && t.paused),
+    JSON.stringify(deniedState),
   );
+  assert.equal(deniedState.button, true);
   await strict.getByRole("button", { name: "开始播放", exact: true }).click();
   await strict.waitForFunction(
     () =>
