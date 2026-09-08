@@ -24,8 +24,7 @@ export function createApp(options = {}) {
   const clients = new Set(), limits = new Map();
   let running = false, stopped = false, player = null;
   app.disable('x-powered-by');
-  // HTTPS may terminate at a reverse proxy. Only accept the current Host or
-  // the administrator's saved public origin; never trust arbitrary forwarded hosts.
+  // Validate only the optional QR origin hint; API access uses explicit credentials.
   function allowedOrigin(req, origin) {
     return typeof origin === 'string' && [
       `${req.protocol}://${req.get('host')}`, `https://${req.get('host')}`,
@@ -35,7 +34,6 @@ export function createApp(options = {}) {
   app.use(express.json({ limit: '32kb' }));
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
-    if (!['GET','HEAD'].includes(req.method) && req.headers.origin && !allowedOrigin(req,req.headers.origin)) return next(fail(403, '访问地址不匹配，请在 NAS 后台保存反代访问地址，并让反代保留 Host 请求头'));
     next();
   });
   const token = req => req.get('authorization')?.replace(/^Bearer /, '') || req.query.token;

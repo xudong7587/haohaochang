@@ -149,6 +149,6 @@ Lucky 的外部入口可以使用 https://ktv.example.com:666，后端目标必�
 
 通过内网进入后台“设置与任务”，把“NAS 访问地址”保存为完整外部地址（包括 HTTPS 和非标准端口，不附加 /admin、/tv）。TV APK 填写相同外部地址，手机二维码也会使用该地址。留空时二维码跟随当前页面地址。
 
-反代应覆盖整个独立域名根路径，保留 Host（包括端口）、Authorization 和 Range 请求头，并允许 /api/events 持续输出 SSE；不要缓冲实时事件或缓存带凭证的接口与媒体。证书需被电视系统信任。应用会接受已保存的外部访问地址，继续拒绝其他跨站写入；不盲目信任任意 X-Forwarded-Host。Nginx 类代理可参考 [官方代理文档](https://nginx.org/en/docs/http/ngx_http_proxy_module.html) 的 proxy_buffering 和 proxy_read_timeout 设置。
+反代应覆盖整个独立域名根路径，保留 Host（包括端口）、Authorization 和 Range 请求头，并允许 /api/events 持续输出 SSE；不要缓冲实时事件或缓存带凭证的接口与媒体。证书需被电视系统信任。API 通过管理密码或客厅凭证验证身份，不限制请求 Origin，避免反代改写地址后误拒绝登录。Nginx 类代理可参考 [官方代理文档](https://nginx.org/en/docs/http/ngx_http_proxy_module.html) 的 proxy_buffering 和 proxy_read_timeout 设置。
 
 外网开唱仍由 NAS 准备媒体，电视接收视频流；流畅度取决于家庭上行和电视网络。同一个后端目前只有一个共享客厅队列、一个活跃播放器，家里和外地不能同时独立开唱。

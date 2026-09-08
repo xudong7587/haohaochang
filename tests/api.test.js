@@ -19,13 +19,13 @@ async function fixture(t){
   const seed=(id,title,status='ready')=>service.store.db.prepare('INSERT INTO songs (id,path,title,artist,search,created,status) VALUES (?,?,?,?,?,?,?)').run(id,path.join(root,id+'.mp4'),title,'测试歌手',searchText(title,'测试歌手'),Date.now(),status);
   return {...service,base,root,dir,call,seed};
 }
-test('authentication, admin isolation, cross-origin writes and UTF-8 token safety',async t=>{
+test('authentication, admin isolation, proxy origin independence and UTF-8 token safety',async t=>{
   const f=await fixture(t);
   assert.equal((await f.call('/state',undefined,'GET','')).status,401);
   assert.equal((await fetch(f.base+'/api/state?token='+encodeURIComponent('你'.repeat(48)))).status,401);
   assert.equal((await f.call('/admin')).status,401);
   assert.equal((await f.call('/admin',undefined,'GET','test-password-12345')).status,200);
-  assert.equal((await fetch(f.base+'/api/reactions',{method:'POST',headers:{Origin:'https://evil.test','Content-Type':'application/json',Authorization:'Bearer '+f.store.get('roomToken')},body:'{"emoji":"👏"}'})).status,403);
+  assert.equal((await fetch(f.base+'/api/reactions',{method:'POST',headers:{Origin:'https://evil.test','Content-Type':'application/json',Authorization:'Bearer '+f.store.get('roomToken')},body:'{"emoji":"👏"}'})).status,200);
 });
 test('queue deduplicates simultaneous requests and guards stale next',async t=>{
   const f=await fixture(t);f.seed('a','第一首');f.seed('b','第二首');f.seed('c','第三首');
@@ -88,7 +88,9 @@ test('admin landing and HTTPS proxy login, QR and events',async t=>{
   assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers,body:'{}'})).status,200);
   const join=await fetch(f.base+'/api/join?origin='+encodeURIComponent(origin),{headers});
   assert.equal((await join.json()).url,origin+'/mobile#'+f.store.get('roomToken'));
-  assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers:{...headers,Origin:'https://evil.test','X-Forwarded-Host':'evil.test','X-Forwarded-Proto':'https'},body:'{}'})).status,403);
+  assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers:{...headers,Origin:'https://evil.test','X-Forwarded-Host':'evil.test','X-Forwarded-Proto':'https'},body:'{}'})).status,200);
+  assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers:{...headers,Origin:'https://other.test',Authorization:'Bearer wrong-password'},body:'{}'})).status,401);
+  assert.equal((await fetch(f.base+'/api/reactions',{method:'POST',headers:{Origin:'https://other.test','Content-Type':'application/json'},body:'{"emoji":"👏"}'})).status,401);
   const rejected=await fetch(f.base+'/api/join?origin='+encodeURIComponent('https://evil.test'),{headers});
   assert.equal((await rejected.json()).url.startsWith('https://evil.test'),false);
   f.store.set('publicUrl',origin+'/');
