@@ -14,6 +14,21 @@ if (!(Test-Path -LiteralPath $uv)) {
   Expand-Archive -LiteralPath (Join-Path $runtime 'uv.zip') -DestinationPath (Split-Path $uv) -Force
 }
 $python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
+# A desktop shortcut runs outside an app's virtualized LocalAppData view.
+# Bind the venv to the Python runtime beside this actual installation.
+$venvConfig = Join-Path $PSScriptRoot '.venv\pyvenv.cfg'
+if (Test-Path -LiteralPath $venvConfig) {
+  $venvText = [IO.File]::ReadAllText($venvConfig)
+  $homeMatch = [regex]::Match($venvText, '(?m)^home\s*=\s*(.+)\r?$')
+  if ($homeMatch.Success) {
+    $runtimeName = Split-Path $homeMatch.Groups[1].Value.Trim() -Leaf
+    $actualPythonHome = Join-Path (Join-Path $runtime 'python') $runtimeName
+    if (Test-Path -LiteralPath (Join-Path $actualPythonHome 'python.exe')) {
+      $venvText = [regex]::Replace($venvText, '(?m)^home\s*=.*$', ('home = ' + $actualPythonHome))
+      [IO.File]::WriteAllText($venvConfig, $venvText, (New-Object Text.UTF8Encoding($false)))
+    }
+  }
+}
 if (!(Test-Path -LiteralPath $python)) {
   & $uv venv --python 3.11 (Join-Path $PSScriptRoot '.venv')
   if ($LASTEXITCODE -ne 0) { throw 'Python setup failed. Check internet access and retry.' }

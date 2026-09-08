@@ -5,9 +5,12 @@ import {run,searchText} from '../server/media.js';
 import ffmpeg from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 process.env.FFMPEG=ffmpeg;process.env.FFPROBE=ffprobe.path;
+try{await fs.access(path.resolve('.tools/yt-dlp.exe'));process.env.YTDLP=path.resolve('.tools/yt-dlp.exe');}catch{}
+if(process.platform==='win32'){const bin=path.resolve('.tools/media-bin');await fs.mkdir(bin,{recursive:true});await fs.copyFile(ffmpeg,path.join(bin,'ffmpeg.exe'));await fs.copyFile(ffprobe.path,path.join(bin,'ffprobe.exe'));process.env.YTDLP_FFMPEG=bin;}
 const dataDir=path.resolve('data-preview'),media=path.join(dataDir,'media'),cache=path.join(dataDir,'cache');
 await fs.mkdir(media,{recursive:true});await fs.mkdir(cache,{recursive:true});
-const {app,store}=createApp({adminToken:'preview-ktv-2026',dataDir,roots:[media]});
+const downloads=path.join(dataDir,'downloads');
+const {app,store}=createApp({adminToken:'preview-ktv-2026',dataDir,roots:[media],downloads});
 store.set('publicUrl','http://127.0.0.1:3210');
 const samples=[
   {title:'客厅试音 · 双版本',artist:'好好唱实验室',color:'0x514368',mode:'tracks'},
@@ -43,8 +46,8 @@ async function seed(){
     }
   }finally{seeding=false;}
 }
-console.log('Preparing independent preview fixtures…');await seed();
+if(process.env.KTV_DEMO_FIXTURES==='1'){console.log('Preparing independent preview fixtures…');await seed();}
 app.get('/simulator',(req,res)=>res.sendFile(path.resolve('preview/index.html')));
-app.get('/preview-info',(req,res)=>res.json({mode:'local-preview',password:'preview-ktv-2026',media,seeding}));
+app.get('/preview-info',(req,res)=>res.json({mode:'local-preview',password:'preview-ktv-2026',media,downloads,seeding}));
 app.post('/preview-fixtures',async(req,res)=>{if(req.get('origin')&&req.get('origin')!=='http://127.0.0.1:3210')return res.status(403).json({error:'本机预览接口'});try{await seed();res.json({ok:true});}catch(e){res.status(409).json({error:e.message});}});
 app.listen(3210,'127.0.0.1',()=>console.log('Preview ready: http://127.0.0.1:3210/simulator'));

@@ -58,7 +58,7 @@ print('Reason:', reason)
 print(f'Listen: http://{host}:{config["port"]}')
 print('Loopback-only mode.' if host == '127.0.0.1' else 'Use a PC address reachable from NAS.')
 print('Model: htdemucs')
-print('PC connection key:', config['key'])
+print('Connection key is available in the local dashboard.')
 print('Keep this window open. Configuration: worker.json')
 print('First separation downloads the model. Close this window to stop.\n')
 import app as worker_app

@@ -15,6 +15,8 @@ export function openStore(dir) {
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, error TEXT DEFAULT '', created INTEGER NOT NULL);
   `);
+  const jobColumns=db.prepare('PRAGMA table_info(jobs)').all().map(c=>c.name);
+  for(const name of ['started','finished'])if(!jobColumns.includes(name))db.exec('ALTER TABLE jobs ADD COLUMN '+name+' INTEGER');
   const columns=db.prepare('PRAGMA table_info(songs)').all().map(c=>c.name);
   if(!columns.includes('needs_video'))db.exec("ALTER TABLE songs ADD COLUMN needs_video INTEGER DEFAULT 0");
   if(!columns.includes('lyrics'))db.exec("ALTER TABLE songs ADD COLUMN lyrics TEXT DEFAULT ''");
@@ -32,7 +34,7 @@ export function openStore(dir) {
   }catch(e){db.close();throw new Error(`无法读取 ${configPath}：${e.message}。原配置未被覆盖。`);}
   const flush = value => {writeFileSync(configPath+'.tmp',JSON.stringify(value,null,2)+'\n',{encoding:'utf8',mode:0o600});renameSync(configPath+'.tmp',configPath);};
   flush(config);
-  const keys=new Set(['publicUrl','onlineEnabled','ai','autoImport','enrichment','favorites']);
+  const keys=new Set(['publicUrl','onlineEnabled','ai','autoImport','enrichment','favorites','lyricsStyle']);
   db.prepare("DELETE FROM settings WHERE key IN ('publicUrl','onlineEnabled','ai')").run();
   const get = (key, fallback) => keys.has(key) ? (config[key]??fallback) : readDb(key,fallback);
   const set = (key, value) => {if(keys.has(key)){const next={...config,[key]:value};flush(next);config=next;}else db.prepare('INSERT OR REPLACE INTO settings VALUES (?,?)').run(key,JSON.stringify(value));};

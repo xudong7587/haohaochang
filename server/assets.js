@@ -42,4 +42,5 @@ export async function archiveVersion(file){
   const info=await exists(file);if(!info)return;
   const target=path.join(path.dirname(file),'versions',path.basename(file,path.extname(file)),`${Math.trunc(info.mtimeMs)}-${info.size}${path.extname(file)}`);
   await copyOnce(file,target);
+  return target;
 }

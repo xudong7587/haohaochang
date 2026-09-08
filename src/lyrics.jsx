@@ -1,14 +1,9 @@
-import React from 'react';
-export function parseLyrics(text=''){
-  const offset=Number(text.match(/\[offset:([+-]?\d+)\]/)?.[1]||0)/1000;
-  return text.split(/\r?\n/).flatMap(line=>{
-    const words=line.replace(/\[[^\]]+\]/g,'').trim();if(!words)return [];
-    return [...line.matchAll(/\[(\d+):(\d{1,2}(?:\.\d+)?)\]/g)].map(m=>({time:Number(m[1])*60+Number(m[2])-offset,text:words}));
-  }).sort((a,b)=>a.time-b.time);
-}
-export function Lyrics({song,time}){
-  const lines=parseLyrics(song.lyrics), index=lines.reduce((found,l,i)=>l.time<=time?i:found,-1);
-  const line=index>=0?lines[index]:null,end=lines[index+1]?.time||song.duration||time;
-  const fill=line&&end>line.time?Math.max(0,Math.min(100,(time-line.time)/(end-line.time)*100)):0;
-  return <div className="lyrics-scene"><div className="audio-title"><small>音频舞台 · 待补 MTV</small><h2>{song.title}</h2><p>{song.artist}</p></div>{lines.length?<div className="lyric-lines"><strong className="karaoke-line" style={{'--lyric-fill':fill+'%'}}>{line?.text||'前奏，准备开唱…'}</strong><span>{lines[Math.max(0,index+1)]?.text}</span></div>:<div className="lyric-lines"><strong>{song.lyrics||'跟着熟悉的旋律，自在开唱'}</strong><span>{song.lyrics?'暂无时间轴，可在后台补充 LRC 歌词':'歌词待补充，可在后台导入同名 LRC'}</span></div>}</div>;
+import React,{useEffect,useState} from 'react';
+import {parseLyrics,progress} from '../shared/lyrics.js';
+export {parseLyrics} from '../shared/lyrics.js';
+export function Lyrics({song,time,token}){
+ const [style,setStyle]=useState({font:'sans-serif',size:48,color:'#ffd66e',offset:0});
+ useEffect(()=>{fetch('/api/lyrics-style?token='+encodeURIComponent(token)).then(r=>r.ok?r.json():null).then(v=>{if(v)setStyle(v);}).catch(()=>{});},[song.id]);
+ const clock=time+(style.offset||0),lines=parseLyrics(song.lyrics),index=lines.reduce((found,l,i)=>l.time<=clock?i:found,-1),line=lines[index],end=lines[index+1]?.time||song.duration;
+ return <div className="lyrics-scene" style={{fontFamily:style.font,'--karaoke-size':style.size+'px','--karaoke-color':style.color}}>{!!song.needs_video&&<div className="audio-title"><small>音频舞台 · 待补 MTV</small><h2>{song.title}</h2><p>{song.artist}</p></div>}{lines.length?<div className="lyric-lines"><strong className={line?.words?.length?'':'karaoke-line'} style={{'--lyric-fill':progress(clock,line?.time||0,end)+'%'}}>{!line?'前奏，准备开唱…':line.words.length?line.words.map((word,i)=><span key={i} className="karaoke-line" style={{'--lyric-fill':progress(clock,word.time,line.words[i+1]?.time||end)+'%'}}>{word.text}</span>):line.text}</strong><span>{lines[Math.max(0,index+1)]?.text}</span></div>:<div className="lyric-lines"><strong>{song.lyrics||'歌词待补充'}</strong><span>{song.lyrics?'纯文本歌词 · 暂无时间轴':'请在后台自动查找或导入 LRC'}</span></div>}</div>;
 }

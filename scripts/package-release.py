@@ -10,7 +10,7 @@ guide = guide.replace('(../pc-worker/README.md)', '(https://github.com/xudong758
 
 bundles = {
     'haohaochang-nas.zip': ['docker-compose.yaml', 'docker-compose.ai.yaml', 'release/haohaochang-tv-0.1.0-debug.apk', 'release/实机测试说明.md'],
-    'haohaochang-resource-ai.zip': ['pc-worker/start.cmd', 'pc-worker/start.ps1', 'pc-worker/run.py', 'pc-worker/hardware.py',
+    'haohaochang-resource-ai.zip': ['pc-worker/open.vbs', 'pc-worker/open.ps1', 'pc-worker/start.cmd', 'pc-worker/start.ps1', 'pc-worker/run.py', 'pc-worker/hardware.py',
         'pc-worker/download_runtime.py', 'pc-worker/desktop.py', 'pc-worker/README.md', 'separator/app.py', 'separator/requirements.txt',
         'pc-worker/ui/index.html', 'pc-worker/ui/icon.svg', 'pc-worker/ui/icon.png', 'pc-worker/ui/icon.ico'],
 }

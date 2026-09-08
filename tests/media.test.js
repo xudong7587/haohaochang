@@ -18,18 +18,18 @@ test('real FFmpeg: audio fallback, dual tracks, persistent cache, AI adapter rou
   const add=(id,file,mode='original',backing=0,vocal=0)=>store.db.prepare('INSERT INTO songs (id,path,title,artist,mode,backing,vocal,created) VALUES (?,?,?,?,?,?,?,?)').run(id,file,'测试','测试',mode,backing,vocal,Date.now());
   const a='a'.repeat(24);add(a,audio);console.log('Media: audio background encode');await prepareSong(store,a,[dir],cache);
   assert.equal(store.db.prepare('SELECT needs_video FROM songs WHERE id=?').get(a).needs_video,1);
-  const out=path.join(cache,a+'-vocal.mp4'),info=await probe(out);assert.equal(info.hasVideo,true);assert.equal(info.audio[0].codec,'aac');assert.ok(Math.abs(info.duration-2)<.3);
+  const asset=(id,name)=>path.join(store.get('package:'+id),name);const out=asset(a,'原唱.m4a'),info=await probe(out);assert.equal(info.hasVideo,false);assert.equal(info.audio[0].codec,'aac');assert.ok(Math.abs(info.duration-2)<.3);
   const first=(await stat(out)).mtimeMs;await prepareSong(store,a,[dir],cache);assert.equal((await stat(out)).mtimeMs,first);
   const dual=path.join(dir,'dual.mkv');await run(ffmpeg,['-y','-v','error','-f','lavfi','-i','color=c=purple:s=320x180:d=2','-f','lavfi','-i','sine=frequency=440:duration=2','-f','lavfi','-i','sine=frequency=880:duration=2','-map','0:v','-map','1:a','-map','2:a','-c:v','libx264','-c:a','aac','-shortest',dual]);
   const b='b'.repeat(24);add(b,dual,'tracks',0,1);console.log('Media: dual audio tracks');await prepareSong(store,b,[dir],cache);
-  const x=await readFile(path.join(cache,b+'-backing.mp4')),y=await readFile(path.join(cache,b+'-vocal.mp4'));assert.notDeepEqual(x,y);
+  const x=await readFile(asset(b,'伴奏.m4a')),y=await readFile(asset(b,'原唱.m4a'));assert.notDeepEqual(x,y);
   // Mock only the remote AI computation; upload, result download and muxing are real.
   let requests=0;const remote=express();remote.use((req,res,next)=>{assert.equal(req.get('authorization'),'Bearer private-key');next();});
   remote.get('/health',(req,res)=>res.json({protocol:'ktv-separation-v1'}));
   remote.post('/separate',express.raw({type:()=>true,limit:'5mb'}),(req,res)=>{requests++;assert.match(req.get('content-type'),/multipart/);assert.ok(req.body.length>1000);res.json({status:'done',instrumental_url:'/result'});});
   remote.get('/result',(req,res)=>res.sendFile(audio));const server=remote.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
   store.set('ai',{enabled:true,endpoint:`http://127.0.0.1:${server.address().port}`,model:'test',apiKey:'private-key'});assert.equal((await testProvider(store.get('ai'))).ok,true);
-  console.log('Media: AI result mux');await separateSong(store,store.db.prepare('SELECT * FROM songs WHERE id=?').get(a),cache);assert.equal(requests,1);assert.equal(store.db.prepare('SELECT mode FROM songs WHERE id=?').get(a).mode,'separated');assert.ok((await stat(path.join(cache,a+'-backing.mp4'))).size>1000);
+  console.log('Media: AI result mux');await separateSong(store,store.db.prepare('SELECT * FROM songs WHERE id=?').get(a),cache);assert.equal(requests,1);assert.equal(store.db.prepare('SELECT mode FROM songs WHERE id=?').get(a).mode,'separated');assert.ok((await stat(asset(a,'伴奏.m4a'))).size>1000);
   await prepareSong(store,a,[dir],cache);assert.equal(requests,1);
   let pcRequests=0;
   remote.get('/pc/health',(req,res)=>res.json({protocol:'ktv-separation-v1'}));
@@ -43,9 +43,9 @@ test('real FFmpeg: audio fallback, dual tracks, persistent cache, AI adapter rou
   const service=createApp({dataDir:path.join(dir,'import-db'),downloads:dir,roots:[library],adminToken:'test-password-123'});
   service.store.set('autoImport',false);service.store.set('ai',store.get('ai'));
   try{
-    const source=await stat(audio);const job=service.addJob('import',{file:audio,signature:source.size+':'+source.mtimeMs,approved:true,metadata:{artist:'测试歌手',title:'测试歌曲',tags:[],needs_review:0}});
+    const source=await stat(audio);const job=service.addJob('import',{file:audio,signature:source.size+':'+source.mtimeMs,approved:true,metadata:{artist:'测试歌手',title:'测试歌曲',lyrics:'[00:00.00]测试歌词',tags:[],needs_review:0}});
     const deadline=Date.now()+30000;let status;
     do{await new Promise(r=>setTimeout(r,30));status=service.store.db.prepare('SELECT * FROM jobs WHERE id=?').get(job);}while(['queued','running'].includes(status.status)&&Date.now()<deadline);
-    assert.equal(status.status,'done',status.error);const imported=service.store.db.prepare('SELECT * FROM songs').get();assert.equal(imported.mode,'separated');assert.ok(imported.path.startsWith(library));assert.ok((await stat(path.join(library,'好好唱播放资源',imported.id+'-vocal.mp4'))).size>1000);assert.ok((await stat(path.join(library,'好好唱播放资源',imported.id+'-backing.mp4'))).size>1000);assert.equal(requests,4);
+    assert.equal(status.status,'done',status.error);const imported=service.store.db.prepare('SELECT * FROM songs').get();assert.equal(imported.mode,'separated');assert.ok(imported.path.startsWith(library));assert.ok((await stat(path.join(service.store.get('package:'+imported.id),'原唱.m4a'))).size>1000);assert.ok((await stat(path.join(service.store.get('package:'+imported.id),'伴奏.m4a'))).size>1000);assert.equal(requests,4);
   }finally{service.close();}
 });

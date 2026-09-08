@@ -1,7 +1,8 @@
+import {findLyrics} from './lyrics-source.js';
 import path from 'node:path';
 import {stat,mkdir,copyFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {canonicalVideo,onlineSearch,downloadVideo} from './sources.js';
+import {canonicalVideo,onlineSearch,downloadVideo,withBiliCookie} from './sources.js';
 import {run} from './process.js';
 import {importMedia,importKey} from './library.js';
 import {prepareSong,probe} from './media.js';
@@ -19,15 +20,17 @@ export function matchCandidates(items,title,artist,video=false){
 }
 
 async function candidates(title,artist,video,search=onlineSearch){
-  const results=await Promise.allSettled(['bilibili','youtube'].map(provider=>search(`${artist} ${title}${video?' 官方 MV':''}`,provider)));
-  const items=results.flatMap(r=>r.status==='fulfilled'?r.value:[]);
-  return matchCandidates(items,title,artist,video);
+  for(const provider of ['bilibili','youtube']){
+    try{const items=await search(`${artist} ${title}${video?' 官方 MV':''}`,provider);const matches=matchCandidates(items,title,artist,video).filter(v=>video||!/伴奏|instrumental|karaoke/i.test(v.title));if(matches.length)return matches;}catch{}
+  }
+  return [];
 }
 
 export async function acquireSong(payload,{store,downloads,roots,outputs,search=onlineSearch}){
   const title=String(payload.metadata?.title||payload.title||'').trim();
   const artist=String(payload.metadata?.artist||payload.artist||'').trim();
   if(!title||!artist||artist==='未知歌手')return {review:'请补充歌手与歌名，以免自动下载同名歌曲。',metadata:{title,artist}};
+  search=search===onlineSearch?((q,p)=>onlineSearch(q,p,store.get('favorites',{}).cookie)):search;
   const found=payload.sourceUrl?[{url:canonicalVideo(payload.sourceUrl),title:`${artist} ${title}`}]:await candidates(title,artist,false,search);
   if(!found.length)return {review:'未找到可靠匹配。请补充资源链接，或检查歌手、歌名后重试。',metadata:{title,artist}};
   let last;
@@ -36,14 +39,19 @@ export async function acquireSong(payload,{store,downloads,roots,outputs,search=
       await mkdir(downloads,{recursive:true});const id=createHash('sha256').update(canonicalVideo(candidate.url)).digest('hex').slice(0,24);
       const file=path.join(downloads,id+'.m4a');
       try{await stat(file);}catch{
-        await run(process.env.YTDLP||'yt-dlp',['--ignore-config','--no-playlist','--socket-timeout','20','--retries','2','--max-filesize','200M','-x','--audio-format','m4a','-o',path.join(downloads,id+'.%(ext)s'),'--',canonicalVideo(candidate.url)],900000);
+        await withBiliCookie(store.get('favorites',{}).cookie,path.join(downloads,'.credentials'),cookieFile=>run(process.env.YTDLP||'yt-dlp',[...(process.env.YTDLP_FFMPEG?['--ffmpeg-location',process.env.YTDLP_FFMPEG]:[]),...(cookieFile?['--cookies',cookieFile]:[]),'--ignore-config','--no-playlist','--socket-timeout','20','--retries','2','--max-filesize','200M','-x','--audio-format','m4a','-o',path.join(downloads,id+'.%(ext)s'),'--',canonicalVideo(candidate.url)],900000));
       }
-      const mode=/伴奏|instrumental|karaoke/i.test(candidate.title)?'instrumental':'original';
+      const mode='original';
+      let lyrics=payload.metadata?.lyrics||'';
+      if(!lyrics){try{lyrics=(await findLyrics(title,artist,(await probe(file)).duration)).lyrics;}catch{}}
+      if(!lyrics)return {review:'已下载音频，缺少匹配歌词，请补充 LRC 后继续',metadata:{title,artist,lyrics:''}};
       const songId=await importMedia(store,file,downloads,roots[0],{title,artist,tags:[],mode,metadata_source:'点歌信息',needs_review:0});
+      store.db.prepare('UPDATE songs SET lyrics=? WHERE id=?').run(lyrics,songId);
       store.set('source:'+songId,{url:candidate.url,title:candidate.title});
       await prepareSong(store,songId,[...roots,downloads],outputs);
       const song=store.db.prepare('SELECT * FROM songs WHERE id=?').get(songId);
       if(mode==='original'&&store.get('ai',{}).enabled)await separateSong(store,song,outputs);
+      if(store.db.prepare('SELECT mode FROM songs WHERE id=?').get(songId).mode==='original')return {review:'音频与歌词已保存，请连接 PC 或分离 API 后重试',metadata:{title,artist,lyrics}};
       return {id:songId,title,artist};
     }catch(error){last=error;}
   }
@@ -56,7 +64,7 @@ export async function findVideo(payload,{store,downloads,outputs,search=onlineSe
   const found=await candidates(song.title,song.artist,true,search);
   for(const candidate of found.slice(0,2)){
     try{
-      const {file}=await downloadVideo(candidate.url,downloads);const info=await probe(file);if(!info.hasVideo)continue;
+      const {file}=await withBiliCookie(store.get('favorites',{}).cookie,path.join(downloads,'.credentials'),cookieFile=>downloadVideo(candidate.url,downloads,cookieFile));const info=await probe(file);if(!info.hasVideo)continue;
       const folder=path.join(outputs,'mtv-candidates',song.id);await mkdir(folder,{recursive:true});
       const target=path.join(folder,path.basename(file));await copyFile(file,target);
       store.set(importKey(file,await stat(file)),song.id);

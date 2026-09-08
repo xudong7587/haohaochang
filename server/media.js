@@ -1,3 +1,4 @@
+import {preparePackage} from './song-package.js';
 import {run} from './process.js';
 export {run} from './process.js';
 import {resourceFolder,preserveSource,archiveVersion} from './assets.js';
@@ -42,45 +43,23 @@ export async function scanLibrary(store, roots) {
 }
 export async function probe(file) {
   const data = JSON.parse(await run(process.env.FFPROBE || 'ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file]));
-  return { hasVideo:!!data.streams?.some(s=>s.codec_type==='video'&&!s.disposition?.attached_pic), duration: Number(data.format?.duration || 0), audio: data.streams.filter(s => s.codec_type === 'audio').map((s, i) => ({ index: i, channels: s.channels, codec: s.codec_name, title: s.tags?.title || `音轨 ${i + 1}` })) };
+  return { hasVideo:!!data.streams?.some(s=>s.codec_type==='video'&&!s.disposition?.attached_pic), videoCodec:data.streams.find(s=>s.codec_type==='video'&&!s.disposition?.attached_pic)?.codec_name,pixelFormat:data.streams.find(s=>s.codec_type==='video'&&!s.disposition?.attached_pic)?.pix_fmt, duration: Number(data.format?.duration || 0), audio: data.streams.filter(s => s.codec_type === 'audio').map((s, i) => ({ index: i, channels: s.channels, codec: s.codec_name, title: s.tags?.title || `音轨 ${i + 1}` })) };
 }
 export async function prepareSong(store, id, roots, cache) {
   const song = store.db.prepare('SELECT * FROM songs WHERE id=?').get(id);
   if (!song) throw new Error('歌曲不存在');
-  const file = await safeMedia(song.path, roots);
-  await preserveSource({...song,path:file},cache);
-  const fileStat=await stat(file);
-  const fingerprint=JSON.stringify([fileStat.size,fileStat.mtimeMs,song.mode,song.backing,song.vocal]);
-  if(store.get(`cache:${id}`)===fingerprint || song.mode==='separated') {
-    try { if(song.mode!=='instrumental')await stat(path.join(cache,`${id}-vocal.mp4`));if(song.mode!=='original')await stat(path.join(cache,`${id}-backing.mp4`));store.db.prepare("UPDATE songs SET status='ready',error='' WHERE id=?").run(id);return; } catch {if(song.mode==='separated')throw new Error('正式伴奏文件缺失，请将资源类型改为普通 MV 后重新准备');}
+  let file;
+  try{file=await safeMedia(song.path,roots);}catch(error){
+    // Old installations retained the source separately. Recover only this song's recorded backup.
+    try{const folder=path.join(cache,'sources',song.id);const record=JSON.parse(await readFile(path.join(folder,'song.json'),'utf8'));if(path.basename(record.retained)!==record.retained)throw error;file=await safeMedia(path.join(folder,record.retained),[cache]);store.db.prepare('UPDATE songs SET path=? WHERE id=?').run(file,id);}catch{throw error;}
   }
   const info = await probe(file);
+  if(store.get('video-source:'+id)?.keepAudio){try{await stat(path.join(store.get('package:'+id),'画面.mp4'));info.hasVideo=true;}catch{}}
   if (!info.audio.length) throw new Error('文件没有音频轨道');
   store.db.prepare('UPDATE songs SET needs_video=? WHERE id=?').run(info.hasVideo?0:1,id);
   if (song.mode === 'tracks' && (!info.audio[song.backing] || !info.audio[song.vocal] || song.backing === song.vocal)) throw new Error('请选择两个不同且有效的原唱/伴奏音轨');
   if (song.mode === 'channels' && info.audio[0].channels < 2) throw new Error('声道切换需要立体声音轨');
-  await mkdir(cache, { recursive: true });
-  for (const variant of song.mode === 'original' ? ['vocal'] : song.mode==='instrumental'?['backing']:['backing', 'vocal']) {
-    const track = song.mode === 'tracks' ? song[variant] : 0;
-    const output = path.join(cache, `${id}-${variant}.mp4`);
-    let args;
-    if(!info.hasVideo){
-      let cover;
-      for(const candidate of [...(song.poster?[song.poster]:[]),path.join(path.dirname(file),path.parse(file).name+'.jpg'),path.join(path.dirname(file),'cover.jpg')]){try{cover=await safeMedia(candidate,roots);break;}catch{}}
-      const images=cover?[cover]:[];
-      const backgrounds=path.join(path.dirname(file),path.parse(file).name+'.images');
-      try{for(const name of (await readdir(backgrounds)).sort()){if(!/\.(png|jpe?g)$/i.test(name)||images.length>=5)continue;images.push(await safeMedia(path.join(backgrounds,name),roots));}}catch{}
-      args=audioVisualArgs(file,images,info.duration,track,song.mode==='channels'?song[variant]:null);
-    }else{
-      args=['-y','-v','error','-i',file,'-map','0:v:0','-map',`0:a:${track}`,'-c:v','libx264','-preset','veryfast','-crf','22','-vf',"scale=w='min(1920,iw)':h=-2",'-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-ac','2'];
-      if(song.mode==='channels')args.push('-af',`pan=stereo|c0=c${song[variant]}|c1=c${song[variant]}`);
-    }
-    args.push('-movflags', '+faststart', '-f', 'mp4', output + '.tmp');
-    await run(process.env.FFMPEG || 'ffmpeg', args, 3600000);
-    await archiveVersion(output);
-    await rename(output + '.tmp', output);
-  }
-  store.db.prepare("UPDATE songs SET duration=?,audio=?,status='ready',error='' WHERE id=?").run(info.duration, JSON.stringify(info.audio), id);
-  store.set(`cache:${id}`,fingerprint);
+  await preparePackage(store,{...song,path:file},info,cache);
+  store.db.prepare("UPDATE songs SET duration=?,audio=?,status='ready',error='' WHERE id=?").run(info.duration,JSON.stringify(info.audio),id);
 }
 export {canonicalVideo,onlineSearch,downloadVideo} from './sources.js';

@@ -1,5 +1,7 @@
 # 开发说明
 
+先阅读 [模块分工](DEVELOPMENT-PLAN.md) 和 [对抗性审查](ADVERSARIAL-REVIEW.md)。当前 UI 脚本有已知失败 R8，不能把历史通过记录当作新工作台验收。
+
 ## 开发和验证
 
 需要 Node.js 22.13+，推荐 Node 24。媒体处理需要 FFmpeg、ffprobe；在线下载需要 yt-dlp。Dockerfile 已安装这些工具。
@@ -29,5 +31,5 @@ gradle -p android assembleDebug
 
 最低 Android 6；WebView 需支持现代 JavaScript，建议 Chromium/WebView 90 及以上。APK 是原生连接外壳加 WebView 终端，播放调用系统媒体解码；没有在 TV 端嵌入 FFmpeg 或 AI。当前是 debug 签名测试包，正式分发前需要建立自己的 release 签名和升级策略。
 
-本机验证记录与待验收项见 [docs/VALIDATION.md](docs/VALIDATION.md)，系统决策见 [docs/DESIGN.md](docs/DESIGN.md)。
+本机验证记录与待验收项见 [验证记录](VALIDATION.md)，系统决策见 [系统设计](DESIGN.md)。
 

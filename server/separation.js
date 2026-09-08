@@ -1,3 +1,4 @@
+import {packageDir,publishBacking} from './song-package.js';
 import {archiveVersion} from './assets.js';
 import { mkdir, rename, stat } from 'node:fs/promises';
 import { createWriteStream, openAsBlob } from 'node:fs';
@@ -31,7 +32,7 @@ async function saveResult(value, config, target) {
   let total=0;
   const limit=new Transform({transform(chunk,encoding,callback){total+=chunk.length;callback(total>1024*1024*1024?new Error('分离结果超过 1 GB'):null,chunk);}});
   await pipeline(Readable.fromWeb(response.body),limit,createWriteStream(target+'.tmp'));
-  await rename(target+'.tmp',target);
+  await archiveVersion(target);await rename(target+'.tmp',target);
 }
 const pcActive=new Map();
 export async function separateSong(store,song,cache){
@@ -49,9 +50,9 @@ export async function separateSong(store,song,cache){
   throw last||new Error('没有可用的分离服务');
 }
 async function separateWithConfig(store,song,cache,config){
-  const dir=path.join(cache,'stems',song.id);await mkdir(dir,{recursive:true});
+  const dir=path.join(await packageDir(store,song,cache),'处理记录');await mkdir(dir,{recursive:true});
   const backing=path.join(dir,'backing.wav');
-  const vocal=path.join(cache,`${song.id}-vocal.mp4`);
+  const vocal=path.join(await packageDir(store,song,cache),'原唱.m4a');
   const source=path.join(dir,'input.m4a');
   await run(process.env.FFMPEG||'ffmpeg',['-y','-v','error','-i',vocal,'-vn','-c:a','aac','-b:a','192k',source],600000);
   if((await stat(source)).size>100*1024*1024)throw new Error('待分离音频超过 100 MB');
@@ -68,11 +69,7 @@ async function separateWithConfig(store,song,cache,config){
   }
   if(result.status!=='done'||!result.instrumental_url)throw new Error('AI 分离失败或缺少伴奏结果');
   await saveResult(result.instrumental_url,config,backing);
-  const output=path.join(cache,`${song.id}-backing.mp4`);
-  if(!Number.isFinite(song.duration)||song.duration<=0)throw new Error('无法读取歌曲时长');
-  await run(process.env.FFMPEG||'ffmpeg',['-y','-v','error','-i',vocal,'-i',backing,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-af','apad','-t',String(song.duration),'-shortest','-movflags','+faststart','-f','mp4',output+'.tmp'],600000);
-  await archiveVersion(output);
-  await rename(output+'.tmp',output);
+  await publishBacking(store,song,cache,backing);
   store.db.prepare("UPDATE songs SET mode='separated',status='ready',error='' WHERE id=?").run(song.id);
   return true;
 }

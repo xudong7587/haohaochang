@@ -87,7 +87,7 @@ test('admin landing and HTTPS proxy login, QR and events',async t=>{
   assert.equal(landing.status,302);assert.equal(landing.headers.get('location'),'/admin');
   assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers,body:'{}'})).status,200);
   const join=await fetch(f.base+'/api/join?origin='+encodeURIComponent(origin),{headers});
-  assert.equal((await join.json()).url,origin+'/mobile#'+f.store.get('roomToken'));
+  assert.equal((await join.json()).url,origin+'/control#'+f.store.get('roomToken'));
   assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers:{...headers,Origin:'https://evil.test','X-Forwarded-Host':'evil.test','X-Forwarded-Proto':'https'},body:'{}'})).status,200);
   assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers:{...headers,Origin:'https://other.test',Authorization:'Bearer wrong-password'},body:'{}'})).status,401);
   assert.equal((await fetch(f.base+'/api/reactions',{method:'POST',headers:{Origin:'https://other.test','Content-Type':'application/json'},body:'{"emoji":"👏"}'})).status,401);
@@ -96,7 +96,7 @@ test('admin landing and HTTPS proxy login, QR and events',async t=>{
   f.store.set('publicUrl',origin+'/');
   assert.equal((await fetch(f.base+'/api/login',{method:'POST',headers:{...headers,Host:'nas.internal:3210'},body:'{}'})).status,200);
   const configured=await fetch(f.base+'/api/join',{headers:{...headers,Host:'nas.internal:3210'}});
-  assert.equal((await configured.json()).url,origin+'/mobile#'+f.store.get('roomToken'));
+  assert.equal((await configured.json()).url,origin+'/control#'+f.store.get('roomToken'));
   const controller=new AbortController();
   const events=await fetch(f.base+'/api/events',{headers,signal:controller.signal});
   assert.equal(events.headers.get('x-accel-buffering'),'no');
