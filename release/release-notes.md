@@ -13,3 +13,5 @@ Windows 用户下载 haohaochang-pc-worker.zip，解压后双击 start.cmd，复
 完整步骤见 [四端使用说明](https://github.com/xudong7587/haohaochang/blob/master/docs/USER-GUIDE.md)，两个 ZIP 包也已附带该说明。平台专用企业微信/TG 机器人尚未内置，目前提供待核对管理接口。
 
 新增独立网页歌房 /play：在 NAS 后台点击“打开网页歌房”，无需 TV APK 也能播放。来宾扫码即可点歌互动，无需手输网址或密码；二维码支持后台配置的反代地址。
+
+全屏播放器可显示/收起手机二维码；另一设备占用播放器时提供明确提示，关闭原播放页后自动重连。
