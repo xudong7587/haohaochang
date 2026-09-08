@@ -1,10 +1,153 @@
-import React,{useEffect,useState} from 'react';
-export function AISettings({attempt}){
-  const [config,setConfig]=useState({enabled:false,endpoint:'',model:'',apiKey:'',hasKey:false,pcEndpoint:'',pcModel:'htdemucs',pcApiKey:''}),[busy,setBusy]=useState(false);
-  async function request(method,body,suffix=''){
-    const r=await fetch('/api/admin/ai'+suffix,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${sessionStorage.getItem('adminToken')}`},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;
+import React, { useEffect, useState } from "react";
+export function AISettings({ attempt }) {
+  const [config, setConfig] = useState({
+      enabled: false,
+      endpoint: "",
+      model: "",
+      apiKey: "",
+      hasKey: false,
+      pcEndpoint: "",
+      pcModel: "htdemucs",
+      pcApiKey: "",
+    }),
+    [busy, setBusy] = useState(false);
+  async function request(method, body, suffix = "") {
+    const r = await fetch("/api/admin/ai" + suffix, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionStorage.getItem("adminToken")}`,
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    return data;
   }
-  useEffect(()=>{attempt(()=>request('GET')).then(v=>{if(v)setConfig({...v,apiKey:'',pcApiKey:''});});},[]);
-  const update=(key,value)=>setConfig(c=>({...c,[key]:value}));
-  return <form className="settings-card" onSubmit={async e=>{e.preventDefault();setBusy(true);const ok=await attempt(()=>request('POST',config),'AI 分离设置已保存');if(ok)setConfig(c=>({...c,hasKey:!!c.apiKey||c.hasKey,apiKey:'',pcApiKey:'',hasPcKey:!!c.pcApiKey||c.hasPcKey}));setBusy(false);}}><h3>AI 伴奏分离</h3><p>第一次点歌时，NAS 将音频发送到你配置的服务，生成并永久保存伴奏版本。原视频音频保留为原唱。下次直接播放已保存版本。</p><label className="checkbox"><input type="checkbox" checked={config.enabled} onChange={e=>update('enabled',e.target.checked)}/>启用首次点歌预分离</label><h4>优先使用局域网 PC</h4><label>PC 地址<input type="url" value={config.pcEndpoint} placeholder="http://192.168.1.20:8000" onChange={e=>update('pcEndpoint',e.target.value)}/></label><label>PC 模型<input value={config.pcModel} onChange={e=>update('pcModel',e.target.value)}/></label><label>PC 连接密钥<input type="password" value={config.pcApiKey||''} placeholder={config.hasPcKey?'已保存，留空保留':'从 PC 支持程序复制'} onChange={e=>update('pcApiKey',e.target.value)}/></label><h4>备用 API / PC 忙时并行处理</h4><label>分离服务地址<input type="url" value={config.endpoint} placeholder="https://separator.example.com" onChange={e=>update('endpoint',e.target.value)}/></label><label>分离模型<input value={config.model} placeholder="例如 htdemucs（由服务决定）" onChange={e=>update('model',e.target.value)}/></label><label>API Key<input type="password" autoComplete="new-password" value={config.apiKey} placeholder={config.hasKey?'已保存；留空保留原密钥':'可选，取决于服务'} onChange={e=>update('apiKey',e.target.value)}/></label><p>PC 空闲优先使用 PC；离线或失败转备用 API，PC 忙时其他歌曲可由 API 并行处理。没有备用 API 时保留失败任务。两种服务都需要 ktv-separation-v1 兼容接口；普通聊天模型 API 不具备音源分离能力。项目附带可自行部署的 Demucs 适配服务，也可接入第三方适配器。启用即允许将点播音频发送至此地址。</p><div className="modal-actions"><button type="button" disabled={busy} onClick={async()=>{setBusy(true);await attempt(()=>request('POST',config,'/test'),'分离服务协议检测通过');setBusy(false);}}>检测服务</button><button className="primary" disabled={busy}>保存配置</button></div></form>;
+  useEffect(() => {
+    attempt(() => request("GET")).then((v) => {
+      if (v) setConfig({ ...v, apiKey: "", pcApiKey: "" });
+    });
+  }, []);
+  const update = (key, value) => setConfig((c) => ({ ...c, [key]: value }));
+  return (
+    <form
+      className="settings-card"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        const ok = await attempt(
+          () => request("POST", config),
+          "AI 分离设置已保存",
+        );
+        if (ok)
+          setConfig((c) => ({
+            ...c,
+            hasKey: !!c.apiKey || c.hasKey,
+            apiKey: "",
+            pcApiKey: "",
+            hasPcKey: !!c.pcApiKey || c.hasPcKey,
+          }));
+        setBusy(false);
+      }}
+    >
+      <h3>AI 伴奏分离</h3>
+      <p>
+        第一次点歌时，NAS
+        将音频发送到你配置的服务，生成并永久保存伴奏版本。原视频音频保留为原唱。下次直接播放已保存版本。
+      </p>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={config.enabled}
+          onChange={(e) => update("enabled", e.target.checked)}
+        />
+        启用首次点歌预分离
+      </label>
+      <h4>优先使用局域网 PC</h4>
+      <label>
+        PC 地址
+        <input
+          type="url"
+          value={config.pcEndpoint}
+          placeholder="http://192.168.1.20:8000"
+          onChange={(e) => update("pcEndpoint", e.target.value)}
+        />
+      </label>
+      <label>
+        PC 模型
+        <input
+          value={config.pcModel}
+          onChange={(e) => update("pcModel", e.target.value)}
+        />
+      </label>
+      <label>
+        PC 连接密钥
+        <input
+          type="password"
+          value={config.pcApiKey || ""}
+          placeholder={
+            config.hasPcKey ? "已保存，留空保留" : "从 PC 支持程序复制"
+          }
+          onChange={(e) => update("pcApiKey", e.target.value)}
+        />
+      </label>
+      <h4>备用 API / PC 忙时并行处理</h4>
+      <label>
+        分离服务地址
+        <input
+          type="url"
+          value={config.endpoint}
+          placeholder="https://separator.example.com"
+          onChange={(e) => update("endpoint", e.target.value)}
+        />
+      </label>
+      <label>
+        分离模型
+        <input
+          value={config.model}
+          placeholder="例如 htdemucs（由服务决定）"
+          onChange={(e) => update("model", e.target.value)}
+        />
+      </label>
+      <label>
+        API Key
+        <input
+          type="password"
+          autoComplete="new-password"
+          value={config.apiKey}
+          placeholder={
+            config.hasKey ? "已保存；留空保留原密钥" : "可选，取决于服务"
+          }
+          onChange={(e) => update("apiKey", e.target.value)}
+        />
+      </label>
+      <p>
+        PC 空闲优先使用 PC；离线或失败转备用 API，PC 忙时其他歌曲可由 API
+        并行处理。没有备用 API 时保留失败任务。两种服务都需要 ktv-separation-v1
+        兼容接口；普通聊天模型 API 不具备音源分离能力。项目附带可自行部署的
+        Demucs
+        适配服务，也可接入第三方适配器。启用即允许将点播音频发送至此地址。
+      </p>
+      <div className="modal-actions">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            await attempt(
+              () => request("POST", config, "/test"),
+              "分离服务协议检测通过",
+            );
+            setBusy(false);
+          }}
+        >
+          检测服务
+        </button>
+        <button className="primary" disabled={busy}>
+          保存配置
+        </button>
+      </div>
+    </form>
+  );
 }

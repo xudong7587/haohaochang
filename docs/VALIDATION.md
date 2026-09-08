@@ -54,3 +54,15 @@
 - 18 组测试通过；覆盖正式资源迁移保留旧文件、历史版本、自动候选排除错误匹配、未找到转人工处理。
 - 真实 FFmpeg 频谱及多图片输入渲染通过，Web 构建和 UI/stage 联动通过。
 - 自动平台下载与收费 AI 没有使用第三方真实歌曲/密钥做验收；MTV 候选需管理员确认版本与同步，未自动覆盖。
+
+
+## v0.2.0 第 0／1 批 · 2026-09-09
+
+当前验收取代上文旧测试数量：Windows 本地 Node 测试 69 项全部通过，包含真实 FFmpeg；生产前端构建通过。`scripts/ui-check.mjs` 的 11 项工作台／TV／手机联动通过，`tests/library-ui.browser.mjs` 的编辑草稿、候选、来源、核对动作与隐藏恢复通过，`scripts/player-check.mjs` 的双路失败、原唱切换、暂停、租约、画面提前结束、旧格式时间轴、原生声音授权失败与点击恢复通过。Edge 无头运行无页面脚本错误，截图存于 test-results。
+
+CI 配置同步执行 Node、三类浏览器测试、Python 分离协议 9 项测试、Docker 主服务构建以及 Android debug APK 构建。镜像发布按提交 SHA 做启动检查，两套镜像都成功后才更新 latest；最终运行结果随发布记录补充。
+
+本批全程使用隔离数据库、合成媒体与 localhost；未向实际曲库添加示例。真实 NAS／手机／TV 音响、长期播放、音乐 GPU 分离音质和收费 API 尚未重新验收。此前合成 CUDA 样本结果仅为历史记录。
+
+
+发布前 CI：提交 `b59256fad9392bfeff4fc24209e49008e6679b3d` 的 [Validate and build](https://github.com/xudong7587/haohaochang/actions/runs/34250451823) 全部成功：69 项 Node 回归、三类 Chromium 浏览器验收、9 项 Python 协议测试、Docker 主服务构建和 Android debug APK 构建。两次旧失败记录来自播放器测试读取状态时意外授予用户激活；改为不授予激活的 CDP 状态读取后，本地 Chromium／Edge 和 Linux CI 均通过，原生声音授权断言保留。

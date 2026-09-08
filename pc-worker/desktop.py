@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import time
+import re
 from pathlib import Path
 from fastapi import Depends
 from fastapi.responses import FileResponse
@@ -36,6 +37,10 @@ def register(app, root, config, plan, device):
                     with log.open('rb') as stream:
                         stream.seek(max(0, log.stat().st_size - 5000))
                         state['log'] = stream.read().decode('utf-8', errors='replace')
+                    matches = re.findall(r'(\d{1,3})%\|', state['log'])
+                    if matches and state.get('status') == 'running':
+                        state['model_progress'] = min(100, int(matches[-1]))
+                state['elapsed_seconds'] = max(0, int((state.get('updated', time.time()) if state.get('status') in ('done', 'failed') else time.time()) - state.get('created', time.time())))
                 jobs.append(state)
             except (OSError, ValueError):
                 continue
