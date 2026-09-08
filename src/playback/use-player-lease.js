@@ -5,7 +5,7 @@ export function usePlayerLease({request,token}) {
   const [lease,setLease]=useState(false),[leaseError,setLeaseError]=useState('正在连接 NAS 播放会话');
   const latestRequest=useRef(request);latestRequest.current=request;
   useEffect(()=>{
-    sessionStorage.setItem('playerId',playerId.current);
+    sessionStorage.setItem('playerId',playerId.current);setLease(false);setLeaseError('正在连接 NAS 播放会话');
     let alive=true,inFlight=false,lastSuccess=0,deadline;
     const beat=async()=>{
       if(inFlight||!alive)return;inFlight=true;
