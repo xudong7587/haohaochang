@@ -6,12 +6,12 @@
 
 ## 从哪里开始
 
-[下载最新版本](https://github.com/xudong7587/haohaochang/releases/tag/latest) · [使用手册](docs/USER-GUIDE.md)
+[下载最新版本](https://github.com/xudong7587/haohaochang/releases/latest) · [使用手册](docs/USER-GUIDE.md)
 
 | 你要做什么 | 下载 / 打开 |
 | --- | --- |
 | 在 NAS 部署 | `docker-compose.yaml` |
-| 在电视唱歌 | `haohaochang-tv-0.1.0-debug.apk` |
+| 在电视唱歌 | `haohaochang-tv-0.2.0-debug.apk` |
 | 在电脑浏览器唱歌 | NAS 后台点击“打开网页歌房” |
 | 用手机点歌和互动 | 扫描播放画面的二维码，无需安装或输入密码 |
 | 用 PC 生成人声分离伴奏 | `haohaochang-resource-ai.zip`，解压运行 `start.cmd` |

@@ -34,4 +34,4 @@ Windows 10/11 x64，解压后双击 `open.vbs` 打开整理器。首次使用建
 
 界面显示“在线”只表示服务可连接。请用 NAS 实际准备一首普通 MV，确认任务完成并能切换伴奏。模型首次下载失败或任务失败时，可在 NAS 后台重试，详情看整理器任务日志。
 
-完整流程见 [使用手册](https://github.com/xudong7587/haohaochang/blob/master/docs/USER-GUIDE.md)。
+完整流程见 [使用手册](https://github.com/xudong7587/haohaochang/blob/main/docs/USER-GUIDE.md)。

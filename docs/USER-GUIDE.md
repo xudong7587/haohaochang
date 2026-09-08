@@ -1,6 +1,6 @@
 # 好好唱使用手册
 
-本地本轮新增功能见 [开发状态](PROJECT-STATUS.md)，尚未发布到 Release。正式安装先装 NAS，再连接播放设备和手机，最后启用自动下载与 PC 算力。[所有安装文件在 Latest Release](https://github.com/xudong7587/haohaochang/releases/tag/latest)。
+v0.2.0 的功能与验证范围见 [开发状态](PROJECT-STATUS.md)。正式安装先装 NAS，再连接播放设备和手机，最后启用自动下载与 PC 算力。[所有安装文件在 Latest Release](https://github.com/xudong7587/haohaochang/releases/latest)。
 
 ## 1. 安装 NAS
 
@@ -49,7 +49,7 @@ docker compose up -d
 
 ## 3. TV 和网页歌房
 
-电视安装 `haohaochang-tv-0.1.0-debug.apk`，填写 NAS 根地址并登录。遥控器菜单键修改地址，方向键选择，确定键操作，返回键关闭弹层或返回点歌页。
+电视安装 `haohaochang-tv-0.2.0-debug.apk`，填写 NAS 根地址并登录。遥控器菜单键修改地址，方向键选择，确定键操作，返回键关闭弹层或返回点歌页。
 
 没有电视时，在管理后台点击“打开网页歌房”，独立打开 `/play`。同一浏览器可以复用登录后的客厅凭证；新设备由主人首次登录一次。浏览器首次可能需要点击“开始播放”以允许声音。
 
