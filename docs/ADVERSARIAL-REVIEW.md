@@ -56,3 +56,23 @@
 PC、Android、发布配置做了静态检查，未重跑真实 GPU、APK、Docker 或发布。仍需验证音频单路失败、声音授权、分离中断恢复、上传并发限流、反代多人共享限流及任务磁盘占用；未将这些未验证项计入已确认缺陷。
 
 模块与任务状态以 [DEVELOPMENT-PLAN.md](DEVELOPMENT-PLAN.md) 为准，本报告保存问题依据。
+
+## 第 0／1 批修复与验收 · 2026-09-09
+
+以上为原始审查证据，旧行号对应审查时实现。本批已将 R1–R9 转成正确行为断言，完成修复：
+
+| 问题 | 当前实现 | 回归证据 |
+| --- | --- | --- |
+| R1 | 资源健康检查、真实能力分类和入队检查 | contracts、library-v2、media 测试 |
+| R2 | 同歌锁、资料／资源修订、独立暂存、阶段幂等 | contracts、picture-repair 测试 |
+| R3 | 画面独立发布，保留旧音轨，失败回滚 | video-replacement、contracts 测试 |
+| R4 | 确认指定候选不重复搜索，拒绝与重搜分离 | candidates、管理组件浏览器测试 |
+| R5 | 旧新歌词入口共享原子保存服务 | contracts 测试 |
+| R6 | 隐藏过滤、拒绝入队和显式恢复 | api、工作台端到端与组件浏览器测试 |
+| R7 | 同一候选贯穿预览、下载、导入 | candidates、管理组件浏览器测试 |
+| R8 | 新工作台 UI 夹具和 11 项联动已通过，纳入 CI | scripts/ui-check.mjs |
+| R9 | expectedRevision、草稿保留、显式冲突处理 | library-drafts、contracts、两类管理浏览器测试 |
+
+另补充双路失败和声音授权、PC 重启与幂等上传、并发上传容量、分离输出完整解码与时长校验。`npm test` 本地 68 项通过。历史 adversarial-check 仍只作诊断观察，退出 0 不能视为验收通过。
+
+仍未覆盖真实 NAS 反代多人压力、长期磁盘占用与电视音响实机，范围见 PROJECT-STATUS.md。

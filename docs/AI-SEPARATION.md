@@ -35,3 +35,9 @@ NAS 不自动适配聊天补全接口、Gradio 的任意应用或各家私有任
 后台 pcEndpoint/pcModel/pcApiKey 对应 Windows 助手；endpoint/model/apiKey 对应备用服务。优先探测 PC，PC 忙时另一首可走 API；PC 不可用或失败时转 API。备用服务仍需本协议。OpenAI Key 仅供单独的信息识别功能使用，OpenAI Audio API 没有音乐伴奏分离端点。参考 [OpenAI 音频文档](https://developers.openai.com/api/docs/guides/audio)。
 
 4070 Super 建议先用 htdemucs，试听后比较 htdemucs_ft；PC 运行期间保持可达。模型初次下载和 Windows GPU 推理待实际设备验收。若选择商业分离 API，MVSEP 提供 [公开 API 文档](https://mvsep.com/en/full_api)，但其协议不同，当前需另外编写适配器，不能直接填入此版本的备用地址。
+
+## v0.2.0 恢复与校验
+
+协议名称仍为 ktv-separation-v1。NAS 在 POST 中附加可选 `Idempotency-Key`，本项目服务对相同键返回原任务；旧供应商可忽略该头。NAS 将远端任务 ID 和选定端点写入任务检查点，重启后继续查询原任务，不因 PC 正忙而重复提交到云端。明确失败后重试使用新的提交键。
+
+PC 将任务状态持久化，服务重启时把未完成推理标为 failed，由 NAS 按策略重试。上传阶段预留容量，限制同时上传和任务总量，避免请求体堆积。成功结果需通过 NAS 的完整解码与原音频时长检查后才发布；失败保留已有原唱和伴奏。新格式只发布独立伴奏文件，旧格式仍支持兼容封装。

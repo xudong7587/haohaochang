@@ -1,65 +1,124 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream, createWriteStream, openAsBlob } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { Readable, Transform } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import path from 'node:path';
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream, createWriteStream, openAsBlob } from "node:fs";
+import { stat } from "node:fs/promises";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import path from "node:path";
 
-export const providerHeaders = config => config.apiKey ? {Authorization:`Bearer ${config.apiKey}`} : {};
+export const providerHeaders = (config) =>
+  config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
 export async function checkProvider(config, timeout = 15000) {
-  if (!config.endpoint) throw new Error('请先填写分离服务地址');
-  const response = await fetch(`${config.endpoint}/health`, {headers:providerHeaders(config), signal:AbortSignal.timeout(timeout), redirect:'error'});
+  if (!config.endpoint) throw new Error("请先填写分离服务地址");
+  const response = await fetch(`${config.endpoint}/health`, {
+    headers: providerHeaders(config),
+    signal: AbortSignal.timeout(timeout),
+    redirect: "error",
+  });
   if (!response.ok) throw new Error(`分离服务检测失败 (${response.status})`);
   const data = await response.json();
-  if (data.protocol !== 'ktv-separation-v1') throw new Error('服务不是 ktv-separation-v1 协议，请部署适配器');
+  if (data.protocol !== "ktv-separation-v1")
+    throw new Error("服务不是 ktv-separation-v1 协议，请部署适配器");
   return data;
 }
 export async function testProvider(config) {
   const data = await checkProvider(config);
-  return {ok:true, protocol:data.protocol};
+  return { ok: true, protocol: data.protocol };
 }
-const validId = id => /^[a-zA-Z0-9_-]{1,100}$/.test(id || '');
+const validId = (id) => /^[a-zA-Z0-9_-]{1,100}$/.test(id || "");
 function checkpointName(song, config) {
-  const providerId = createHash('sha256').update(config.endpoint + '\n' + config.model).digest('hex').slice(0, 20);
+  const providerId = createHash("sha256")
+    .update(config.endpoint + "\n" + config.model)
+    .digest("hex")
+    .slice(0, 20);
   return `separation:${song.id}:${providerId}`;
 }
 export function hasProviderCheckpoint(store, song, config) {
   return !!store.get(checkpointName(song, config));
 }
 async function fingerprint(file) {
-  const hash = createHash('sha256');
+  const hash = createHash("sha256");
   for await (const chunk of createReadStream(file)) hash.update(chunk);
-  return hash.digest('hex');
+  return hash.digest("hex");
 }
 async function saveResult(value, config, target) {
   let url;
-  try { url = new URL(value, config.endpoint + '/'); }
-  catch { throw Object.assign(new Error('分离结果 URL 无效'), {terminal:true}); }
-  if (url.origin !== new URL(config.endpoint).origin || url.username || url.password) throw Object.assign(new Error('分离结果必须由配置的服务同源提供'), {terminal:true});
-  const response = await fetch(url, {headers:providerHeaders(config), signal:AbortSignal.timeout(300000), redirect:'error'});
-  if (!response.ok || !response.body) throw Object.assign(new Error(`分离结果下载失败 (${response.status})`), {terminal:response.status === 404 || response.status === 410});
+  try {
+    url = new URL(value, config.endpoint + "/");
+  } catch {
+    throw Object.assign(new Error("分离结果 URL 无效"), { terminal: true });
+  }
+  if (
+    url.origin !== new URL(config.endpoint).origin ||
+    url.username ||
+    url.password
+  )
+    throw Object.assign(new Error("分离结果必须由配置的服务同源提供"), {
+      terminal: true,
+    });
+  const response = await fetch(url, {
+    headers: providerHeaders(config),
+    signal: AbortSignal.timeout(300000),
+    redirect: "error",
+  });
+  if (!response.ok || !response.body)
+    throw Object.assign(new Error(`分离结果下载失败 (${response.status})`), {
+      terminal: response.status === 404 || response.status === 410,
+    });
   let total = 0;
-  const limit = new Transform({transform(chunk, encoding, callback) { total += chunk.length; callback(total > 1024*1024*1024 ? new Error('分离结果超过 1 GB') : null, chunk); }});
-  await pipeline(Readable.fromWeb(response.body), limit, createWriteStream(target));
+  const limit = new Transform({
+    transform(chunk, encoding, callback) {
+      total += chunk.length;
+      callback(
+        total > 1024 * 1024 * 1024 ? new Error("分离结果超过 1 GB") : null,
+        chunk,
+      );
+    },
+  });
+  await pipeline(
+    Readable.fromWeb(response.body),
+    limit,
+    createWriteStream(target),
+  );
 }
 
-export async function runProviderJob(store, song, vocal, staging, config, {pollInterval = 3000} = {}) {
-  if ((await stat(vocal)).size > 100*1024*1024) throw new Error('待分离音频超过 100 MB');
+export async function runProviderJob(
+  store,
+  song,
+  vocal,
+  staging,
+  config,
+  { pollInterval = 3000 } = {},
+) {
+  if ((await stat(vocal)).size > 100 * 1024 * 1024)
+    throw new Error("待分离音频超过 100 MB");
   const signature = await fingerprint(vocal);
   const checkpointKey = checkpointName(song, config);
   let checkpoint = store.get(checkpointKey);
   if (!checkpoint || checkpoint.signature !== signature) {
-    checkpoint = {signature, requestId:randomUUID(), created:Date.now()};
+    checkpoint = { signature, requestId: randomUUID(), created: Date.now() };
     // Persist before uploading; upgraded v1 adapters deduplicate even a lost POST response.
     store.set(checkpointKey, checkpoint);
   }
   let result = checkpoint.result;
   if (!result) {
     const form = new FormData();
-    form.set('file', await openAsBlob(vocal, {type:'audio/mp4'}), 'input.m4a');
-    form.set('model', config.model);
-    form.set('title', `${song.artist} - ${song.title}`);
-    const response = await fetch(`${config.endpoint}/separate`, {method:'POST', headers:{...providerHeaders(config), 'Idempotency-Key':checkpoint.requestId}, body:form, signal:AbortSignal.timeout(120000), redirect:'error'});
+    form.set(
+      "file",
+      await openAsBlob(vocal, { type: "audio/mp4" }),
+      "input.m4a",
+    );
+    form.set("model", config.model);
+    form.set("title", `${song.artist} - ${song.title}`);
+    const response = await fetch(`${config.endpoint}/separate`, {
+      method: "POST",
+      headers: {
+        ...providerHeaders(config),
+        "Idempotency-Key": checkpoint.requestId,
+      },
+      body: form,
+      signal: AbortSignal.timeout(120000),
+      redirect: "error",
+    });
     if (!response.ok) throw new Error(`AI 分离请求失败 (${response.status})`);
     result = await response.json();
     checkpoint.result = result;
@@ -67,28 +126,47 @@ export async function runProviderJob(store, song, vocal, staging, config, {pollI
   }
   const deadline = Date.now() + 1800000;
   let firstPoll = true;
-  while (result.status === 'queued' || result.status === 'running') {
-    if (!validId(result.id)) { store.set(checkpointKey, null); throw new Error('分离服务返回了无效任务 ID'); }
-    if (Date.now() > deadline) throw new Error('AI 分离超过 30 分钟，请在后台重试；将继续查询原任务');
-    if (!firstPoll) await new Promise(resolve => setTimeout(resolve, pollInterval));
+  while (result.status === "queued" || result.status === "running") {
+    if (!validId(result.id)) {
+      store.set(checkpointKey, null);
+      throw new Error("分离服务返回了无效任务 ID");
+    }
+    if (Date.now() > deadline)
+      throw new Error("AI 分离超过 30 分钟，请在后台重试；将继续查询原任务");
+    if (!firstPoll)
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
     firstPoll = false;
-    const poll = await fetch(`${config.endpoint}/jobs/${result.id}`, {headers:providerHeaders(config), signal:AbortSignal.timeout(20000), redirect:'error'});
+    const poll = await fetch(`${config.endpoint}/jobs/${result.id}`, {
+      headers: providerHeaders(config),
+      signal: AbortSignal.timeout(20000),
+      redirect: "error",
+    });
     if (!poll.ok) {
-      if (poll.status === 404 || poll.status === 410) store.set(checkpointKey, null);
+      if (poll.status === 404 || poll.status === 410)
+        store.set(checkpointKey, null);
       throw new Error(`分离任务查询失败 (${poll.status})`);
     }
     const next = await poll.json();
-    if (next.id && next.id !== result.id) { store.set(checkpointKey, null); throw new Error('分离服务返回了不匹配的任务 ID'); }
-    result = {...next, id:result.id};
+    if (next.id && next.id !== result.id) {
+      store.set(checkpointKey, null);
+      throw new Error("分离服务返回了不匹配的任务 ID");
+    }
+    result = { ...next, id: result.id };
     checkpoint.result = result;
     store.set(checkpointKey, checkpoint);
   }
-  if (result.status !== 'done' || !result.instrumental_url) {
+  if (result.status !== "done" || !result.instrumental_url) {
     store.set(checkpointKey, null);
-    throw new Error('AI 分离失败：' + String(result.error || '缺少伴奏结果').slice(0, 300));
+    throw new Error(
+      "AI 分离失败：" + String(result.error || "缺少伴奏结果").slice(0, 300),
+    );
   }
-  const file = path.join(staging, 'backing.wav');
-  try { await saveResult(result.instrumental_url, config, file); }
-  catch (error) { if (error.terminal) store.set(checkpointKey, null); throw error; }
-  return {file, checkpointKey};
+  const file = path.join(staging, "backing.wav");
+  try {
+    await saveResult(result.instrumental_url, config, file);
+  } catch (error) {
+    if (error.terminal) store.set(checkpointKey, null);
+    throw error;
+  }
+  return { file, checkpointKey };
 }

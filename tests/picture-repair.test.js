@@ -1,24 +1,64 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,readdir} from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import ffmpeg from 'ffmpeg-static';
-import {run} from '../server/process.js';
-import {repairPicture} from '../server/song-package.js';
-import {openStore} from '../server/db.js';
-process.env.FFMPEG=ffmpeg;
-test('overlapping picture repairs use independent staging and preserve audio and lyrics',async t=>{
- const root=await mkdtemp(path.join(os.tmpdir(),'ktv-picture-'));
- const source=path.join(root,'source.mp4'),dir=path.join(root,'package');await mkdir(dir);
- await run(ffmpeg,['-y','-v','error','-f','lavfi','-i','testsrc2=s=128x72:r=25:d=2','-c:v','libx264',source]);
- const protectedFiles=['原唱.m4a','伴奏.m4a','歌词.lrc'];for(const file of protectedFiles)await writeFile(path.join(dir,file),file);
- const store=openStore(path.join(root,'data'));t.after(()=>store.db.close());
- store.db.prepare('INSERT INTO songs (id,path,title,artist,lyrics,created) VALUES (?,?,?,?,?,?)').run('test',source,'测试','歌手','歌词.lrc',Date.now());store.set('package:test',dir);
- const song=store.db.prepare('SELECT * FROM songs WHERE id=?').get('test');
- await Promise.all([repairPicture(store,song,root),repairPicture(store,song,root)]);
- const active=store.get('package:test');assert.notEqual(active,dir);
- await run(ffmpeg,['-v','error','-xerror','-err_detect','explode','-i',path.join(active,'画面.mp4'),'-f','null','-']);
- for(const file of protectedFiles)assert.equal(await readFile(path.join(active,file),'utf8'),file);
- assert.equal((await readdir(active)).filter(f=>f.endsWith('.tmp')).length,0);
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import ffmpeg from "ffmpeg-static";
+import { run } from "../server/process.js";
+import { repairPicture } from "../server/song-package.js";
+import { openStore } from "../server/db.js";
+process.env.FFMPEG = ffmpeg;
+test("overlapping picture repairs use independent staging and preserve audio and lyrics", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "ktv-picture-"));
+  const source = path.join(root, "source.mp4"),
+    dir = path.join(root, "package");
+  await mkdir(dir);
+  await run(ffmpeg, [
+    "-y",
+    "-v",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc2=s=128x72:r=25:d=2",
+    "-c:v",
+    "libx264",
+    source,
+  ]);
+  const protectedFiles = ["原唱.m4a", "伴奏.m4a", "歌词.lrc"];
+  for (const file of protectedFiles)
+    await writeFile(path.join(dir, file), file);
+  const store = openStore(path.join(root, "data"));
+  t.after(() => store.db.close());
+  store.db
+    .prepare(
+      "INSERT INTO songs (id,path,title,artist,lyrics,created) VALUES (?,?,?,?,?,?)",
+    )
+    .run("test", source, "测试", "歌手", "歌词.lrc", Date.now());
+  store.set("package:test", dir);
+  const song = store.db.prepare("SELECT * FROM songs WHERE id=?").get("test");
+  await Promise.all([
+    repairPicture(store, song, root),
+    repairPicture(store, song, root),
+  ]);
+  const active = store.get("package:test");
+  assert.notEqual(active, dir);
+  await run(ffmpeg, [
+    "-v",
+    "error",
+    "-xerror",
+    "-err_detect",
+    "explode",
+    "-i",
+    path.join(active, "画面.mp4"),
+    "-f",
+    "null",
+    "-",
+  ]);
+  for (const file of protectedFiles)
+    assert.equal(await readFile(path.join(active, file), "utf8"), file);
+  assert.equal(
+    (await readdir(active)).filter((f) => f.endsWith(".tmp")).length,
+    0,
+  );
 });
