@@ -2,7 +2,7 @@ import path from "node:path";
 import { copyFile } from "node:fs/promises";
 import {
   encodePackage,
-  encodeResource,
+  encodePicture,
   savePackageInfo,
   present,
 } from "./song-package.js";
@@ -66,22 +66,9 @@ export async function replaceVideo(
         const source = path.join(stage.directory, "来源" + path.extname(file));
         await copyFile(file, source);
         if (keepAudio) {
-          const codec =
-            info.videoCodec === "h264" &&
-            ["yuv420p", "yuvj420p"].includes(info.pixelFormat)
-              ? ["-c:v", "copy"]
-              : [
-                  "-c:v",
-                  "libx264",
-                  "-preset",
-                  "veryfast",
-                  "-pix_fmt",
-                  "yuv420p",
-                ];
-          await encodeResource(
-            ["-i", source, "-map", "0:v:0", "-an", ...codec],
-            path.join(stage.directory, "画面.mp4"),
-          );
+          await encodePicture(stage.store, latest, source, stage.directory, {
+            info,
+          });
         } else {
           stage.store.set("package-fingerprint:" + song.id, null);
           stage.store.set("video-source:" + song.id, null);

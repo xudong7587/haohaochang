@@ -37,6 +37,7 @@ export function libraryApi({
   addJob,
   emit,
   resolveReview,
+  snapshot,
 }) {
   const { db, get, set } = store;
   const previews = new Map();
@@ -386,6 +387,45 @@ export function libraryApi({
       );
     for (const row of rows) addJob("prepare", { id: row.id });
     res.json({ count: rows.length });
+  });
+  app.post("/api/admin/standardize-batch", admin, (req, res) => {
+    const items = req.body.items;
+    if (!Array.isArray(items) || items.length > 20)
+      throw new Error("每批最多 20 首");
+    const results = items.map((item) => {
+      try {
+        const song = currentSong(store, item.id);
+        checkRevision(song, item.expectedRevision);
+        assertIdle(song.id);
+        if (
+          get("hidden:" + song.id) ||
+          resourceManifest(store, song, cache).tier !== "standard"
+        )
+          throw new Error("仅整理标准曲库内的歌曲");
+        if (
+          snapshot?.().ambient?.song_id === song.id ||
+          db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
+        )
+          return {
+            id: song.id,
+            status: "skipped",
+            message: "正在播放队列中，已跳过",
+          };
+        return {
+          id: song.id,
+          status: "success",
+          message: "已排队检查格式并回收旧版本",
+          jobId: addJob("standardize", { id: song.id }),
+        };
+      } catch (error) {
+        return {
+          id: item?.id,
+          status: error.code === "SONG_BUSY" ? "skipped" : "failed",
+          message: error.message,
+        };
+      }
+    });
+    res.json({ results });
   });
   app.post("/api/admin/find-lyrics", admin, async (req, res) =>
     res.json(

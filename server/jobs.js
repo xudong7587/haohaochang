@@ -9,8 +9,16 @@ import { importJob } from "./job-handlers/import.js";
 import { scan } from "./job-handlers/scan.js";
 import { prepare } from "./job-handlers/prepare.js";
 import { download } from "./job-handlers/download.js";
+import { cleanResourceVersions } from "./resource-cleanup.js";
+import { standardize } from "./job-handlers/standardize.js";
 
 const handlers = {
+  standardize,
+  "resource-cleanup": (_job, _payload, context) =>
+    cleanResourceVersions(context.store, context.cache, {
+      legacyCache: context.legacyCache,
+      isPlaying: context.isPlaying,
+    }),
   organize: organize,
   acquire: acquire,
   attach: attach,

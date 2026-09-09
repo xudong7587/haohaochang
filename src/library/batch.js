@@ -60,7 +60,9 @@ export async function organizeBatch(
   const reviewSongs = new Set(reviews.map((r) => r.songId).filter(Boolean));
   const rows = [
     ...reviews.filter((r) => r.kind !== "find-video"),
-    ...songs.filter((s) => ["pending", "audio"].includes(s.tier) && !reviewSongs.has(s.id)),
+    ...songs.filter(
+      (s) => ["pending", "audio"].includes(s.tier) && !reviewSongs.has(s.id),
+    ),
   ];
   const results = rows.map((row) => ({
     id: row.id,
@@ -110,6 +112,45 @@ export async function organizeBatch(
           message: error.message,
         };
       });
+    }
+    onProgress([...results]);
+  }
+  return results;
+}
+
+export async function standardizeBatch(songs, request, onProgress = () => {}) {
+  const rows = songs.filter((song) => song.tier === "standard");
+  const results = rows.map((song) => ({
+    id: song.id,
+    title: song.title,
+    artist: song.artist,
+    status: "pending",
+    message: "等待提交",
+  }));
+  for (let start = 0; start < rows.length; start += 20) {
+    try {
+      const response = await request(
+        "/admin/standardize-batch",
+        {
+          items: rows
+            .slice(start, start + 20)
+            .map((song) => ({
+              id: song.id,
+              expectedRevision: song.metadataRevision,
+            })),
+        },
+        "POST",
+      );
+      response.results.forEach((result, index) => {
+        results[start + index] = { ...results[start + index], ...result };
+      });
+    } catch (error) {
+      for (let i = start; i < Math.min(start + 20, rows.length); i++)
+        results[i] = {
+          ...results[i],
+          status: "failed",
+          message: error.message,
+        };
     }
     onProgress([...results]);
   }

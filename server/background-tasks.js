@@ -11,6 +11,19 @@ export function startBackgroundTasks({
 }) {
   const { db, get } = store;
   let stopped = false;
+  const scheduleCleanup = () => {
+    if (stopped || !enabled) return;
+    if (
+      !db
+        .prepare("SELECT id FROM songs WHERE created < ? LIMIT 1")
+        .get(Date.now() - 10 * 60 * 1000)
+    )
+      return;
+    addJob("resource-cleanup", {});
+  };
+  setImmediate(scheduleCleanup);
+  const cleanupTimer = setInterval(scheduleCleanup, 15 * 60 * 1000);
+  cleanupTimer.unref();
   const favoritesTimer = setInterval(() => {
     const c = get("favorites", {});
     if (stopped || !enabled || !c.enabled) return;
@@ -60,6 +73,7 @@ export function startBackgroundTasks({
       stopped = true;
       clearInterval(importer);
       clearInterval(favoritesTimer);
+      clearInterval(cleanupTimer);
     },
   };
 }

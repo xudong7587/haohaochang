@@ -4,7 +4,11 @@ import { VideoReview } from "./library/video-review.jsx";
 import { CatalogImport } from "./library/catalog-import.jsx";
 import { SourceImport } from "./library/source-import.jsx";
 import { BatchResults } from "./library/batch-results.jsx";
-import { refreshMetadataBatch, organizeBatch } from "./library/batch.js";
+import {
+  refreshMetadataBatch,
+  organizeBatch,
+  standardizeBatch,
+} from "./library/batch.js";
 export { LyricsSettings } from "./library/lyrics-settings.jsx";
 
 export function LibraryManager({ request, notify, onEdit }) {
@@ -132,6 +136,32 @@ export function LibraryManager({ request, notify, onEdit }) {
           >
             全部整理
           </button>
+        </div>
+      )}
+      {tab === "standard" && (
+        <div className="actions tier-actions">
+          <button
+            className="primary"
+            disabled={busy || !songs.some((song) => song.tier === "standard")}
+            onClick={() =>
+              action(async () => {
+                setResults([]);
+                const completed = await standardizeBatch(
+                  songs,
+                  request,
+                  setResults,
+                );
+                notify(
+                  `已提交 ${completed.filter((result) => result.status === "success").length} 首，逐项结果见下方`,
+                );
+              })
+            }
+          >
+            整理已有标准曲库
+          </button>
+          <small>
+            检查旧格式、保留已有双音轨并回收过期版本；播放中的歌曲会跳过。
+          </small>
         </div>
       )}
       <input

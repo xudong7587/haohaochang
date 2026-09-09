@@ -69,6 +69,23 @@ class StoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'duration'):
             validate_waves(source, create('short.wav', 0.2))
 
+    def test_dashboard_polling_during_parallel_state_writes(self):
+        import concurrent.futures
+        import threading
+        job, _ = self.store.reserve('htdemucs', 'polling')
+        start = threading.Barrier(4)
+        def access(writer):
+            start.wait(timeout=5)
+            for i in range(300):
+                if writer:
+                    self.store.write(job, dict(status='running', progress=i))
+                else:
+                    self.assertIn(self.store.state(job)['status'], ('uploading', 'running'))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [pool.submit(access, writer) for writer in (True, True, False, False)]
+            for future in futures:
+                future.result(timeout=20)
+
 
 class UploadTests(unittest.IsolatedAsyncioTestCase):
     async def test_upload_limit_applies_before_downstream_body_parser(self):
@@ -203,6 +220,37 @@ class RouteTests(unittest.TestCase):
             response = client.post('/separate', content=iter([body[:60], body[60:]]),
                 headers={'Content-Type':'multipart/form-data; boundary=boundary'})
         self.assertEqual(response.status_code, 413)
+
+    def test_video_preparation_removes_audio_and_keeps_original_input(self):
+        import json
+        import shutil
+        import subprocess
+        from clipping import execute_clip
+        ffmpeg = os.getenv('FFMPEG') or shutil.which('ffmpeg')
+        ffprobe = os.getenv('FFPROBE') or shutil.which('ffprobe')
+        if not ffmpeg or not ffprobe: self.skipTest('FFmpeg and ffprobe required')
+        job, _ = self.module.jobs.reserve('video:0:1', 'video preparation')
+        folder = self.module.ROOT / job
+        subprocess.run([ffmpeg, '-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=160x90:r=24:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', str(folder/'input.mp4')], check=True)
+        original = (folder/'input.mp4').read_bytes()
+        with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cpu'}):
+            execute_clip(self.module.jobs, job, 0, 1, True)
+        self.assertEqual(self.module.jobs.state(job)['status'], 'done')
+        info = json.loads(subprocess.check_output([ffprobe, '-v', 'error', '-show_streams', '-of', 'json', str(folder/'clip.mp4')]))
+        self.assertEqual([s['codec_type'] for s in info['streams']], ['video'])
+        self.assertEqual(info['streams'][0]['codec_name'], 'h264')
+        self.assertEqual((folder/'input.mp4').read_bytes(), original)
+
+    def test_nvenc_failure_falls_back_to_cpu_for_video_only(self):
+        import subprocess
+        from clipping import execute_clip
+        job, _ = self.module.jobs.reserve('video:0:1', 'fallback')
+        with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cuda'}), patch('clipping.subprocess.run', side_effect=[subprocess.CalledProcessError(1, 'nvenc'), None]) as run:
+            execute_clip(self.module.jobs, job, 0, 1, True)
+        self.assertEqual(self.module.jobs.state(job)['status'], 'done')
+        self.assertIn('h264_nvenc', run.call_args_list[0].args[0])
+        self.assertIn('libx264', run.call_args_list[1].args[0])
+        self.assertIn('-an', run.call_args_list[1].args[0])
 
 
 if __name__ == '__main__':

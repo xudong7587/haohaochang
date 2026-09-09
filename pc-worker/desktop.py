@@ -11,7 +11,7 @@ import psutil
 
 
 def register(app, root, config, plan, device):
-    from app import auth, ROOT, CONCURRENCY
+    from app import auth, ROOT, CONCURRENCY, jobs as job_store
     from lan import addresses
     started = time.time()
 
@@ -30,7 +30,7 @@ def register(app, root, config, plan, device):
         finished_count = 0
         for file in files:
             try:
-                state = json.loads(file.read_text(encoding='utf-8'))
+                state = job_store.state(file.parent.name)
                 if state.get('status') not in ('uploading', 'queued', 'running'):
                     if finished_count >= 40:
                         continue
@@ -49,6 +49,8 @@ def register(app, root, config, plan, device):
                 state['elapsed_seconds'] = max(0, int((state.get('updated', time.time()) if state.get('status') in ('done', 'failed') else time.time()) - state.get('created', time.time())))
                 if str(state.get('model', '')).startswith('clip:'):
                     state['model'] = '视频裁剪'
+                elif str(state.get('model', '')).startswith('video:'):
+                    state['model'] = '画面转码'
                 jobs.append(state)
             except (OSError, ValueError):
                 continue

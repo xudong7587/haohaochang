@@ -12,10 +12,13 @@ class JobStore:
         self.lock = threading.RLock()
 
     def state(self, job):
-        try:
-            return json.loads((self.root / job / 'state.json').read_text(encoding='utf-8'))
-        except (OSError, ValueError):
-            return dict(id=job, status='failed', error='Job state is missing or corrupt; retry from NAS')
+        # Windows cannot replace a file while another thread has it open.
+        # Dashboard polling must share the writers' lock, including closing the file.
+        with self.lock:
+            try:
+                return json.loads((self.root / job / 'state.json').read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                return dict(id=job, status='failed', error='Job state is missing or corrupt; retry from NAS')
 
     def write(self, job, value):
         with self.lock:

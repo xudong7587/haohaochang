@@ -16,7 +16,10 @@ export function taskStatus(store) {
       ? store.db.prepare("SELECT title,artist FROM songs WHERE id=?").get(id)
       : null;
     const checkpoint = checkpoints.find(
-      (c) => c.key.startsWith(`separation:${id || row.id}:`) && c.value?.result,
+      (c) =>
+        c.key.startsWith(`separation:${id || row.id}:`) &&
+        c.value?.result &&
+        !["done", "failed"].includes(c.value.result.status),
     )?.value?.result;
     return {
       ...row,
@@ -33,9 +36,7 @@ export function taskStatus(store) {
           : null,
       priority:
         p.priority ||
-        (["acquire", "download"].includes(row.kind)
-          ? "online"
-          : "background"),
+        (["acquire", "download"].includes(row.kind) ? "online" : "background"),
     };
   });
 }

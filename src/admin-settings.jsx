@@ -206,6 +206,8 @@ export function Settings({ admin, attempt, refresh }) {
                         organize: "整理歌曲",
                         scan: "扫描媒体目录",
                         prepare: "准备播放版本",
+                        standardize: "整理已有标准曲库",
+                        "resource-cleanup": "回收过期资源版本",
                         download: "下载在线资源",
                       }[j.kind]
                     }
@@ -232,6 +234,10 @@ export function Settings({ admin, attempt, refresh }) {
                         decoding: " · 提取音频",
                         validating: " · 校验资源",
                         preparing: " · 准备播放资源",
+                        "preparing-video": " · NAS 准备画面与校验",
+                        "preparing-video-pc": " · PC 转换画面",
+                        "preparing-audio": " · NAS 准备音轨与校验",
+                        "resource-cleanup": " · 清理未使用的旧版本",
                       }[j.stage] ||
                         "")}
                     {j.started && !j.finished

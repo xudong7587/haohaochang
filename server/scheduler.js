@@ -127,7 +127,7 @@ export function createScheduler(
     );
     const job = db
       .prepare(
-        "SELECT * FROM jobs WHERE status='queued' ORDER BY CASE WHEN kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online' THEN 0 ELSE 1 END, created",
+        "SELECT * FROM jobs WHERE status='queued' ORDER BY CASE WHEN kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online' THEN 0 WHEN kind='resource-cleanup' THEN 1 ELSE 2 END, created",
       )
       .all()
       .find(

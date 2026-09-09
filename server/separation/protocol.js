@@ -104,7 +104,7 @@ export async function runProviderJob(
   vocal,
   staging,
   config,
-  { pollInterval = 3000, clip } = {},
+  { pollInterval = 3000, clip, videoOnly = false } = {},
 ) {
   if ((await stat(vocal)).size > (clip ? 1024 : 100) * 1024 * 1024)
     throw new Error(clip ? "待裁剪视频超过 1 GB" : "待分离音频超过 100 MB");
@@ -126,6 +126,7 @@ export async function runProviderJob(
     );
     form.set("model", config.model);
     if (clip) {
+      if (videoOnly) form.set("video_only", "true");
       form.set("start", String(clip.start));
       form.set("end", String(clip.end));
     }

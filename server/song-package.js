@@ -3,8 +3,11 @@ import { mkdir, stat, writeFile, rename, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { run } from "./process.js";
 import { stageResources, requireFiles } from "./resource-publication.js";
-import { withSongWrite, publicationKey } from "./song-writes.js";
+import { withSongWrite, publicationKey, jobScope } from "./song-writes.js";
 import { inspectPackage, requireHealthyPackage } from "./resource-health.js";
+import { probe } from "./media-utils.js";
+import { resourceNames } from "./resource-manifest.js";
+import { prepareVideoOnPc } from "./video-preparation.js";
 export const packageFolder = "歌曲";
 export async function packageDir(store, song, cache) {
   let dir = store.get("package:" + song.id);
@@ -103,8 +106,95 @@ export async function encodeResource(args, out) {
       3600000,
     );
     await rename(temporary, out);
+    const media = await probe(out),
+      info = await stat(out);
+    return { media, info };
   } finally {
     await rm(temporary, { force: true });
+  }
+}
+function reportResourceStage(store, stage) {
+  const job = jobScope();
+  if (job)
+    store.db
+      .prepare("UPDATE jobs SET stage=? WHERE id=? AND status='running'")
+      .run(stage, job);
+}
+export async function encodePackageResource(
+  store,
+  song,
+  kind,
+  args,
+  directory,
+) {
+  reportResourceStage(
+    store,
+    kind === "video" ? "preparing-video" : "preparing-audio",
+  );
+  const file = path.join(directory, resourceNames[kind]);
+  const { media, info } = await encodeResource(args, file);
+  if (
+    !(media.duration > 0) ||
+    (kind === "video"
+      ? !media.hasVideo || media.audio.length
+      : media.hasVideo || media.audio.length !== 1)
+  )
+    throw new Error("生成资源的音视频轨道或时长无效");
+  // encodeResource already decoded the entire output with -xerror. Preserve
+  // that evidence so subsequent package inspection does not decode it again.
+  store.set("package-health:" + song.id, {
+    ...store.get("package-health:" + song.id, {}),
+    [kind]: {
+      file,
+      size: info.size,
+      mtimeMs: info.mtimeMs,
+      available: true,
+      duration: media.duration,
+    },
+  });
+}
+export async function encodePicture(
+  store,
+  song,
+  source,
+  directory,
+  { info, force = false } = {},
+) {
+  info ||= await probe(source);
+  let codec =
+    !force &&
+    info.videoCodec === "h264" &&
+    ["yuv420p", "yuvj420p"].includes(info.pixelFormat)
+      ? ["-c:v", "copy"]
+      : [
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "22",
+          "-vf",
+          "scale=w='min(1920,iw)':h=-2",
+          "-pix_fmt",
+          "yuv420p",
+        ];
+  let prepared;
+  try {
+    if (codec.includes("libx264")) {
+      reportResourceStage(store, "preparing-video-pc");
+      prepared = await prepareVideoOnPc(store, song, source, directory);
+      if (prepared) codec = ["-c:v", "copy"];
+    }
+    await encodePackageResource(
+      store,
+      song,
+      "video",
+      ["-i", prepared?.file || source, "-map", "0:v:0", "-an", ...codec],
+      directory,
+    );
+    if (prepared) store.set(prepared.checkpointKey, null);
+  } finally {
+    if (prepared) await rm(prepared.file, { force: true });
   }
 }
 // Internal encoder: its store must point at an unpublished directory.
@@ -135,7 +225,6 @@ export async function encodePackage(store, song, info, cache) {
     : ["original", "separated"].includes(song.mode)
       ? ["vocal"]
       : ["vocal", "backing"]) {
-    const out = path.join(dir, variant === "vocal" ? "原唱.m4a" : "伴奏.m4a");
     if ((same || song.mode === "separated") && health[variant]?.available)
       continue;
     const args = [
@@ -150,9 +239,12 @@ export async function encodePackage(store, song, info, cache) {
         "-af",
         "pan=stereo|c0=c" + song[variant] + "|c1=c" + song[variant],
       );
-    await encodeResource(
+    await encodePackageResource(
+      store,
+      song,
+      variant,
       [...args, "-c:a", "aac", "-b:a", "192k", "-ac", "2"],
-      out,
+      dir,
     );
   }
   if (!same && song.mode === "original")
@@ -164,26 +256,7 @@ export async function encodePackage(store, song, info, cache) {
     !store.get("video-source:" + song.id)?.keepAudio &&
     (!same || !health.video?.available)
   ) {
-    const codec =
-      info.videoCodec === "h264" &&
-      ["yuv420p", "yuvj420p"].includes(info.pixelFormat)
-        ? ["-c:v", "copy"]
-        : [
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "22",
-            "-vf",
-            "scale=w='min(1920,iw)':h=-2",
-            "-pix_fmt",
-            "yuv420p",
-          ];
-    await encodeResource(
-      ["-i", song.path, "-map", "0:v:0", "-an", ...codec],
-      path.join(dir, "画面.mp4"),
-    );
+    await encodePicture(store, song, song.path, dir, { info });
   }
   if (!info.hasVideo && !store.get("video-source:" + song.id)?.keepAudio)
     await rm(path.join(dir, "画面.mp4"), { force: true });
@@ -193,9 +266,12 @@ export async function encodePackage(store, song, info, cache) {
       ? old
       : path.join(cache, song.id + "-backing.mp4");
     if (await present(legacy))
-      await encodeResource(
+      await encodePackageResource(
+        store,
+        song,
+        "backing",
         ["-i", legacy, "-vn", "-c:a", "aac", "-b:a", "192k"],
-        path.join(dir, "伴奏.m4a"),
+        dir,
       );
     else await rm(path.join(dir, "伴奏.m4a"), { force: true });
   }
@@ -261,26 +337,9 @@ export async function repairPicture(store, song, cache) {
     async (latest) => {
       const stage = await stageResources(store, latest, cache);
       try {
-        await encodeResource(
-          [
-            "-i",
-            latest.path,
-            "-map",
-            "0:v:0",
-            "-an",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "22",
-            "-vf",
-            "scale=w='min(1920,iw)':h=-2",
-            "-pix_fmt",
-            "yuv420p",
-          ],
-          path.join(stage.directory, "画面.mp4"),
-        );
+        await encodePicture(stage.store, latest, latest.path, stage.directory, {
+          force: true,
+        });
         await savePackageInfo(
           stage.store,
           { ...latest, resourceRevision: latest.resourceRevision + 1 },
@@ -306,9 +365,12 @@ export async function publishBacking(store, song, cache, wav) {
         phase: "backing",
       });
       try {
-        await encodeResource(
+        await encodePackageResource(
+          stage.store,
+          latest,
+          "backing",
           ["-i", wav, "-vn", "-c:a", "aac", "-b:a", "192k"],
-          path.join(stage.directory, "伴奏.m4a"),
+          stage.directory,
         );
         await requireHealthyPackage(stage.store, latest, stage.directory, [
           "vocal",

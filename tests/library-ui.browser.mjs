@@ -20,6 +20,7 @@ window.request=async(url,body,method)=>{
  if(url==='/admin/reviews')return [structuredClone(window.videoReview)];
  if(url==='/admin/inbox')return [];
  if(url==='/admin/organize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已加入整理队列'}))};
+ if(url==='/admin/standardize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已排队检查格式并回收旧版本'}))};
  if(url.endsWith('/delete-preview'))return {title:'初始歌名',token:'preview-token',targets:[{path:'/isolated/song-folder',directory:true}]};
  if(url.endsWith('/delete-files')){if(body.token!=='preview-token')throw new Error('无效确认');window.songs=window.songs.filter(row=>row.id!==url.split('/')[3]);return {ok:true};}
  if(url==='/admin/source-info')return {title:'可爱女人',artist:'周杰伦',duration:240,candidateId:'retained-preview-id',candidate:{canonicalUrl:body.url,externalTitle:'第14P',page:14}};
@@ -81,7 +82,22 @@ try {
     .filter({ hasText: /^标准/ })
     .click();
   await page.locator(".artist-library summary").first().click();
-  assert.equal(await page.getByRole("button", { name: "全部整理", exact: true }).count(), 0);
+  await page
+    .getByRole("button", { name: "整理已有标准曲库", exact: true })
+    .click();
+  await page.getByText("已排队检查格式并回收旧版本", { exact: true }).waitFor();
+  assert.deepEqual(
+    await page.evaluate(
+      () =>
+        window.calls.find((call) => call.url === "/admin/standardize-batch")
+          .body.items,
+    ),
+    [{ id: "song-a", expectedRevision: 1 }],
+  );
+  assert.equal(
+    await page.getByRole("button", { name: "全部整理", exact: true }).count(),
+    0,
+  );
   assert.equal(await page.getByText("旧曲库工具", { exact: true }).count(), 0);
   let row = page.locator('[data-song-id="song-a"]');
   assert.deepEqual(await row.locator("header button").allTextContents(), [

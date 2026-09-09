@@ -1,6 +1,6 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { mkdir, copyFile, stat, rm } from "node:fs/promises";
+import { mkdir, copyFile, link, stat, rm } from "node:fs/promises";
 import { resourceNames } from "./resource-manifest.js";
 import {
   currentSong,
@@ -25,13 +25,41 @@ export async function stageResources(
   const directory = path.join(base, "资源版本", randomUUID());
   await mkdir(directory, { recursive: true });
   const health = {};
+  // An imported source is not a published package. Do not copy its full video
+  // into metadata-only revisions before preparing the separate playback tracks.
   if (copy && old)
     for (const [kind, name] of Object.entries(resourceNames)) {
       try {
         const source = path.join(old, name),
-          target = path.join(directory, name),
-          before = await stat(source);
-        await copyFile(source, target);
+          target = path.join(directory, name);
+        if (
+          !store.get("package-ready:" + song.id) &&
+          path.resolve(source) === path.resolve(song.path)
+        )
+          continue;
+        const before = await stat(source);
+        if (kind === "lyrics") await copyFile(source, target);
+        else {
+          // Media is immutable: encoders write a new file and rename it into
+          // the staged directory. Unchanged tracks can share storage safely.
+          try {
+            await link(source, target);
+          } catch (error) {
+            if (
+              ![
+                "EXDEV",
+                "EPERM",
+                "EACCES",
+                "ENOSYS",
+                "ENOTSUP",
+                "EOPNOTSUPP",
+                "EMLINK",
+              ].includes(error.code)
+            )
+              throw error;
+            await copyFile(source, target);
+          }
+        }
         const prior = store.get("package-health:" + song.id, {})[kind];
         if (
           prior?.available &&
@@ -60,7 +88,10 @@ export async function stageResources(
     ...store,
     get: (key, fallback) =>
       pending.has(key) ? pending.get(key) : store.get(key, fallback),
-    set: (key, value) => pending.set(key, value),
+    set: (key, value) =>
+      key.startsWith("separation:")
+        ? store.set(key, value)
+        : pending.set(key, value),
   };
   return {
     store: staged,
@@ -125,16 +156,14 @@ export async function stageResources(
             jobId &&
             store.db.prepare("SELECT payload FROM jobs WHERE id=?").get(jobId);
         if (job)
-          store.db
-            .prepare("UPDATE jobs SET payload=? WHERE id=?")
-            .run(
-              JSON.stringify({
-                ...JSON.parse(job.payload),
-                id: song.id,
-                expectedRevision: currentSong(store, song.id).metadataRevision,
-              }),
-              jobId,
-            );
+          store.db.prepare("UPDATE jobs SET payload=? WHERE id=?").run(
+            JSON.stringify({
+              ...JSON.parse(job.payload),
+              id: song.id,
+              expectedRevision: currentSong(store, song.id).metadataRevision,
+            }),
+            jobId,
+          );
         store.db.exec("COMMIT");
         return currentSong(store, song.id);
       } catch (e) {

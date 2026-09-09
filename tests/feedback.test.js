@@ -143,6 +143,14 @@ test("active tasks survive 150 newer completed records, resolve song titles and 
   assert.equal(view[0].model_progress, 42);
   assert.equal(view.filter((j) => j.status === "queued").length, 110);
   assert.equal("payload" in view[0], false);
+  store.set("separation:s:provider", {
+    result: { status: "done", stage: "done" },
+  });
+  store.db
+    .prepare("UPDATE jobs SET stage='preparing-video' WHERE id='active'")
+    .run();
+  assert.equal(taskStatus(store)[0].stage, "preparing-video");
+  assert.equal(taskStatus(store)[0].model_progress, null);
 });
 
 test("100 local background jobs do not block online requests; online capacity is 200", async (t) => {

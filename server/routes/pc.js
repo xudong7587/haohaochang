@@ -14,6 +14,7 @@ export function pcApi({ app, admin, store, discovery }) {
       checkedAt: Date.now(),
       discovery: discovery.info(),
       tasks,
+      resourceCleanup: store.get("resource-cleanup", null),
       worker: null,
     };
     if (!config.pcEndpoint)

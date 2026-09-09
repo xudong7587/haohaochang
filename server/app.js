@@ -111,6 +111,7 @@ export function createApp(options = {}) {
       legacyCache,
       emit,
       enqueue,
+      isPlaying: (id) => snapshot().ambient?.song_id === id,
       fail,
     },
     { enabled: options.worker !== false, onIdle: () => db.close() },

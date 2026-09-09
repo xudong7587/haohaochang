@@ -4,10 +4,12 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import ffmpeg from "ffmpeg-static";
+import ffprobe from "ffprobe-static";
 import { run } from "../server/process.js";
 import { repairPicture } from "../server/song-package.js";
 import { openStore } from "../server/db.js";
 process.env.FFMPEG = ffmpeg;
+process.env.FFPROBE = ffprobe.path;
 test("overlapping picture repairs use independent staging and preserve audio and lyrics", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "ktv-picture-"));
   const source = path.join(root, "source.mp4"),
