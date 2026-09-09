@@ -76,4 +76,4 @@ v0.2.0 发布提交为 `f50c823395981343fcff69bbd8740169b84dc408`，已合并 ma
 
 真实公开 B站搜索返回 20 条；视频预览解析得到独立画面/音频流，NAS 代理两路 Range=bytes=0-1023 均返回 206 与 1024 字节。yt-dlp 重复请求曾触发平台 412，改为播放器 API 优先、yt-dlp 后备，并增加缓存与重试提示。此验证不代表所有视频、Cookie、地区或未来平台变化均可用。
 
-PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时长在 0.15 秒容差内且保留音视频轨道；原输入保留，重试复用任务/结果。LAN 发现测试通过内存 UDP 替身及 localhost HTTP 验证，不代表已测试家庭广播、Docker host 网络或 Windows 防火墙。没有做本版本真实音乐 GPU 音质或家庭 TV 音响验收。发布 CI 结果随后补充。
+PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时长在 0.15 秒容差内且保留音视频轨道；原输入保留，重试复用任务/结果。LAN 发现测试通过内存 UDP 替身及 localhost HTTP 验证，不代表已测试家庭广播、Docker host 网络或 Windows 防火墙。没有做本版本真实音乐 GPU 音质或家庭 TV 音响验收。发布提交 f9739bdfaa1edc73474a6436d9b17068c2a17316 的 [标签 CI](https://github.com/xudong7587/haohaochang/actions/runs/34312286038)、[main CI](https://github.com/xudong7587/haohaochang/actions/runs/34312285811) 和 [两套镜像启动检查及 latest 更新](https://github.com/xudong7587/haohaochang/actions/runs/34312286052) 均全部成功。
