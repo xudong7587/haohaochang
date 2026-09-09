@@ -73,9 +73,7 @@ export function resourceManifest(store, song, cache) {
     identity &&
     ["separated", "tracks", "channels"].includes(song.mode) &&
     resources.vocal.available &&
-    resources.backing.available &&
-    resources.lyrics.available &&
-    song.lyrics?.trim();
+    resources.backing.available;
   return {
     version: v2 ? 2 : 1,
     revision,

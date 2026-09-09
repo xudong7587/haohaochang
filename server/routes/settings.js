@@ -34,6 +34,7 @@ export function settingsApi({
       configPath: store.configPath,
       publicUrl: get("publicUrl", ""),
       onlineEnabled: get("onlineEnabled", false),
+      scanProgress: get("scan-progress", null),
       songs: db.prepare("SELECT COUNT(*) AS n FROM songs").get().n,
       ready: db
         .prepare("SELECT COUNT(*) AS n FROM songs WHERE status='ready'")
@@ -83,6 +84,46 @@ export function settingsApi({
     set("ai", providerConfig(req.body, get("ai", {})));
     res.json({ ok: true });
   });
+  for (const kind of ["pc", "cloud"]) {
+    const configFor = (input) => {
+      const old = get("ai", {});
+      const fields =
+        kind === "pc"
+          ? [
+              "enabled",
+              "autoDiscover",
+              "pcEndpoint",
+              "pcModel",
+              "pcApiKey",
+              "clearPcKey",
+            ]
+          : ["enabled", "endpoint", "model", "apiKey", "clearKey"];
+      const patch = Object.fromEntries(
+        fields.filter((k) => k in input).map((k) => [k, input[k]]),
+      );
+      return providerConfig({ ...old, ...patch }, old);
+    };
+    app.post("/api/admin/ai/" + kind, admin, (req, res) => {
+      set("ai", configFor(req.body));
+      if (kind === "pc") discovery.scan();
+      res.json({ ok: true });
+    });
+    app.post("/api/admin/ai/" + kind + "/test", admin, async (req, res) => {
+      const c = configFor(req.body);
+      const target =
+        kind === "pc"
+          ? { endpoint: c.pcEndpoint, model: c.pcModel, apiKey: c.pcApiKey }
+          : c;
+      if (!target.endpoint)
+        throw fail(
+          400,
+          kind === "pc"
+            ? "尚未发现 PC，请启动整理器或填写手动地址。"
+            : "未配置备用 AI；仅使用 PC 时无需检测此项。",
+        );
+      res.json(await testProvider(target));
+    });
+  }
   app.post("/api/admin/ai/test", admin, async (req, res) =>
     res.json(
       await testProvider(

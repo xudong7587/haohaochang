@@ -29,7 +29,6 @@ export function libraryTier(song) {
     !song.title ||
     !song.artist ||
     song.artist === "未知歌手" ||
-    !song.lyrics?.trim() ||
     song.status !== "ready" ||
     !["separated", "tracks", "channels"].includes(song.mode)
   )

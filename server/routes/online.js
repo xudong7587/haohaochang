@@ -28,7 +28,11 @@ export function onlineApi({
 }) {
   const previews = previewSessions();
   app.get("/api/online/songs", member, async (req, res) => {
-    if (!get("onlineEnabled", false)) throw fail(403, "请先在后台启用在线资源");
+    if (!get("onlineEnabled", false))
+      throw fail(
+        403,
+        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+      );
     const title = clean(req.query.title),
       artist = clean(req.query.artist),
       page = Number(req.query.page || 1);
@@ -39,7 +43,11 @@ export function onlineApi({
     );
   });
   app.post("/api/online/preview", member, async (req, res) => {
-    if (!get("onlineEnabled", false)) throw fail(403, "请先在后台启用在线资源");
+    if (!get("onlineEnabled", false))
+      throw fail(
+        403,
+        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+      );
     res.json(
       await previews.create(
         canonicalVideo(req.body.url),
@@ -54,7 +62,11 @@ export function onlineApi({
     await previews.stream(req, res);
   });
   app.post("/api/requests", member, (req, res) => {
-    if (!get("onlineEnabled", false)) throw fail(403, "请先在后台启用在线资源");
+    if (!get("onlineEnabled", false))
+      throw fail(
+        403,
+        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+      );
     const title = clean(req.body.title),
       artist = clean(req.body.artist);
     if (!title) throw fail(400, "请填写歌名");
@@ -86,7 +98,11 @@ export function onlineApi({
     });
   });
   app.get("/api/online", member, async (req, res) => {
-    if (!get("onlineEnabled", false)) throw fail(403, "请先在后台启用在线资源");
+    if (!get("onlineEnabled", false))
+      throw fail(
+        403,
+        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+      );
     const query = clean(req.query.q);
     if (query.length < 2) throw fail(400, "至少输入两个字");
     res.json(
@@ -97,7 +113,11 @@ export function onlineApi({
     );
   });
   app.post("/api/online", member, (req, res) => {
-    if (!get("onlineEnabled", false)) throw fail(403, "请先在后台启用在线资源");
+    if (!get("onlineEnabled", false))
+      throw fail(
+        403,
+        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+      );
     if (
       db
         .prepare(

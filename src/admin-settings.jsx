@@ -41,6 +41,13 @@ export function Settings({ admin, attempt, refresh }) {
       </div>
       <section className="settings-card">
         <h3>NAS 媒体目录</h3>
+        {admin.scanProgress && (
+          <p>
+            最近扫描：{admin.scanProgress.running ? "扫描中" : "已结束"}，已检查{" "}
+            {admin.scanProgress.checked} 个媒体，新增 {admin.scanProgress.added}{" "}
+            首，读取失败 {admin.scanProgress.errors.length} 个。
+          </p>
+        )}
         {admin.roots.map((r) => (
           <code key={r}>{r}</code>
         ))}

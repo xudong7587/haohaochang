@@ -4,6 +4,7 @@ import { stat } from "node:fs/promises";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
+import { connectionError } from "../connection-error.js";
 
 export const providerHeaders = (config) =>
   config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
@@ -14,15 +15,31 @@ export async function checkProvider(config, timeout = 15000) {
     signal: AbortSignal.timeout(timeout),
     redirect: "error",
   });
-  if (!response.ok) throw new Error(`分离服务检测失败 (${response.status})`);
+  if (!response.ok)
+    throw Object.assign(new Error(`分离服务检测失败 (${response.status})`), {
+      status: response.status,
+    });
   const data = await response.json();
   if (data.protocol !== "ktv-separation-v1")
-    throw new Error("服务不是 ktv-separation-v1 协议，请部署适配器");
+    throw Object.assign(
+      new Error("服务不是 ktv-separation-v1 协议，请部署适配器"),
+      { code: "INVALID_PROTOCOL" },
+    );
   return data;
 }
 export async function testProvider(config) {
-  const data = await checkProvider(config);
-  return { ok: true, protocol: data.protocol };
+  if (!config.endpoint)
+    throw new Error(
+      "尚未填写服务地址，也未发现 PC。请先启动整理器或填写手动地址。",
+    );
+  try {
+    const data = await checkProvider(config);
+    return { ok: true, protocol: data.protocol, endpoint: config.endpoint };
+  } catch (error) {
+    throw Object.assign(new Error(connectionError(error, "服务").message), {
+      status: 502,
+    });
+  }
 }
 const validId = (id) => /^[a-zA-Z0-9_-]{1,100}$/.test(id || "");
 function checkpointName(song, config) {

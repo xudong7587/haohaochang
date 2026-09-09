@@ -19,6 +19,8 @@ window.request=async(url,body,method)=>{
  if(url==='/admin/library?hidden=true')return structuredClone(window.hiddenSongs);
  if(url==='/admin/reviews')return [structuredClone(window.videoReview)];
  if(url==='/admin/inbox')return [];
+ if(url.endsWith('/delete-preview'))return {title:'初始歌名',token:'preview-token',targets:[{path:'/isolated/song-folder',directory:true}]};
+ if(url.endsWith('/delete-files')){if(body.token!=='preview-token')throw new Error('无效确认');window.songs=window.songs.filter(row=>row.id!==url.split('/')[3]);return {ok:true};}
  if(url==='/admin/source-info')return {title:'可爱女人',artist:'周杰伦',duration:240,candidateId:'retained-preview-id',candidate:{canonicalUrl:body.url,externalTitle:'第14P',page:14}};
  if(url==='/admin/find-lyrics')return {lyrics:'[00:01]本地候选歌词',source:'本地 LRC',provider:'local-lrc',sourceId:'local-1'};
  if(url==='/admin/refresh-metadata')return {title:'识别歌名',artist:'测试歌手',needs_review:body.id==='review'};
@@ -78,6 +80,16 @@ try {
     .filter({ hasText: /^标准/ })
     .click();
   let row = page.locator('[data-song-id="song-a"]');
+  assert.deepEqual(await row.locator("header button").allTextContents(), [
+    "替换视频",
+    "编辑歌曲",
+    "删除",
+  ]);
+  await row.getByRole("button", { name: "删除", exact: true }).click();
+  await row.getByRole("dialog", { name: "确认删除媒体" }).waitFor();
+  assert.ok((await row.getByRole("dialog").textContent()).includes("整个目录"));
+  await row.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.songs.length), 1);
   await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
   const title = row.getByLabel("歌名", { exact: true });
   await page.evaluate(() =>
@@ -181,11 +193,9 @@ try {
   assert.equal(source.offset, 1.2);
   assert.equal(source.expectedRevision, 6);
   await page.getByRole("button", { name: /^待整理曲库/ }).click();
-  const video = page
-    .locator("article")
-    .filter({
-      has: page.getByRole("heading", { name: "视频候选 — 测试歌手" }),
-    });
+  const video = page.locator("article").filter({
+    has: page.getByRole("heading", { name: "视频候选 — 测试歌手" }),
+  });
   await video.getByLabel("我已试听核对，这是与当前音轨对应的录音版本").check();
   await video.getByLabel("视频相对音轨偏移（秒）").fill("0");
   await video
@@ -208,6 +218,10 @@ try {
   await page.getByRole("button", { name: /^已隐藏/ }).click();
   await page.getByRole("button", { name: "恢复歌曲", exact: true }).click();
   assert.equal(await page.evaluate(() => window.songs.length), 1);
+  await page.getByRole("button", { name: /^标准曲库/ }).click();
+  await row.getByRole("button", { name: "删除", exact: true }).click();
+  await row.getByRole("button", { name: "确认永久删除", exact: true }).click();
+  await page.waitForFunction(() => window.songs.length === 0);
   assert.deepEqual(errors, []);
   console.log(
     "Library component browser contracts passed: clean refresh, draft conflicts, stale saves, candidate download, lyric provenance, MV confirmation, review actions, hide/restore.",

@@ -37,6 +37,7 @@ export function reviewsApi({
         return {
           id: j.id,
           kind: j.kind,
+          songId: p.id || p.existingId,
           expectedRevision:
             p.id || p.existingId
               ? currentSong(store, p.id || p.existingId).metadataRevision

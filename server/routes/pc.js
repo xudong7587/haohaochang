@@ -1,4 +1,5 @@
 import { providerHeaders } from "../separation/protocol.js";
+import { connectionError } from "../connection-error.js";
 
 const clipText = (v, max = 240) => String(v ?? "").slice(0, max);
 export function pcApi({ app, admin, store, discovery }) {
@@ -7,19 +8,27 @@ export function pcApi({ app, admin, store, discovery }) {
     const config = store.get("ai", {});
     const tasks = store.db
       .prepare(
-        "SELECT id,kind,payload,status,stage,error,created FROM jobs ORDER BY created DESC LIMIT 40",
+        "SELECT id,kind,payload,status,stage,error,created,started,finished FROM jobs ORDER BY created DESC LIMIT 200",
       )
       .all()
       .map(({ payload, ...row }) => {
         const p = JSON.parse(payload);
+        const song =
+          p.id || p.existingId
+            ? store.db
+                .prepare("SELECT title,artist FROM songs WHERE id=?")
+                .get(p.id || p.existingId)
+            : null;
         return {
           ...row,
-          title: p.title || p.metadata?.title || "",
-          artist: p.artist || p.metadata?.artist || "",
+          title: p.title || p.metadata?.title || song?.title || "",
+          artist: p.artist || p.metadata?.artist || song?.artist || "",
         };
       });
     const base = {
       connected: false,
+      endpoint: config.pcEndpoint || "",
+      checkedAt: Date.now(),
       discovery: discovery.info(),
       tasks,
       worker: null,
@@ -27,7 +36,11 @@ export function pcApi({ app, admin, store, discovery }) {
     if (!config.pcEndpoint)
       return {
         ...base,
-        message: "等待 PC 整理器上线。在电脑上运行 start.cmd 即可。",
+        status: "unconfigured",
+        message:
+          config.autoDiscover !== false && !discovery.info().enabled
+            ? "未连接：当前 NAS 没有启用局域网发现。请使用 LAN 部署配置，或直接填写手动 PC 地址。"
+            : "未连接：尚未获得 PC 地址。请启动整理器并等待发现，或填写手动 PC 地址。",
       };
     try {
       const response = await fetch(config.pcEndpoint + "/desktop/status", {
@@ -35,7 +48,10 @@ export function pcApi({ app, admin, store, discovery }) {
         signal: AbortSignal.timeout(5000),
         redirect: "error",
       });
-      if (!response.ok) throw new Error("PC 状态暂不可用");
+      if (!response.ok)
+        throw Object.assign(new Error("PC 状态暂不可用"), {
+          status: response.status,
+        });
       const chunks = [];
       let bytes = 0;
       for await (const chunk of response.body) {
@@ -45,7 +61,9 @@ export function pcApi({ app, admin, store, discovery }) {
       }
       const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if (!Array.isArray(data.jobs) || !data.memory)
-        throw new Error("请更新 PC 整理器");
+        throw Object.assign(new Error("请更新 PC 整理器"), {
+          code: "INVALID_PROTOCOL",
+        });
       const jobs = data.jobs
         .slice(0, 40)
         .map((j) =>
@@ -97,13 +115,14 @@ export function pcApi({ app, admin, store, discovery }) {
       return {
         ...base,
         connected: true,
+        status: "connected",
         message: "PC 已连接，任务自动处理",
         worker,
       };
-    } catch {
+    } catch (error) {
       return {
         ...base,
-        message: "PC 暂未连接或仍在安装环境，已保存的任务会等待恢复。",
+        ...connectionError(error),
       };
     }
   }
@@ -112,5 +131,37 @@ export function pcApi({ app, admin, store, discovery }) {
       pending = null;
     });
     res.set("Cache-Control", "no-store").json(await pending);
+  });
+  app.get("/api/admin/pc/logs", admin, async (_req, res) => {
+    const report = await status();
+    report.scan = store.get("scan-progress", null);
+    const secrets = [
+      store.get("favorites", {}).cookie,
+      ...Object.values(store.get("favorites", {}).credentials || {}),
+      store.get("ai", {}).apiKey,
+      store.get("ai", {}).pcApiKey,
+      store.get("enrichment", {}).apiKey,
+    ].filter(Boolean);
+    const output = JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        scope:
+          "最近 200 条 NAS 任务与最近 40 条 PC 任务；PC 日志每条最多 5000 字符",
+        ...report,
+      },
+      (_key, value) =>
+        typeof value === "string"
+          ? secrets.reduce(
+              (text, secret) => text.split(secret).join("[已隐藏]"),
+              value,
+            )
+          : value,
+      2,
+    );
+    res
+      .set("Cache-Control", "no-store")
+      .attachment("haohaochang-diagnostics.json")
+      .type("json")
+      .send(output);
   });
 }

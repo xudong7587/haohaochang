@@ -46,9 +46,27 @@ export function libraryApi({
       .get(req.params.id);
     if (!song) throw new Error("歌曲不存在");
     assertIdle(song.id);
+    checkRevision(song, req.body.expectedRevision, false);
     if (db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id))
       throw new Error("请先移出播放队列");
-    res.json({ id: addJob("organize", { id: song.id }) });
+    const known =
+      song.title?.trim() && song.artist?.trim() && song.artist !== "未知歌手";
+    res.json({
+      id: addJob("organize", {
+        id: song.id,
+        approved: !!known,
+        ...(known
+          ? {
+              metadata: {
+                title: song.title,
+                artist: song.artist,
+                lyrics: song.lyrics || "",
+                needs_review: 0,
+              },
+            }
+          : {}),
+      }),
+    });
   });
   app.post("/api/admin/refresh-metadata", admin, async (req, res) => {
     const song = req.body.id
@@ -188,28 +206,61 @@ export function libraryApi({
   app.get("/api/admin/inbox", admin, async (req, res) => {
     const handled = db
       .prepare(
-        "SELECT payload FROM jobs WHERE kind='import' AND status IN ('review','running','queued')",
+        "SELECT id,payload,status,stage FROM jobs WHERE kind='import' AND status IN ('review','running','queued','waiting-worker')",
       )
       .all()
-      .map((j) => JSON.parse(j.payload).file);
+      .map((j) => ({ ...j, payload: JSON.parse(j.payload) }));
     const rows = [];
-    for (const file of (await filesUnder(downloads)).slice(0, 500)) {
-      const info = await stat(file);
-      if (get(importKey(file, info)) || handled.includes(file)) continue;
-      rows.push({
-        id: importKey(file, info),
-        file,
-        inbox: true,
-        ...(await metadata(file, [downloads])),
-        note: "下载工作区 · 等待信息完整和文件稳定",
-        lyrics: "",
-      });
+    for (const file of await filesUnder(downloads)) {
+      try {
+        const info = await stat(file);
+        const job = handled.find((j) => j.payload.file === file);
+        if (get(importKey(file, info)) || job?.status === "review") continue;
+        rows.push({
+          id: importKey(file, info),
+          file,
+          inbox: true,
+          ...(await metadata(file, [downloads])),
+          ...(job?.payload.metadata || {}),
+          processing: !!job,
+          status: job?.status || "import",
+          jobId: job?.id,
+          note: job
+            ? {
+                queued: "已加入整理队列",
+                running: "正在整理，完成后自动更新",
+                "waiting-worker": "等待 PC 上线后继续",
+              }[job.status]
+            : "下载工作区 · 等待信息完整和文件稳定",
+          lyrics: "",
+        });
+      } catch (error) {
+        rows.push({
+          id: file,
+          file,
+          inbox: true,
+          title: path.basename(file),
+          artist: "未知歌手",
+          note: "读取失败：" + error.message,
+        });
+      }
     }
     res.json(rows);
   });
   app.post("/api/admin/inbox", admin, async (req, res) => {
     const file = await safeMedia(String(req.body.file || ""), [downloads]),
       info = await stat(file);
+    const existing = db
+      .prepare(
+        "SELECT id,payload,status FROM jobs WHERE kind='import' AND status IN ('queued','running','review','waiting-worker')",
+      )
+      .all()
+      .find((j) => JSON.parse(j.payload).file === file);
+    if (existing) {
+      if (existing.status === "review")
+        throw new Error("媒体已进入待核对，请刷新后从待核对项目继续");
+      return res.json({ id: existing.id, existing: true });
+    }
     const title = String(req.body.title || "")
         .trim()
         .slice(0, 120),
@@ -355,7 +406,6 @@ export function libraryApi({
         .slice(0, 120),
       lyrics = String(req.body.lyrics || "").slice(0, 25000);
     if (!title || !artist) throw new Error("请填写歌名和歌手");
-    if (req.body.prepare && !lyrics) throw new Error("请补充歌词后继续整理");
     const updated = await saveSongMetadata(
       store,
       song.id,
@@ -373,7 +423,7 @@ export function libraryApi({
       },
       cache,
     );
-    if (req.body.prepare) addJob("prepare", { id: song.id });
+    if (req.body.prepare) addJob("organize", { id: song.id });
     emit("library", {});
     res.json({ ok: true, metadataRevision: updated.metadataRevision });
   });

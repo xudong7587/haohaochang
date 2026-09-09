@@ -17,6 +17,14 @@ process.env.FFMPEG = ffmpeg;
 process.env.FFPROBE = ffprobe.path;
 
 test("online marked video is clipped before extracting and uploading audio; full selection retains full duration", async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) =>
+    String(url).includes("lrclib.net")
+      ? Promise.resolve({ ok: true, json: async () => [] })
+      : originalFetch(url, options);
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
   const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-pc-pipeline-"));
   const store = openStore(path.join(dir, "db")),
     downloads = path.join(dir, "downloads"),
@@ -176,7 +184,7 @@ test("online marked video is clipped before extracting and uploading audio; full
     assert.ok(
       Math.abs((await probe(staged.payload.file)).duration - duration) < 0.15,
     );
-    staged.payload.metadata.lyrics = "[00:00.00]测试歌词";
+    staged.payload.metadata.lyrics = id === "full" ? "" : "[00:00.00]测试歌词";
     store.db
       .prepare(
         "INSERT INTO jobs(id,kind,payload,status,created) VALUES (?,?,?,?,?)",
@@ -186,6 +194,7 @@ test("online marked video is clipped before extracting and uploading audio; full
     const song = store.db.prepare("SELECT * FROM songs WHERE title=?").get(id);
     assert.equal(song.mode, "separated");
     assert.equal(song.status, "ready");
+    if (id === "full") assert.equal(song.lyrics, "");
     assert.ok(Math.abs(song.duration - duration) < 0.15);
   }
   assert.deepEqual(events, ["clip", "separate", "separate"]);

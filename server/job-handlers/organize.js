@@ -53,7 +53,7 @@ export async function organize(job, payload, context) {
         };
       } catch {}
     }
-    if (meta.needs_review || !meta.lyrics) {
+    if (meta.needs_review) {
       db.prepare(
         "UPDATE jobs SET status='review',payload=?,error=? WHERE id=?",
       ).run(

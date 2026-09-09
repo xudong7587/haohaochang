@@ -84,3 +84,9 @@ PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时�
 - `npm run build` 通过；ui-check、player-check、library-ui、online-player、pc-dashboard 五类浏览器检查通过。新增页面覆盖管理密码、只访问 NAS 同源、PC 密钥及私有路径过滤、在线/断线、刷新与会话、390px 手机布局、管理端“歌星管理”。截图保存在 test-results/pc-dashboard。
 - Python 工作协议 11 项、模拟 LAN 2 项通过。Windows launcher-check 真实执行 start.cmd→open.vbs→隐藏 PowerShell，验证关闭自动浏览器和保留 local-only 设置；安装入口使用临时替身，未下载模型、未启用 LAN。
 - 家庭 NAS 反代配置、广播发现与电视实机未在本轮验证；发布检查以 v0.3.1 标签的 Actions 和 Release 为准。
+# v0.3.2 曲库管理回归 · 2026-09-09
+
+- 本地 `npm test` 80 项通过；真实 FFmpeg 验证无歌词仍完成导入和音轨分离，旧裁剪顺序与资源保留回归继续通过。
+- 独立数据库和临时媒体目录验证永久删除：展示目标目录、阻止任务/队列占用、拒绝过期确认、保留无关文件；下载区 105 文件（104 已排队）全部可见，未处理文件可以确认删除。
+- 五类浏览器检查通过：整体管理/点歌、曲库草稿与删除确认、在线选段、PC 管理与日志下载、播放器异常恢复。PC/备用 AI 独立保存和检测由 localhost 协议替身验证。
+- 未操作用户正式曲库；未探测公司局域网或修改防火墙。本地通过不代表家庭 NAS、GPU 音质或电视实机通过。发布构建结果见版本 Release 与 Actions。

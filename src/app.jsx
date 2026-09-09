@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 
 import { AISettings } from "./settings.jsx";
+import { PcDashboard } from "./pc-dashboard.jsx";
 
 const route = ["/", "/admin"].includes(location.pathname)
   ? "admin"
@@ -381,13 +382,29 @@ export function App() {
             在线找歌
           </IconButton>
           {route === "admin" && (
-            <IconButton
-              icon={Settings2}
-              className={tab === "settings" ? "selected" : ""}
-              onClick={() => setTab("settings")}
-            >
-              设置与任务
-            </IconButton>
+            <>
+              <IconButton
+                icon={Monitor}
+                className={tab === "pc" ? "selected" : ""}
+                onClick={() => setTab("pc")}
+              >
+                PC 整理器
+              </IconButton>
+              <IconButton
+                icon={SlidersHorizontal}
+                className={tab === "ai" ? "selected" : ""}
+                onClick={() => setTab("ai")}
+              >
+                备用 AI
+              </IconButton>
+              <IconButton
+                icon={Settings2}
+                className={tab === "settings" ? "selected" : ""}
+                onClick={() => setTab("settings")}
+              >
+                设置与任务
+              </IconButton>
+            </>
           )}
         </nav>
         <div className="sidebar-bottom">
@@ -808,7 +825,18 @@ export function App() {
                 attempt={attempt}
                 refresh={() => setRefresh((n) => n + 1)}
               />
-              <AISettings attempt={attempt} />
+            </>
+          )}
+          {route === "admin" && tab === "pc" && <PcDashboard embedded />}
+          {route === "admin" && tab === "ai" && (
+            <>
+              <div className="section-heading">
+                <div>
+                  <h1>备用 AI</h1>
+                  <p>配置分离服务，并独立检测其连接。</p>
+                </div>
+              </div>
+              <AISettings />
             </>
           )}
           {route === "mobile" && (

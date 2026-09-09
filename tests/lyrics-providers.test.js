@@ -78,16 +78,19 @@ test("same name, cover artist, missing duration and recording version do not aut
     ).includes("duration-mismatch"),
   );
 });
-test("ambiguous same-duration lyrics require explicit selection", async (t) => {
+test("same-duration matching lyrics select a candidate without blocking", async (t) => {
   const { dir, localIndex } = await fixture(t, [
     row,
     { ...row, id: "other", file: "other.lrc" },
   ]);
   await writeFile(path.join(dir, "other.lrc"), "[00:09]另一版本");
-  await assert.rejects(
-    findLyrics(row.title, row.artist, 200, { localIndex, lrclib: false }),
-    { code: "LYRICS_AMBIGUOUS" },
-  );
+  const result = await findLyrics(row.title, row.artist, 200, {
+    localIndex,
+    lrclib: false,
+  });
+  assert.equal(result.candidateCount, 2);
+  assert.equal(result.selection, "closest-duration");
+  assert.ok(result.lyrics);
 });
 test("local provider rejects paths escaping its index directory", async (t) => {
   const { localIndex } = await fixture(t, [{ ...row, file: "../outside.lrc" }]);

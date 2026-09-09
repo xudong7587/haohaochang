@@ -83,15 +83,12 @@ export async function findLyrics(title, artist, duration, options = {}) {
     const distinct = new Map(
       matches.map((row) => [String(row.lyrics).trim(), row]),
     );
-    if (distinct.size > 1) {
-      const error = new Error(
-        "找到多个同名、同歌手、相近时长的歌词版本，请导入确认过的 LRC",
-      );
-      error.code = "LYRICS_AMBIGUOUS";
-      error.candidates = matches.map(({ lyrics, ...row }) => row);
-      throw error;
-    }
-    const row = matches[0];
+    const candidates = [...distinct.values()].sort(
+      (a, b) =>
+        Math.abs((Number(a.duration) || 0) - query.duration) -
+        Math.abs((Number(b.duration) || 0) - query.duration),
+    );
+    const row = candidates[0];
     return {
       lyrics: row.lyrics,
       source: row.source || provider.id,
@@ -107,6 +104,8 @@ export async function findLyrics(title, artist, duration, options = {}) {
       evidence: row.evidence || [],
       offsetUnit: "milliseconds",
       status: "candidate",
+      candidateCount: candidates.length,
+      selection: candidates.length > 1 ? "closest-duration" : "single-match",
       reviewReasons: ["recording-alignment-needs-review"],
     };
   }

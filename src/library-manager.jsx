@@ -4,7 +4,7 @@ import { VideoReview } from "./library/video-review.jsx";
 import { CatalogImport } from "./library/catalog-import.jsx";
 import { SourceImport } from "./library/source-import.jsx";
 import { BatchResults } from "./library/batch-results.jsx";
-import { refreshMetadataBatch } from "./library/batch.js";
+import { refreshMetadataBatch, organizeBatch } from "./library/batch.js";
 export { LyricsSettings } from "./library/lyrics-settings.jsx";
 
 export function LibraryManager({ request, notify, onEdit }) {
@@ -66,6 +66,26 @@ export function LibraryManager({ request, notify, onEdit }) {
           <p>按歌曲整理信息、MV、原唱、伴奏和歌词。</p>
         </div>
         <div className="actions">
+          <button
+            className="primary"
+            disabled={busy}
+            onClick={() =>
+              action(async () => {
+                setResults([]);
+                const completed = await organizeBatch(
+                  songs,
+                  reviews,
+                  request,
+                  setResults,
+                );
+                notify(
+                  `已提交 ${completed.filter((r) => r.status === "success").length} 首，逐项结果见下方`,
+                );
+              })
+            }
+          >
+            全部整理
+          </button>
           <button
             disabled={busy || !songs.length}
             onClick={() =>
@@ -135,12 +155,12 @@ export function LibraryManager({ request, notify, onEdit }) {
       />
       <p>
         {tab === "pending"
-          ? "缺信息、歌词或双版本的资源。补齐后再继续整理。"
+          ? "原始媒体等待整理。确认歌名和歌手后即可开始，自动查找歌词，找不到也会继续。"
           : tab === "audio"
-            ? "原唱、伴奏和歌词齐全，可直接唱；等待补充匹配视频。"
+            ? "原唱、伴奏已准备，可直接唱；等待补充匹配视频，歌词可选。"
             : tab === "hidden"
               ? "已隐藏歌曲保留媒体文件，恢复后重新按资源能力分类。"
-              : "画面、原唱、伴奏和歌词齐全。"}
+              : "画面、原唱、伴奏已准备，歌词可随时补充。"}
       </p>
       {reviews.map((row) =>
         row.kind === "find-video" ? (

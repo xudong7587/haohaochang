@@ -27,8 +27,27 @@ import { pinyin } from "pinyin-pro";
 
 export async function scanLibrary(store, roots) {
   let count = 0;
+  const progress = {
+    running: true,
+    checked: 0,
+    added: 0,
+    errors: [],
+    started: Date.now(),
+  };
+  const recordError = (file, error) => {
+    progress.errors.push({ file, message: error.message });
+    store.set("scan-progress", { ...progress });
+  };
+  store.set("scan-progress", { ...progress });
   async function walk(dir, root) {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      recordError(dir, error);
+      return;
+    }
+    for (const entry of entries) {
       if (entry.isSymbolicLink() || entry.name === resourceFolder) continue;
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) await walk(file, root);
@@ -37,71 +56,92 @@ export async function scanLibrary(store, roots) {
           entry.name,
         )
       ) {
-        const id =
-          store.db.prepare("SELECT id FROM songs WHERE path=?").get(file)?.id ||
-          createHash("sha256").update(file).digest("hex").slice(0, 24);
-        const { artist, title, poster, tags, metadata_source, needs_review } =
-          await metadata(file, [root]);
-        count += Number(
-          store.db
-            .prepare(
-              "INSERT OR IGNORE INTO songs (id,path,title,artist,search,created) VALUES (?,?,?,?,?,?)",
-            )
-            .run(id, file, title, artist, searchText(title, artist), Date.now())
-            .changes,
-        );
-        await withSongWrite(
-          store,
-          id,
-          async (song) => {
-            if (
-              store.db.prepare("SELECT id FROM queue WHERE song_id=?").get(id)
-            )
-              return;
-            const patch = {};
-            if (!["手动", "AI"].includes(song.metadata_source))
-              Object.assign(patch, {
+        try {
+          const id =
+            store.db.prepare("SELECT id FROM songs WHERE path=?").get(file)
+              ?.id ||
+            createHash("sha256").update(file).digest("hex").slice(0, 24);
+          const { artist, title, poster, tags, metadata_source, needs_review } =
+            await metadata(file, [root]);
+          count += Number(
+            store.db
+              .prepare(
+                "INSERT OR IGNORE INTO songs (id,path,title,artist,search,created) VALUES (?,?,?,?,?,?)",
+              )
+              .run(
+                id,
+                file,
                 title,
                 artist,
-                metadata_source,
-                needs_review,
-              });
-            if (!song.tags_manual && song.metadata_source !== "AI")
-              patch.tags = JSON.stringify(tags);
-            if (!song.lyrics) {
-              try {
-                const lrc = await safeMedia(
-                  path.join(dir, path.parse(entry.name).name + ".lrc"),
-                  [root],
-                );
-                if ((await stat(lrc)).size < 100000)
-                  patch.lyrics = await readFile(lrc, "utf8");
-              } catch {}
-            }
-            if (
-              Object.entries(patch).some(([key, value]) => song[key] !== value)
-            )
-              await saveSongMetadata(store, id, patch, resourceRoot(root), {
-                required: false,
-                idle: false,
-              });
-            store.db
-              .prepare("UPDATE songs SET poster=? WHERE id=?")
-              .run(poster, id);
-            if (
-              /\.(mp3|flac|wav|m4a|ogg|aac)$/i.test(entry.name) &&
-              !store.get("video-source:" + id)?.keepAudio
-            )
+                searchText(title, artist),
+                Date.now(),
+              ).changes,
+          );
+          await withSongWrite(
+            store,
+            id,
+            async (song) => {
+              if (
+                store.db.prepare("SELECT id FROM queue WHERE song_id=?").get(id)
+              )
+                return;
+              const patch = {};
+              if (!["手动", "AI"].includes(song.metadata_source))
+                Object.assign(patch, {
+                  title,
+                  artist,
+                  metadata_source,
+                  needs_review,
+                });
+              if (!song.tags_manual && song.metadata_source !== "AI")
+                patch.tags = JSON.stringify(tags);
+              if (!song.lyrics) {
+                try {
+                  const lrc = await safeMedia(
+                    path.join(dir, path.parse(entry.name).name + ".lrc"),
+                    [root],
+                  );
+                  if ((await stat(lrc)).size < 100000)
+                    patch.lyrics = await readFile(lrc, "utf8");
+                } catch {}
+              }
+              if (
+                Object.entries(patch).some(
+                  ([key, value]) => song[key] !== value,
+                )
+              )
+                await saveSongMetadata(store, id, patch, resourceRoot(root), {
+                  required: false,
+                  idle: false,
+                });
               store.db
-                .prepare("UPDATE songs SET needs_video=1 WHERE id=?")
-                .run(id);
-          },
-          { wait: true },
-        );
+                .prepare("UPDATE songs SET poster=? WHERE id=?")
+                .run(poster, id);
+              if (
+                /\.(mp3|flac|wav|m4a|ogg|aac)$/i.test(entry.name) &&
+                !store.get("video-source:" + id)?.keepAudio
+              )
+                store.db
+                  .prepare("UPDATE songs SET needs_video=1 WHERE id=?")
+                  .run(id);
+            },
+            { wait: true },
+          );
+        } catch (error) {
+          recordError(file, error);
+        }
+        progress.checked++;
+        progress.added = count;
+        store.set("scan-progress", { ...progress });
       }
     }
   }
   for (const root of roots) await walk(root, root);
+  store.set("scan-progress", {
+    ...progress,
+    running: false,
+    finished: Date.now(),
+  });
   return count;
 }
 export async function prepareSong(store, id, roots, cache) {

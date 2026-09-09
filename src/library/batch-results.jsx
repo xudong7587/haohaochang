@@ -6,6 +6,7 @@ export function BatchResults({ results }) {
     review: "需核对",
     conflict: "冲突",
     failed: "失败",
+    skipped: "已跳过",
   };
   return (
     <div className="settings-card" aria-live="polite">

@@ -11,6 +11,7 @@ import { legacyLibraryApi } from "./routes/legacy-library.js";
 import { createRoom } from "./room.js";
 import { createScheduler } from "./scheduler.js";
 import { libraryApi } from "./library-api.js";
+import { libraryDeleteApi } from "./library-delete.js";
 import { resourceRoot } from "./assets.js";
 import express from "express";
 import path from "node:path";
@@ -146,6 +147,7 @@ export function createApp(options = {}) {
     allowedOrigin,
   };
   libraryApi(routeContext);
+  libraryDeleteApi(routeContext);
   backgroundApi(routeContext);
   app.get("/api/health", (req, res) => res.json({ ok: true }));
   app.post("/api/login", admin, (req, res) =>

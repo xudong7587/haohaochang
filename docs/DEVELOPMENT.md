@@ -54,7 +54,7 @@ Python 协议测试需 fastapi==0.115.12、python-multipart==0.0.20 和 httpx，
 [{"id":"my-recording-1","title":"歌名","artist":"歌手","duration":240,"version":"studio","file":"歌曲.lrc","sourceUrl":"https://example.com/source","license":"自有或获授权"}]
 ```
 
-必须填写真实录音时长和版本；缺失、同名翻唱或歧义不会自动认定匹配。索引最多 20000 项／8 MB，单个 LRC 最多 1 MB，路径不能越出索引目录。支持增强逐字 LRC 与毫秒 offset。失败时回退 LRCLIB；自动匹配仍需试听核对，不保证逐字节奏一致。
+必须填写真实录音时长和版本；缺失、同名翻唱或版本不符不会自动认定匹配。多份通过歌名、歌手、时长和版本检查的歌词默认选择时长最接近的一份，并保留候选数量。索引最多 20000 项／8 MB，单个 LRC 最多 1 MB，路径不能越出索引目录。支持增强逐字 LRC 与毫秒 offset。失败时回退 LRCLIB；自动匹配仍需试听核对，不保证逐字节奏一致。未找到歌词不阻止整理。
 
 ## v0.3.0 局域网与在线视频
 

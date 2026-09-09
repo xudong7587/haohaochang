@@ -20,6 +20,16 @@ export function ResourceRow({
 }) {
   const [open, setOpen] = useState(false),
     [draft, dispatch] = useReducer(draftReducer, row, createDraft);
+  const [deletion, setDeletion] = useState(null);
+  busy = busy || row.processing;
+  const deleteSongId = review ? row.songId : row.id;
+  const deleteBase = deleteSongId
+    ? "/admin/library/" + deleteSongId
+    : "/admin/inbox";
+  const deletePayload = {
+    file: row.file,
+    reviewId: row.inbox ? undefined : row.id,
+  };
   const [confirmed, setConfirmed] = useState(false),
     [offset, setOffset] = useState(""),
     [parsed, setParsed] = useState(null),
@@ -74,7 +84,6 @@ export function ResourceRow({
     checkDraft();
     if (!form.title.trim() || !form.artist.trim() || form.artist === "未知歌手")
       throw new Error("请填写歌名和实际演唱者");
-    if (prepare && !form.lyrics.trim()) throw new Error("请先补充同步歌词");
     if (prepare && !review && changedUrl) replacementPayload();
     const values = { ...form };
     if (review) {
@@ -189,39 +198,103 @@ export function ResourceRow({
               error: "处理失败",
               import: "等待入库",
               acquire: "等待找歌",
+              queued: "等待处理",
+              running: "处理中",
+              "waiting-worker": "等待 PC 上线",
             }[row.status || row.kind] || "待处理"}
             {draft.dirty ? " · 草稿未保存" : ""}
           </p>
         </div>
         <div className="actions">
-          <button
-            className="primary"
-            disabled={busy || draft.conflict}
-            onClick={organize}
-          >
-            {row.tier === "audio" ? "整理 / 查找 MV" : "开始整理"}
-          </button>
-          <button disabled={busy || draft.conflict} onClick={refreshMetadata}>
-            刷新歌名 / 歌手
-          </button>
+          {row.tier !== "standard" && (
+            <>
+              <button
+                className="primary"
+                disabled={busy || draft.conflict}
+                onClick={organize}
+              >
+                {row.tier === "audio" ? "整理 / 查找 MV" : "开始整理"}
+              </button>
+              <button
+                disabled={busy || draft.conflict}
+                onClick={refreshMetadata}
+              >
+                刷新歌名 / 歌手
+              </button>
+            </>
+          )}
           <button disabled={busy} onClick={() => setOpen(true)}>
             {row.tier === "audio" ? "补充 MV" : "替换视频"}
           </button>
-          <button
-            disabled={busy || draft.conflict || !form.title || !form.artist}
-            onClick={findLyrics}
-          >
-            自动找歌词
-          </button>
+          {row.tier !== "standard" && (
+            <button
+              disabled={busy || draft.conflict || !form.title || !form.artist}
+              onClick={findLyrics}
+            >
+              自动找歌词
+            </button>
+          )}
           <button onClick={() => setOpen(!open)}>
             {open ? "收起" : "编辑歌曲"}
           </button>
+          {(!review || row.songId || row.inbox || row.kind === "import") && (
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  setDeletion(
+                    await request(
+                      deleteBase + "/delete-preview",
+                      deleteSongId ? undefined : deletePayload,
+                      deleteSongId ? "GET" : "POST",
+                    ),
+                  );
+                })
+              }
+            >
+              删除
+            </button>
+          )}
         </div>
       </header>
+      {deletion && (
+        <div role="dialog" aria-label="确认删除媒体" className="settings-card">
+          <strong>永久删除《{deletion.title}》及以下媒体，无法恢复</strong>
+          <ul>
+            {deletion.targets.map((target) => (
+              <li key={target.path}>
+                <code>{target.path}</code>
+                {target.directory ? "（整个目录）" : ""}
+              </li>
+            ))}
+          </ul>
+          <div className="actions">
+            <button disabled={busy} onClick={() => setDeletion(null)}>
+              取消
+            </button>
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await request(
+                    deleteBase + "/delete-files",
+                    { ...deletePayload, token: deletion.token },
+                    "POST",
+                  );
+                  setDeletion(null);
+                  notify("歌曲及对应媒体已删除");
+                })
+              }
+            >
+              确认永久删除
+            </button>
+          </div>
+        </div>
+      )}
       {row.note && <p>{row.note}</p>}
       {row.missing?.length > 0 && (
-        <p className="error">
-          缺失或未通过校验：
+        <p className="muted">
+          {row.status === "ready" ? "可补充资源：" : "整理后将生成："}
           {row.missing.map((name) => resourceNames[name] || name).join("、")}
         </p>
       )}

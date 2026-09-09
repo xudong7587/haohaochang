@@ -10,7 +10,7 @@ import { parseLyrics, progress } from "../shared/lyrics.js";
 import { findLyrics } from "../server/lyrics-source.js";
 import { favoriteConfig } from "../server/favorites.js";
 import { canonicalVideo } from "../server/sources.js";
-test("library tiers require identity, both audio versions and lyrics", () => {
+test("library tiers require identity and both audio versions, with optional lyrics", () => {
   const song = {
     title: "歌曲",
     artist: "歌手",
@@ -21,8 +21,8 @@ test("library tiers require identity, both audio versions and lyrics", () => {
   };
   assert.equal(libraryTier(song), "standard");
   assert.equal(libraryTier({ ...song, needs_video: 1 }), "audio");
+  assert.equal(libraryTier({ ...song, lyrics: "" }), "standard");
   for (const patch of [
-    { lyrics: "" },
     { mode: "original" },
     { needs_review: 1 },
     { status: "preparing" },

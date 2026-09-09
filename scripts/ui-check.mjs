@@ -140,7 +140,9 @@ try {
   await page.locator(".reaction-layer").getByText("👏").waitFor();
   await page.goto(base + "/admin");
   await page.getByRole("button", { name: "设置与任务", exact: true }).click();
-  await page.getByText("AI 伴奏分离", { exact: true }).waitFor();
+  await page
+    .getByRole("heading", { name: "NAS 媒体目录", exact: true })
+    .waitFor();
   await page.screenshot({ path: "test-results/ui/admin.png", fullPage: true });
   await page.getByRole("button", { name: "曲库管理", exact: true }).click();
   await page.getByRole("button", { name: /^标准曲库/ }).click();

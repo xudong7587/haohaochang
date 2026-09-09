@@ -115,6 +115,17 @@ try {
   await page.getByText("待整理歌曲 · 测试歌手", { exact: true }).waitFor();
   await page.getByText("查看日志", { exact: true }).click();
   await page.getByText("正在裁剪所选区间", { exact: true }).waitFor();
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出诊断日志" }).click();
+  const download = await downloadEvent;
+  assert.match(download.suggestedFilename(), /好好唱诊断/);
+  const exported = await fetch(base + "/api/admin/pc/logs", {
+    headers: { Authorization: "Bearer pc-page-test-password" },
+  });
+  assert.equal(exported.status, 200);
+  const exportedText = await exported.text();
+  assert.ok(exportedText.includes("最近 200 条"));
+  assert.ok(!exportedText.includes("worker-test-secret"));
   await mkdir("test-results/pc-dashboard", { recursive: true });
   await page.screenshot({
     path: "test-results/pc-dashboard/desktop.png",
@@ -133,7 +144,7 @@ try {
   mode = "offline";
   await page.getByRole("button", { name: "刷新状态" }).click();
   await page
-    .getByText("PC 暂未连接或仍在安装环境，已保存的任务会等待恢复。", {
+    .getByText("PC返回 HTTP 503，服务暂时不可用。请查看整理器日志。", {
       exact: true,
     })
     .waitFor();
@@ -151,6 +162,36 @@ try {
   );
   await page.getByRole("button", { name: "歌星管理", exact: true }).click();
   await page.getByRole("heading", { name: "歌星管理", exact: true }).waitFor();
+  mode = "online";
+  await page.getByRole("button", { name: "PC 整理器", exact: true }).click();
+  await page.getByText("PC 已连接，任务自动处理", { exact: true }).waitFor();
+  assert.equal(new URL(page.url()).pathname, "/admin");
+  assert.equal(
+    await page.getByRole("link", { name: "返回管理页面" }).count(),
+    0,
+  );
+  await page
+    .getByLabel("PC 地址", { exact: true })
+    .fill("http://192.168.11.155:8000");
+  assert.equal(await page.getByLabel("自动发现并连接 PC").isChecked(), false);
+  assert.equal(
+    await page.getByLabel("分离服务地址", { exact: true }).count(),
+    0,
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({
+    path: "test-results/pc-dashboard/admin-tab.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "备用 AI", exact: true }).click();
+  await page.getByRole("heading", { name: "备用 AI 分离服务" }).waitFor();
+  assert.equal(await page.getByLabel("PC 地址", { exact: true }).count(), 0);
+  await page.getByRole("button", { name: "检测备用 AI" }).click();
+  await page.getByRole("alert").filter({ hasText: "未配置备用 AI" }).waitFor();
+  await page.screenshot({
+    path: "test-results/pc-dashboard/ai-tab.png",
+    fullPage: true,
+  });
   assert.deepEqual(errors, []);
   console.log(
     "PC dashboard: auth, same-origin NAS proxy, redaction, online/offline, desktop/mobile and admin singer label passed",

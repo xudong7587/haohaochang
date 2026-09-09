@@ -1,82 +1,95 @@
 import React, { useEffect, useState } from "react";
-export function AISettings({ attempt }) {
-  const [config, setConfig] = useState({
-      enabled: false,
-      autoDiscover: true,
-      endpoint: "",
-      model: "",
-      apiKey: "",
-      hasKey: false,
-      pcEndpoint: "",
-      pcModel: "htdemucs",
-      pcApiKey: "",
-    }),
-    [busy, setBusy] = useState(false);
-  async function request(method, body, suffix = "") {
-    const r = await fetch("/api/admin/ai" + suffix, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${sessionStorage.getItem("adminToken")}`,
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error);
-    return data;
-  }
+async function request(path, body) {
+  const r = await fetch("/api/admin/ai" + path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + sessionStorage.getItem("adminToken"),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw Error(data.error || "请求失败");
+  return data;
+}
+function ConnectionSettings({ kind, onSaved }) {
+  const pc = kind === "pc";
+  const [config, setConfig] = useState(null),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [result, setResult] = useState("");
   useEffect(() => {
     let live = true;
-    attempt(() => request("GET")).then((v) => {
-      if (live && v) setConfig({ ...v, apiKey: "", pcApiKey: "" });
-    });
-    const timer = setInterval(
-      () =>
-        request("GET")
-          .then((v) => {
-            if (live)
-              setConfig((c) => ({
-                ...c,
-                discovery: v.discovery,
-                ...(c.autoDiscover !== false
-                  ? { pcEndpoint: v.pcEndpoint, hasPcKey: v.hasPcKey }
-                  : {}),
-              }));
-          })
-          .catch(() => {}),
-      5000,
-    );
+    request("")
+      .then((v) => {
+        if (live) setConfig({ ...v, apiKey: "", pcApiKey: "" });
+      })
+      .catch((e) => {
+        if (live) setError(e.message);
+      });
     return () => {
       live = false;
-      clearInterval(timer);
     };
   }, []);
-  const update = (key, value) => setConfig((c) => ({ ...c, [key]: value }));
+  const update = (key, value) => {
+    setConfig((c) => ({
+      ...c,
+      [key]: value,
+      ...(key === "pcEndpoint" || key === "pcApiKey"
+        ? { autoDiscover: false }
+        : {}),
+    }));
+    setResult("");
+    setError("");
+  };
+  async function act(test) {
+    setBusy(true);
+    setError("");
+    setResult("");
+    try {
+      const r = await request("/" + kind + (test ? "/test" : ""), config);
+      setResult(
+        test
+          ? "检测通过：" + r.endpoint
+          : pc
+            ? "PC 连接设置已保存"
+            : "备用 AI 设置已保存",
+      );
+      if (!test) {
+        setConfig((c) => ({
+          ...c,
+          hasPcKey: !!c.pcApiKey || c.hasPcKey,
+          hasKey: !!c.apiKey || c.hasKey,
+          pcApiKey: "",
+          apiKey: "",
+        }));
+        onSaved?.();
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!config)
+    return (
+      <section className="settings-card">
+        <p role="status">{error || "正在读取连接设置…"}</p>
+      </section>
+    );
   return (
     <form
       className="settings-card"
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
-        setBusy(true);
-        const ok = await attempt(
-          () => request("POST", config),
-          "AI 分离设置已保存",
-        );
-        if (ok)
-          setConfig((c) => ({
-            ...c,
-            hasKey: !!c.apiKey || c.hasKey,
-            apiKey: "",
-            pcApiKey: "",
-            hasPcKey: !!c.pcApiKey || c.hasPcKey,
-          }));
-        setBusy(false);
+        act(false);
       }}
     >
-      <h3>AI 伴奏分离</h3>
+      <h2>{pc ? "PC 连接设置" : "备用 AI 分离服务"}</h2>
       <p>
-        第一次点歌时，NAS
-        将音频发送到你配置的服务，生成并永久保存伴奏版本。原视频音频保留为原唱。下次直接播放已保存版本。
+        {pc
+          ? "PC 负责裁剪与去人声。连接状态和任务直接显示在本页。"
+          : "独立配置与检测备用分离 API，检测不会访问 PC。仅使用 PC 时，这些字段可以留空。"}
       </p>
       <label className="checkbox">
         <input
@@ -84,139 +97,103 @@ export function AISettings({ attempt }) {
           checked={config.enabled}
           onChange={(e) => update("enabled", e.target.checked)}
         />
-        启用歌曲整理与伴奏分离
+        启用自动整理（PC 与备用 API 共用）
       </label>
-      <h4>局域网 PC 整理器</h4>
-      <p>
-        <a href="/pc" target="_blank" rel="noreferrer">
-          打开 PC 整理状态
-        </a>{" "}
-        · 使用当前 NAS 内网或反代地址的 /pc 页面。
-      </p>
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={config.autoDiscover !== false}
-          onChange={(e) => update("autoDiscover", e.target.checked)}
-        />
-        自动发现并连接 PC
-      </label>
-      <p>
-        {config.discovery?.message || "打开同一局域网的 PC 整理器即可连接。"}
-      </p>
-      {config.autoDiscover !== false && (
+      {pc ? (
         <>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={config.autoDiscover !== false}
+              onChange={(e) => update("autoDiscover", e.target.checked)}
+            />
+            自动发现并连接 PC
+          </label>
           <p>
-            {config.discovery?.worker?.name} {config.pcEndpoint}
+            {config.autoDiscover !== false
+              ? "使用 NAS 的 LAN host 配置自动配对。填写下方地址会切换到手动连接。"
+              : "手动连接：填写 PC 的内网地址和密钥，然后保存。"}
           </p>
-          <button
-            type="button"
-            onClick={() =>
-              attempt(async () => {
-                await request("POST", {}, "/discover");
-                const v = await request("GET");
-                setConfig((c) => ({
-                  ...c,
-                  pcEndpoint: v.pcEndpoint,
-                  discovery: v.discovery,
-                }));
-              })
-            }
-          >
-            刷新连接状态
-          </button>
+          <label>
+            PC 地址
+            <input
+              value={config.pcEndpoint || ""}
+              placeholder="http://192.168.11.155:8000"
+              onChange={(e) => update("pcEndpoint", e.target.value)}
+            />
+          </label>
+          <label>
+            PC 模型
+            <input
+              value={config.pcModel || "htdemucs"}
+              onChange={(e) => update("pcModel", e.target.value)}
+            />
+          </label>
+          <label>
+            PC 连接密钥
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={config.pcApiKey || ""}
+              placeholder={
+                config.hasPcKey
+                  ? "已保存，留空保留"
+                  : "自动配对无需填写；手动连接使用 worker.json 中的 key"
+              }
+              onChange={(e) => update("pcApiKey", e.target.value)}
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <label>
+            分离服务地址
+            <input
+              type="url"
+              value={config.endpoint || ""}
+              placeholder="https://separator.example.com"
+              onChange={(e) => update("endpoint", e.target.value)}
+            />
+          </label>
+          <label>
+            分离模型
+            <input
+              value={config.model || ""}
+              placeholder="例如 htdemucs"
+              onChange={(e) => update("model", e.target.value)}
+            />
+          </label>
+          <label>
+            API Key
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={config.apiKey || ""}
+              placeholder={
+                config.hasKey ? "已保存，留空保留" : "可选，取决于服务"
+              }
+              onChange={(e) => update("apiKey", e.target.value)}
+            />
+          </label>
+          <p>需要 ktv-separation-v1 音源分离接口，普通聊天模型 API 不适用。</p>
         </>
       )}
-      <details>
-        <summary>高级：手动连接设置</summary>
-        <p>关闭自动发现后使用。地址应为 PC 的局域网 IP。</p>
-
-        <label>
-          PC 地址
-          <input
-            type="url"
-            disabled={config.autoDiscover !== false}
-            value={config.pcEndpoint}
-            placeholder="http://192.168.1.20:8000"
-            onChange={(e) => update("pcEndpoint", e.target.value)}
-          />
-        </label>
-        <label>
-          PC 模型
-          <input
-            value={config.pcModel}
-            onChange={(e) => update("pcModel", e.target.value)}
-          />
-        </label>
-        <label>
-          PC 连接密钥
-          <input
-            type="password"
-            disabled={config.autoDiscover !== false}
-            value={config.pcApiKey || ""}
-            placeholder={
-              config.hasPcKey ? "已保存，留空保留" : "从 PC 支持程序复制"
-            }
-            onChange={(e) => update("pcApiKey", e.target.value)}
-          />
-        </label>
-      </details>
-      <h4>备用 API / PC 忙时并行处理</h4>
-      <label>
-        分离服务地址
-        <input
-          type="url"
-          value={config.endpoint}
-          placeholder="https://separator.example.com"
-          onChange={(e) => update("endpoint", e.target.value)}
-        />
-      </label>
-      <label>
-        分离模型
-        <input
-          value={config.model}
-          placeholder="例如 htdemucs（由服务决定）"
-          onChange={(e) => update("model", e.target.value)}
-        />
-      </label>
-      <label>
-        API Key
-        <input
-          type="password"
-          autoComplete="new-password"
-          value={config.apiKey}
-          placeholder={
-            config.hasKey ? "已保存；留空保留原密钥" : "可选，取决于服务"
-          }
-          onChange={(e) => update("apiKey", e.target.value)}
-        />
-      </label>
-      <p>
-        PC 空闲优先使用 PC；离线或失败转备用 API，PC 忙时其他歌曲可由 API
-        并行处理。没有备用 API 时保留失败任务。两种服务都需要 ktv-separation-v1
-        兼容接口；普通聊天模型 API 不具备音源分离能力。项目附带可自行部署的
-        Demucs
-        适配服务，也可接入第三方适配器。启用即允许将点播音频发送至此地址。
-      </p>
+      {error && <p role="alert">{error}</p>}
+      {result && <p role="status">{result}</p>}
       <div className="modal-actions">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            await attempt(
-              () => request("POST", config, "/test"),
-              "分离服务协议检测通过",
-            );
-            setBusy(false);
-          }}
-        >
-          检测服务
+        <button type="button" disabled={busy} onClick={() => act(true)}>
+          {busy ? "正在处理…" : pc ? "检测 PC 连接" : "检测备用 AI"}
         </button>
         <button className="primary" disabled={busy}>
-          保存配置
+          {pc ? "保存 PC 配置" : "保存备用 AI 配置"}
         </button>
       </div>
     </form>
   );
+}
+export function PCSettings(props) {
+  return <ConnectionSettings kind="pc" {...props} />;
+}
+export function AISettings() {
+  return <ConnectionSettings kind="cloud" />;
 }

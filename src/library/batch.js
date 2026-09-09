@@ -51,3 +51,55 @@ export async function refreshMetadataBatch(
   }
   return results;
 }
+export async function organizeBatch(
+  songs,
+  reviews,
+  request,
+  onProgress = () => {},
+) {
+  const results = [];
+  const reviewSongs = new Set(reviews.map((r) => r.songId).filter(Boolean));
+  for (const row of [
+    ...reviews.filter((r) => r.kind !== "find-video"),
+    ...songs.filter((s) => s.tier === "pending" && !reviewSongs.has(s.id)),
+  ]) {
+    let result = { id: row.id, title: row.title, artist: row.artist };
+    try {
+      if (row.processing) {
+        result = { ...result, status: "skipped", message: "已在整理队列中" };
+      } else if (
+        !row.title?.trim() ||
+        !row.artist?.trim() ||
+        row.artist === "未知歌手"
+      ) {
+        result = { ...result, status: "review", message: "请先填写歌名和歌手" };
+      } else {
+        const review = reviews.includes(row);
+        await request(
+          review
+            ? row.inbox
+              ? "/admin/inbox"
+              : "/admin/reviews/" + row.id
+            : "/admin/library/" + row.id + "/organize",
+          review
+            ? {
+                title: row.title,
+                artist: row.artist,
+                lyrics: row.lyrics || "",
+                file: row.file,
+                action: "confirm",
+                expectedRevision: row.expectedRevision,
+              }
+            : { expectedRevision: row.metadataRevision },
+          "POST",
+        );
+        result = { ...result, status: "success", message: "已加入整理队列" };
+      }
+    } catch (error) {
+      result = { ...result, status: "failed", message: error.message };
+    }
+    results.push(result);
+    onProgress([...results]);
+  }
+  return results;
+}

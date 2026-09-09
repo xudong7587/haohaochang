@@ -118,10 +118,6 @@ export async function importJob(job, payload, context) {
       } catch {}
     }
     meta.lyrics = lyrics;
-    if (!lyrics) {
-      meta.needs_review = 1;
-      meta.note = "缺少歌词，请自动查找或导入 LRC 后继续";
-    }
     if (meta.needs_review) {
       db.prepare(
         "UPDATE jobs SET status='review',payload=?,error=? WHERE id=?",
