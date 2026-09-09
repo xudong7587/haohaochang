@@ -55,3 +55,13 @@ Python 协议测试需 fastapi==0.115.12、python-multipart==0.0.20 和 httpx，
 ```
 
 必须填写真实录音时长和版本；缺失、同名翻唱或歧义不会自动认定匹配。索引最多 20000 项／8 MB，单个 LRC 最多 1 MB，路径不能越出索引目录。支持增强逐字 LRC 与毫秒 offset。失败时回退 LRCLIB；自动匹配仍需试听核对，不保证逐字节奏一致。
+
+## v0.3.0 局域网与在线视频
+
+`docker-compose.lan.yaml` 是独立的 Linux NAS host 网络部署文件，默认 PORT=43210、KTV_DISCOVERY_ENABLED=1。不要与 bridge 主配置叠加，host 模式也不能使用 Docker 内部的 separator 服务名；可配置实际可达的兼容 API 地址。公司环境测试设置 KTV_LOCAL_ONLY=1，createApp({discovery:false})，仅绑定 localhost。
+
+NAS 从 UDP 回复的源 IPv4 推导 PC 地址，检查发现 nonce，再用绑定源 IP 的一次性 challenge 配对；广播不携带工作密钥。发现只支持 RFC1918 IPv4，不跨 VLAN。PC 默认开放工作监听，测试模式显式关闭。在线预览经 NAS 代理，源 URL 仅允许 HTTPS bilivideo.com/cn 域名及其子域，重定向再次校验，凭证不返回浏览器。
+
+在线任务使用 .ktv-online 隐藏目录保留原始下载与裁剪结果，避免自动入库器抢先处理完整视频。worker 的 /clip、/jobs/:id、/clip-artifacts/:id 共用持久化队列；NAS 复用分离任务的幂等上传与检查点协议。waiting-worker 状态由重新配对唤醒；手动连接可重试。新浏览器检查为 `node tests/online-player.browser.mjs`，LAN 协议检查为 `python -m unittest discover -s pc-worker -p test_lan.py`，均不探测局域网。
+
+B站预览优先使用播放器提供的 AVC/AAC DASH 流，yt-dlp 为后备；协议实现参考其 [Bilibili 提取器](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/bilibili.py)，平台变动仍可能影响可用性。

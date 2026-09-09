@@ -23,3 +23,23 @@ export const progress = (time, start, end) =>
     : time >= start
       ? 100
       : 0;
+
+// Presentation offsets are independent of resource/metadata revisions.
+export const clampLyricsOffset = (value) =>
+  Math.max(-30000, Math.min(30000, Math.round(Number(value) || 0)));
+export function lyricFrame(lines, clock, duration) {
+  const index = lines.reduce(
+    (found, line, i) => (line.time <= clock ? i : found),
+    -1,
+  );
+  const active = Math.max(0, index),
+    line = lines[active];
+  const remaining = index < 0 && line ? Math.max(0, line.time - clock) : 0;
+  return {
+    index,
+    line,
+    next: lines[active + 1],
+    end: lines[active + 1]?.time ?? duration,
+    countdown: index < 0 ? Math.min(4, Math.ceil(remaining)) : 0,
+  };
+}

@@ -82,3 +82,7 @@ manifest.version=2 是格式代际，不是资源修订号；playback.revision �
 ## 接续实施状态
 
 本批已完成 T1–T8。后续重点为 NAS、手机、TV 实机兼容、长期播放、真实平台下载成功率与音乐分离音质。历史诊断脚本保留为观察工具，正确行为由断言式回归测试保证。新任务先读取 PROJECT-STATUS.md，并保留工作区内新增改动。
+
+## v0.3.0 接续交付
+
+本轮由单一集成任务维护公共路由、调度器和全局界面：server/discovery.js 与 pc-worker/lan.py 管自动发现；server/online-preview.js、online-search.js 与 src/online-songs.jsx 管视频搜索预览；server/clipping.js 与 separator/clipping.py 管 PC 裁剪；shared/lyrics.js、server/room.js 与播放器管歌词微调。独立测试新增 tests/online-flow.test.js、tests/online-player.browser.mjs、tests/lyrics-tuning.test.js、pc-worker/test_lan.py。公开接口继续兼容 ktv-separation-v1，新增 video-clip-v1 能力；LAN 配置必须明确启用。当前发布与实机边界见 PROJECT-STATUS.md。

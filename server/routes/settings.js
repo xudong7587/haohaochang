@@ -5,6 +5,7 @@ import { providerConfig, testProvider } from "../separation.js";
 import { fail, clean } from "../http-utils.js";
 
 export function settingsApi({
+  discovery,
   app,
   admin,
   member,
@@ -64,6 +65,8 @@ export function settingsApi({
     const config = get("ai", {});
     res.json({
       enabled: !!config.enabled,
+      autoDiscover: config.autoDiscover !== false,
+      discovery: discovery.info(),
       endpoint: config.endpoint || "",
       model: config.model || "",
       hasKey: !!config.apiKey,
@@ -71,6 +74,10 @@ export function settingsApi({
       pcModel: config.pcModel || "htdemucs",
       hasPcKey: !!config.pcApiKey,
     });
+  });
+  app.post("/api/admin/ai/discover", admin, (req, res) => {
+    discovery.scan();
+    res.json(discovery.info());
   });
   app.post("/api/admin/ai", admin, (req, res) => {
     set("ai", providerConfig(req.body, get("ai", {})));

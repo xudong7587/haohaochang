@@ -11,6 +11,7 @@ export const statusNames = {
   ready: "可点播",
   error: "处理失败",
   queued: "等待中",
+  "waiting-worker": "等待 PC 上线",
   running: "处理中",
   done: "已完成",
   review: "待核对",

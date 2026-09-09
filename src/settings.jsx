@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 export function AISettings({ attempt }) {
   const [config, setConfig] = useState({
       enabled: false,
+      autoDiscover: true,
       endpoint: "",
       model: "",
       apiKey: "",
@@ -25,9 +26,30 @@ export function AISettings({ attempt }) {
     return data;
   }
   useEffect(() => {
+    let live = true;
     attempt(() => request("GET")).then((v) => {
-      if (v) setConfig({ ...v, apiKey: "", pcApiKey: "" });
+      if (live && v) setConfig({ ...v, apiKey: "", pcApiKey: "" });
     });
+    const timer = setInterval(
+      () =>
+        request("GET")
+          .then((v) => {
+            if (live)
+              setConfig((c) => ({
+                ...c,
+                discovery: v.discovery,
+                ...(c.autoDiscover !== false
+                  ? { pcEndpoint: v.pcEndpoint, hasPcKey: v.hasPcKey }
+                  : {}),
+              }));
+          })
+          .catch(() => {}),
+      5000,
+    );
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
   }, []);
   const update = (key, value) => setConfig((c) => ({ ...c, [key]: value }));
   return (
@@ -62,36 +84,77 @@ export function AISettings({ attempt }) {
           checked={config.enabled}
           onChange={(e) => update("enabled", e.target.checked)}
         />
-        启用首次点歌预分离
+        启用歌曲整理与伴奏分离
       </label>
-      <h4>优先使用局域网 PC</h4>
-      <label>
-        PC 地址
+      <h4>局域网 PC 整理器</h4>
+      <label className="checkbox">
         <input
-          type="url"
-          value={config.pcEndpoint}
-          placeholder="http://192.168.1.20:8000"
-          onChange={(e) => update("pcEndpoint", e.target.value)}
+          type="checkbox"
+          checked={config.autoDiscover !== false}
+          onChange={(e) => update("autoDiscover", e.target.checked)}
         />
+        自动发现并连接 PC
       </label>
-      <label>
-        PC 模型
-        <input
-          value={config.pcModel}
-          onChange={(e) => update("pcModel", e.target.value)}
-        />
-      </label>
-      <label>
-        PC 连接密钥
-        <input
-          type="password"
-          value={config.pcApiKey || ""}
-          placeholder={
-            config.hasPcKey ? "已保存，留空保留" : "从 PC 支持程序复制"
-          }
-          onChange={(e) => update("pcApiKey", e.target.value)}
-        />
-      </label>
+      <p>
+        {config.discovery?.message || "打开同一局域网的 PC 整理器即可连接。"}
+      </p>
+      {config.autoDiscover !== false && (
+        <>
+          <p>
+            {config.discovery?.worker?.name} {config.pcEndpoint}
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              attempt(async () => {
+                await request("POST", {}, "/discover");
+                const v = await request("GET");
+                setConfig((c) => ({
+                  ...c,
+                  pcEndpoint: v.pcEndpoint,
+                  discovery: v.discovery,
+                }));
+              })
+            }
+          >
+            刷新连接状态
+          </button>
+        </>
+      )}
+      <details>
+        <summary>高级：手动连接设置</summary>
+        <p>关闭自动发现后使用。地址应为 PC 的局域网 IP。</p>
+
+        <label>
+          PC 地址
+          <input
+            type="url"
+            disabled={config.autoDiscover !== false}
+            value={config.pcEndpoint}
+            placeholder="http://192.168.1.20:8000"
+            onChange={(e) => update("pcEndpoint", e.target.value)}
+          />
+        </label>
+        <label>
+          PC 模型
+          <input
+            value={config.pcModel}
+            onChange={(e) => update("pcModel", e.target.value)}
+          />
+        </label>
+        <label>
+          PC 连接密钥
+          <input
+            type="password"
+            disabled={config.autoDiscover !== false}
+            value={config.pcApiKey || ""}
+            placeholder={
+              config.hasPcKey ? "已保存，留空保留" : "从 PC 支持程序复制"
+            }
+            onChange={(e) => update("pcApiKey", e.target.value)}
+          />
+        </label>
+      </details>
       <h4>备用 API / PC 忙时并行处理</h4>
       <label>
         分离服务地址

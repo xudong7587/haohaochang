@@ -154,6 +154,14 @@ export function Settings({ admin, attempt, refresh }) {
                 <small>
                   {new Date(j.created).toLocaleString()} ·{" "}
                   {statusNames[j.status]}
+                  {j.status === "running" &&
+                    ({
+                      downloading: " · 下载视频",
+                      clipping: " · PC 裁剪",
+                      separating: " · 伴奏分离",
+                      preparing: " · 准备播放资源",
+                    }[j.stage] ||
+                      "")}
                   {j.started && j.finished
                     ? " · 耗时 " +
                       Math.round((j.finished - j.started) / 1000) +
@@ -162,7 +170,7 @@ export function Settings({ admin, attempt, refresh }) {
                 </small>
                 {j.error && <p className="error">{j.error}</p>}
               </div>
-              {j.status === "failed" && (
+              {["failed", "waiting-worker"].includes(j.status) && (
                 <button
                   onClick={async () => {
                     await attempt(() =>

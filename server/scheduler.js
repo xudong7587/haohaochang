@@ -25,10 +25,19 @@ export function createScheduler(
     if (["download", "favorite-download"].includes(kind)) {
       const duplicate = db
         .prepare(
-          "SELECT id,payload FROM jobs WHERE kind IN ('download','favorite-download') AND status IN ('queued','running')",
+          "SELECT id,payload FROM jobs WHERE kind IN ('download','favorite-download') AND status IN ('queued','running','waiting-worker')",
         )
         .all()
-        .find((j) => JSON.parse(j.payload).url === payload.url);
+        .find((j) => {
+          const p = JSON.parse(j.payload);
+          return (
+            p.url === payload.url &&
+            JSON.stringify(p.clip || null) ===
+              JSON.stringify(payload.clip || null) &&
+            (p.title || "") === (payload.title || "") &&
+            (p.artist || "") === (payload.artist || "")
+          );
+        });
       if (duplicate) {
         if (payload.enqueue)
           db.prepare("UPDATE jobs SET payload=? WHERE id=?").run(
@@ -85,7 +94,8 @@ export function createScheduler(
       .find(
         (j) =>
           JSON.parse(j.payload).operationKey === operationKey &&
-          (payload.idempotencyKey || ["queued", "running"].includes(j.status)),
+          (payload.idempotencyKey ||
+            ["queued", "running", "waiting-worker"].includes(j.status)),
       );
     if (existing) return existing.id;
     const songId = songIdFor(payload);
@@ -152,6 +162,12 @@ export function createScheduler(
         "UPDATE jobs SET status='done',stage='done',error='' WHERE id=?",
       ).run(job.id);
     } catch (e) {
+      if (e.code === "WAITING_WORKER") {
+        db.prepare(
+          "UPDATE jobs SET status='waiting-worker',stage='waiting-worker',error=? WHERE id=?",
+        ).run(e.message, job.id);
+        return;
+      }
       db.prepare("UPDATE jobs SET status='failed',error=? WHERE id=?").run(
         e.message.slice(-1800),
         job.id,

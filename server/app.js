@@ -1,3 +1,4 @@
+import { startDiscovery } from "./discovery.js";
 import { startBackgroundTasks } from "./background-tasks.js";
 import { backgroundApi } from "./background-api.js";
 import { publicLibraryApi } from "./routes/public-library.js";
@@ -113,7 +114,17 @@ export function createApp(options = {}) {
     { enabled: options.worker !== false, onIdle: () => db.close() },
   );
   const { addJob, work } = scheduler;
+  const discovery = startDiscovery({
+    store,
+    work,
+    emit,
+    enabled:
+      options.discovery ??
+      (process.env.KTV_DISCOVERY_ENABLED === "1" &&
+        process.env.KTV_LOCAL_ONLY !== "1"),
+  });
   const routeContext = {
+    discovery,
     app,
     admin,
     member,
@@ -192,6 +203,7 @@ export function createApp(options = {}) {
     addJob,
     close: () => {
       clearInterval(heartbeat);
+      discovery.stop();
       backgroundTasks.stop();
       clients.forEach((c) => c.end());
       scheduler.stop();

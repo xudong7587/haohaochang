@@ -154,6 +154,41 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(self.module.jobs.pending(), pending)
 
+    def test_clip_range_authentication_and_idempotent_retry(self):
+        headers = {'Authorization':'Bearer test-only', 'Idempotency-Key':'clip-retry'}
+        def post(start='1.25', end='2.75', auth=headers):
+            return self.client.post('/clip', data={'start':start,'end':end,'title':'裁剪测试'}, files={'file':('input.mp4',b'fake-video')}, headers=auth)
+        self.assertEqual(post(auth={}).status_code, 401)
+        for start, end in [('2','1'),('-1','3'),('nan','3'),('0','inf')]:
+            self.assertIn(post(start,end).status_code, (400,422))
+        with patch.object(self.module.pool, 'submit') as submit:
+            first, second = post(), post()
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(first.json()['id'], second.json()['id'])
+            self.assertEqual(submit.call_count, 1)
+            self.assertEqual(post('1','2').status_code,409)
+        self.assertEqual(self.client.get('/clip-artifacts/' + first.json()['id'],headers=headers).status_code,404)
+
+    def test_real_ffmpeg_clip_preserves_audio_video_and_requested_duration(self):
+        import json
+        import shutil
+        import subprocess
+        from clipping import execute_clip
+        ffmpeg = os.getenv('FFMPEG') or shutil.which('ffmpeg')
+        ffprobe = os.getenv('FFPROBE') or shutil.which('ffprobe')
+        if not ffmpeg or not ffprobe:
+            self.skipTest('FFmpeg and ffprobe required for real clip validation')
+        job, _ = self.module.jobs.reserve('clip:1.25:2.75','real clip')
+        folder = self.module.ROOT / job
+        subprocess.run([ffmpeg,'-y','-v','error','-f','lavfi','-i','testsrc2=s=160x90:r=24:d=4','-f','lavfi','-i','sine=frequency=440:duration=4','-c:v','libx264','-c:a','aac',str(folder/'input.mp4')],check=True)
+        execute_clip(self.module.jobs,job,1.25,2.75)
+        state=self.module.jobs.state(job)
+        self.assertEqual(state['status'],'done',state)
+        info=json.loads(subprocess.check_output([ffprobe,'-v','error','-show_streams','-show_format','-of','json',str(folder/'clip.mp4')]))
+        self.assertLess(abs(float(info['format']['duration'])-1.5),0.15)
+        self.assertEqual({s['codec_type'] for s in info['streams']},{'video','audio'})
+        self.assertTrue((folder/'input.mp4').is_file())
+
     def test_chunked_oversized_multipart_is_rejected_with_413(self):
         from fastapi import FastAPI, File, UploadFile
         from fastapi.testclient import TestClient

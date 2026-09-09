@@ -35,8 +35,9 @@ def separate(job, model):
 def health():
     pending = jobs.pending()
     return dict(protocol='ktv-separation-v1', models=['htdemucs', 'htdemucs_ft'],
+        lanEnabled=getattr(app.state, 'lan', {}).get('enabled', False),
         device=os.getenv('SEPARATION_DEVICE', 'cpu'), pending=pending, busy=pending > 0,
-        capabilities=['idempotency-key', 'upload-limit', 'restart-recovery'])
+        capabilities=['idempotency-key', 'upload-limit', 'restart-recovery', 'video-clip-v1'])
 
 
 @app.post('/separate', dependencies=[Depends(auth)])
@@ -102,3 +103,7 @@ def artifact(job: str):
     if jobs.state(job).get('status') != 'done' or not file.exists():
         raise HTTPException(404, 'Not ready')
     return FileResponse(file, media_type='audio/wav')
+
+
+from clipping import register as register_clipping
+register_clipping(app, auth, jobs, pool, job_path)

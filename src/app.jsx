@@ -13,7 +13,7 @@ import { Editor } from "./song-editor.jsx";
 import { LibraryManager, LyricsSettings } from "./library-manager.jsx";
 import { Player } from "./playback/player.jsx";
 
-import { RequestSong } from "./request-song.jsx";
+import { OnlineSongs } from "./online-songs.jsx";
 import { Automation } from "./automation.jsx";
 import { tagOptions } from "../shared/tags.js";
 import { Organize } from "./organize.jsx";
@@ -94,15 +94,14 @@ export function App() {
     [refresh, setRefresh] = useState(0),
     [admin, setAdmin] = useState(null),
     [editing, setEditing] = useState(null);
-  const [provider, setProvider] = useState("bilibili"),
-    [results, setResults] = useState([]),
-    [searchBusy, setSearchBusy] = useState(false),
-    [onlineUrl, setOnlineUrl] = useState(""),
-    [isBacking, setIsBacking] = useState(false);
   const [name, setName] = useState(localStorage.getItem("guestName") || "家人");
   const current = state.queue[0] || (route === "tv" ? state.ambient : null);
   const playback = current?.ambient
-    ? { paused: !!current.paused, vocal: true }
+    ? {
+        paused: !!current.paused,
+        vocal: true,
+        lyricsOffsetMs: state.playback.lyricsOffsetMs,
+      }
     : state.playback;
   const notify = (text) => setMessage(text);
   async function attempt(fn, success) {
@@ -271,23 +270,6 @@ export function App() {
           : "已加入点歌队列",
       );
   }
-  async function findOnline(e) {
-    e.preventDefault();
-    setSearchBusy(true);
-    setResults([]);
-    const data = await attempt(() =>
-      api(`/online?q=${encodeURIComponent(query)}&provider=${provider}`),
-    );
-    if (data) setResults(data);
-    setSearchBusy(false);
-  }
-  async function download(v) {
-    await attempt(
-      () => api("/online", { ...v, enqueue: true, name, isBacking }, "POST"),
-      "已加入下载任务，准备完成后自动加入队列",
-    );
-  }
-
   if (!authenticated)
     return (
       <div className="login">
@@ -811,100 +793,7 @@ export function App() {
             </>
           )}
           {tab === "online" && (
-            <>
-              <RequestSong
-                key={query}
-                initialTitle={query}
-                request={(body) => api("/requests", { ...body, name }, "POST")}
-                notify={notify}
-              />
-              <div className="section-heading">
-                <div>
-                  <h1>想唱的歌，再找找。</h1>
-                  <p>搜索视频，准备好后自动存入曲库并加入队列。</p>
-                </div>
-                <Globe2 size={30} />
-              </div>
-              <form onSubmit={findOnline} className="online-search">
-                <select
-                  aria-label="资源平台"
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value)}
-                >
-                  <option value="bilibili">Bilibili</option>
-                  <option value="youtube">YouTube</option>
-                </select>
-                <SearchBox query={query} setQuery={setQuery} />
-                <button
-                  className="primary"
-                  disabled={searchBusy || query.length < 2}
-                >
-                  {searchBusy ? "搜索中…" : "搜索"}
-                </button>
-              </form>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={isBacking}
-                  onChange={(e) => setIsBacking(e.target.checked)}
-                />
-                我确认所选资源为纯伴奏，跳过 AI 分离
-              </label>
-              <p className="note">
-                在线 MV 可能只有原唱。下载和转码由 NAS
-                完成，通常需要等待几分钟。
-              </p>
-              <form
-                className="url-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  download({
-                    url: onlineUrl,
-                    title: query || "在线歌曲",
-                    artist: provider,
-                  });
-                }}
-              >
-                <input
-                  aria-label="视频链接"
-                  placeholder="也可以粘贴 Bilibili / YouTube 视频链接"
-                  value={onlineUrl}
-                  onChange={(e) => setOnlineUrl(e.target.value)}
-                  type="url"
-                  required
-                />
-                <button disabled={!onlineUrl}>
-                  <Download size={17} />
-                  存入并点歌
-                </button>
-              </form>
-              <div className="online-results">
-                {results.map((v) => (
-                  <div className="queue-row" key={v.url}>
-                    <span className="song-cover color-1">
-                      <Globe2 size={20} />
-                    </span>
-                    <div>
-                      <strong>{v.title}</strong>
-                      <small>
-                        {v.artist} · {v.provider}
-                      </small>
-                    </div>
-                    <button onClick={() => download(v)}>
-                      <Plus size={18} />
-                      点歌
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {!results.length && !searchBusy && (
-                <Empty
-                  icon={Search}
-                  title="让下一首歌，有更多可能"
-                  text="输入歌名加「伴奏」或「KTV」，更容易找到适合演唱的版本。"
-                />
-              )}
-            </>
+            <OnlineSongs initialTitle={query} notify={notify} />
           )}
           {tab === "settings" && admin && (
             <>
@@ -952,6 +841,7 @@ export function App() {
       </main>
       {route === "tv" && (
         <Player
+          keyboardLyrics={tab === "stage"}
           current={current}
           playback={playback}
           notify={notify}

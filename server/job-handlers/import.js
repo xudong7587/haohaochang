@@ -161,7 +161,7 @@ export async function importJob(job, payload, context) {
       id,
       async () => {
         db.prepare("UPDATE jobs SET payload=? WHERE id=?").run(
-          JSON.stringify({ ...payload, id }),
+          JSON.stringify({ ...payload, id, metadata: meta, approved: true }),
           job.id,
         );
         const existing = db.prepare("SELECT * FROM songs WHERE id=?").get(id);

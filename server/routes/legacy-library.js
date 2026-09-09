@@ -112,7 +112,8 @@ export function legacyLibraryApi({
   );
   app.post("/api/admin/jobs/:id/retry", admin, (req, res) => {
     const job = db.prepare("SELECT * FROM jobs WHERE id=?").get(req.params.id);
-    if (!job || job.status !== "failed") throw fail(409, "仅失败任务可重试");
+    if (!job || !["failed", "waiting-worker"].includes(job.status))
+      throw fail(409, "仅失败或等待 PC 的任务可重试");
     db.prepare("UPDATE jobs SET status='queued',error='' WHERE id=?").run(
       job.id,
     );

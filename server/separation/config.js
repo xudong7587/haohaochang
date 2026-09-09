@@ -13,7 +13,9 @@ export function providerConfig(input, old = {}) {
     )
       throw new Error("分离服务地址格式错误");
   }
-  const pcEndpoint = String(input.pcEndpoint || "")
+  const pcEndpoint = String(
+    (input.autoDiscover === true ? old.pcEndpoint : input.pcEndpoint) || "",
+  )
     .trim()
     .replace(/\/$/, "");
   if (pcEndpoint) {
@@ -29,11 +31,13 @@ export function providerConfig(input, old = {}) {
   }
   if (
     input.enabled &&
+    input.autoDiscover !== true &&
     !(pcEndpoint || (endpoint && String(input.model || "").trim()))
   )
     throw new Error("启用 AI 分离前请填写地址和模型");
   return {
     enabled: input.enabled === true,
+    autoDiscover: input.autoDiscover !== false,
     pcEndpoint,
     pcModel: String(input.pcModel || "htdemucs").slice(0, 120),
     pcApiKey: input.clearPcKey

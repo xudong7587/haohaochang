@@ -1,3 +1,4 @@
+import { clampLyricsOffset } from "../shared/lyrics.js";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { canEnqueue } from "./resource-manifest.js";
@@ -36,7 +37,13 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
       queue,
       pending,
       ambient: queue.length ? null : ambient,
-      playback: get("playback"),
+      playback: {
+        ...get("playback"),
+        lyricsOffsetMs: get(
+          "lyrics-offset:" + (queue[0]?.song_id || ambient?.song_id),
+          0,
+        ),
+      },
       playerOnline: !!player && Date.now() - player.seen < 15000,
     };
   }
@@ -121,6 +128,24 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
   app.post("/api/control", member, (req, res) => {
     const current = snapshot().queue[0],
       action = req.body.action;
+    if (action === "lyrics-offset") {
+      const entry = current || ambient;
+      if (!entry || req.body.entryId !== entry.id)
+        throw fail(409, "当前歌曲已改变，请重试");
+      const delta = Number(req.body.deltaMs);
+      if (
+        req.body.reset !== true &&
+        (!Number.isInteger(delta) || Math.abs(delta) > 1000)
+      )
+        throw fail(400, "歌词微调每次最多 1 秒");
+      const key = "lyrics-offset:" + entry.song_id;
+      set(
+        key,
+        req.body.reset === true ? 0 : clampLyricsOffset(get(key, 0) + delta),
+      );
+      revise();
+      return res.json(snapshot());
+    }
     if (!current && ambient && req.body.entryId === ambient.id) {
       if (action === "next") pickAmbient();
       else if (action === "pause") {

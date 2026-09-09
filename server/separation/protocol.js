@@ -87,10 +87,10 @@ export async function runProviderJob(
   vocal,
   staging,
   config,
-  { pollInterval = 3000 } = {},
+  { pollInterval = 3000, clip } = {},
 ) {
-  if ((await stat(vocal)).size > 100 * 1024 * 1024)
-    throw new Error("待分离音频超过 100 MB");
+  if ((await stat(vocal)).size > (clip ? 1024 : 100) * 1024 * 1024)
+    throw new Error(clip ? "待裁剪视频超过 1 GB" : "待分离音频超过 100 MB");
   const signature = await fingerprint(vocal);
   const checkpointKey = checkpointName(song, config);
   let checkpoint = store.get(checkpointKey);
@@ -104,22 +104,33 @@ export async function runProviderJob(
     const form = new FormData();
     form.set(
       "file",
-      await openAsBlob(vocal, { type: "audio/mp4" }),
-      "input.m4a",
+      await openAsBlob(vocal, { type: clip ? "video/mp4" : "audio/mp4" }),
+      clip ? "input.mp4" : "input.m4a",
     );
     form.set("model", config.model);
+    if (clip) {
+      form.set("start", String(clip.start));
+      form.set("end", String(clip.end));
+    }
     form.set("title", `${song.artist} - ${song.title}`);
-    const response = await fetch(`${config.endpoint}/separate`, {
-      method: "POST",
-      headers: {
-        ...providerHeaders(config),
-        "Idempotency-Key": checkpoint.requestId,
+    const response = await fetch(
+      `${config.endpoint}/${clip ? "clip" : "separate"}`,
+      {
+        method: "POST",
+        headers: {
+          ...providerHeaders(config),
+          "Idempotency-Key": checkpoint.requestId,
+        },
+        body: form,
+        signal: AbortSignal.timeout(120000),
+        redirect: "error",
       },
-      body: form,
-      signal: AbortSignal.timeout(120000),
-      redirect: "error",
-    });
-    if (!response.ok) throw new Error(`AI 分离请求失败 (${response.status})`);
+    );
+    if (!response.ok)
+      throw Object.assign(
+        new Error(`AI ${clip ? "裁剪" : "分离"}请求失败 (${response.status})`),
+        { retryable: response.status >= 500 || response.status === 429 },
+      );
     result = await response.json();
     checkpoint.result = result;
     store.set(checkpointKey, checkpoint);
@@ -144,7 +155,9 @@ export async function runProviderJob(
     if (!poll.ok) {
       if (poll.status === 404 || poll.status === 410)
         store.set(checkpointKey, null);
-      throw new Error(`分离任务查询失败 (${poll.status})`);
+      throw Object.assign(new Error(`任务查询失败 (${poll.status})`), {
+        retryable: poll.status >= 500 || poll.status === 429,
+      });
     }
     const next = await poll.json();
     if (next.id && next.id !== result.id) {
@@ -155,15 +168,16 @@ export async function runProviderJob(
     checkpoint.result = result;
     store.set(checkpointKey, checkpoint);
   }
-  if (result.status !== "done" || !result.instrumental_url) {
+  const resultUrl = clip ? result.video_url : result.instrumental_url;
+  if (result.status !== "done" || !resultUrl) {
     store.set(checkpointKey, null);
     throw new Error(
       "AI 分离失败：" + String(result.error || "缺少伴奏结果").slice(0, 300),
     );
   }
-  const file = path.join(staging, "backing.wav");
+  const file = path.join(staging, clip ? "clip.mp4" : "backing.wav");
   try {
-    await saveResult(result.instrumental_url, config, file);
+    await saveResult(resultUrl, config, file);
   } catch (error) {
     if (error.terminal) store.set(checkpointKey, null);
     throw error;

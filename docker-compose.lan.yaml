@@ -1,0 +1,17 @@
+# 独立 LAN 部署配置：docker compose -f docker-compose.lan.yaml up -d
+# Linux NAS 使用 host 网络接收局域网广播；不要叠加 bridge 配置。
+services:
+  ktv:
+    image: ghcr.io/xudong7587/haohaochang:latest
+    network_mode: host
+    environment:
+      ADMIN_PASSWORD: "change-this-password-123"
+      PORT: "43210"
+      KTV_DISCOVERY_ENABLED: "1"
+    volumes:
+      - ./data:/data
+      - /volume3/V3 Media/Haohaochang/media:/media
+      - /volume3/V3 Media/Haohaochang/download:/download
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s

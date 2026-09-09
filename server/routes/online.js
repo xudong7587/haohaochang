@@ -2,6 +2,9 @@ import { canonicalVideo, onlineSearch } from "../media.js";
 import { canEnqueue } from "../resource-manifest.js";
 
 import { fail, clean } from "../http-utils.js";
+import { searchSongs } from "../online-search.js";
+import { previewSessions } from "../online-preview.js";
+import { clipRange } from "../clipping.js";
 
 export function onlineApi({
   app,
@@ -23,6 +26,33 @@ export function onlineApi({
   snapshot,
   allowedOrigin,
 }) {
+  const previews = previewSessions();
+  app.get("/api/online/songs", member, async (req, res) => {
+    if (!get("onlineEnabled", false)) throw fail(403, "请先在后台启用在线资源");
+    const title = clean(req.query.title),
+      artist = clean(req.query.artist),
+      page = Number(req.query.page || 1);
+    if (!title || !Number.isInteger(page) || page < 1 || page > 20)
+      throw fail(400, "请填写歌名和有效页码");
+    res.json(
+      await searchSongs(title, artist, get("favorites", {}).cookie, page),
+    );
+  });
+  app.post("/api/online/preview", member, async (req, res) => {
+    if (!get("onlineEnabled", false)) throw fail(403, "请先在后台启用在线资源");
+    res.json(
+      await previews.create(
+        canonicalVideo(req.body.url),
+        get("favorites", {}).cookie,
+        dir,
+        { refresh: req.body.refresh === true },
+      ),
+    );
+  });
+  app.get("/api/online/preview/:id/:track", member, async (req, res) => {
+    if (!get("onlineEnabled", false)) throw fail(403, "在线资源已关闭");
+    await previews.stream(req, res);
+  });
   app.post("/api/requests", member, (req, res) => {
     if (!get("onlineEnabled", false)) throw fail(403, "请先在后台启用在线资源");
     const title = clean(req.body.title),
@@ -41,7 +71,7 @@ export function onlineApi({
     if (
       db
         .prepare(
-          "SELECT COUNT(*) n FROM jobs WHERE status IN ('queued','running')",
+          "SELECT COUNT(*) n FROM jobs WHERE status IN ('queued','running','waiting-worker')",
         )
         .get().n >= 20
     )
@@ -71,7 +101,7 @@ export function onlineApi({
     if (
       db
         .prepare(
-          "SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running')",
+          "SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running','waiting-worker')",
         )
         .get().n >= 20
     )
@@ -84,6 +114,21 @@ export function onlineApi({
       name: clean(req.body.name, 24) || "家人",
       isBacking: req.body.isBacking === true,
     };
+    if (req.body.onlineSelection === true) {
+      if (!clean(req.body.title) || !clean(req.body.artist))
+        throw fail(400, "请填写歌名和歌手");
+      if (get("ai", {}).enabled === false)
+        throw fail(400, "请先启用 PC 整理与伴奏分离");
+      payload.onlineSelection = true;
+      payload.isBacking = false;
+      payload.enqueue = false;
+      if (req.body.clip) {
+        const preview = previews.lookup(req.body.previewId);
+        if (preview.url !== payload.url)
+          throw fail(400, "标记区间不属于当前视频");
+        payload.clip = clipRange(req.body.clip, preview.duration);
+      }
+    }
     res.json({ id: addJob("download", payload) });
   });
 }

@@ -16,6 +16,7 @@ export function Player({
   request,
   token,
   background,
+  keyboardLyrics = false,
 }) {
   const video = useRef(),
     container = useRef(),
@@ -35,6 +36,38 @@ export function Player({
     [warning, setWarning] = useState(""),
     [pictureError, setPictureError] = useState(false),
     [reload, setReload] = useState(0);
+  function adjustLyrics(deltaMs, reset = false) {
+    if (!current) return;
+    request(
+      "/control",
+      { action: "lyrics-offset", entryId: current.id, deltaMs, reset },
+      "POST",
+    ).catch((e) => notify(e.message));
+  }
+  useEffect(() => {
+    if (!current || !(full || keyboardLyrics)) return;
+    let last = 0;
+    const key = (e) => {
+      if (
+        !["ArrowLeft", "ArrowRight"].includes(e.key) ||
+        e.altKey ||
+        e.ctrlKey ||
+        e.metaKey ||
+        document.querySelector("dialog[open]") ||
+        /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName) ||
+        e.target?.isContentEditable
+      )
+        return;
+      if (!container.current?.getClientRects().length) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.repeat && Date.now() - last < 250) return;
+      last = Date.now();
+      adjustLyrics(e.key === "ArrowLeft" ? 100 : -100);
+    };
+    document.addEventListener("keydown", key, true);
+    return () => document.removeEventListener("keydown", key, true);
+  }, [current?.id, full, keyboardLyrics, request]);
   const variant =
     current?.mode === "original" || playback.vocal ? "vocal" : "backing";
   function ended(entryId) {
@@ -234,6 +267,7 @@ export function Player({
             time={time}
             token={token}
             resource={manifest?.resources?.lyrics}
+            offsetMs={playback.lyricsOffsetMs || 0}
           />
         )}
         {!current && (
@@ -349,6 +383,34 @@ export function Player({
                 {label}
               </button>
             ))}
+          </div>
+        )}
+        {current && (
+          <div className="lyric-adjust" aria-label="歌词时间微调">
+            <button
+              aria-label="歌词提前 0.1 秒"
+              onClick={() => adjustLyrics(100)}
+            >
+              ← 提前
+            </button>
+            <output aria-live="polite">
+              歌词{" "}
+              {playback.lyricsOffsetMs
+                ? `${playback.lyricsOffsetMs > 0 ? "提前" : "延后"} ${(Math.abs(playback.lyricsOffsetMs) / 1000).toFixed(1)} 秒`
+                : "原始时间"}
+            </output>
+            <button
+              aria-label="歌词延后 0.1 秒"
+              onClick={() => adjustLyrics(-100)}
+            >
+              延后 →
+            </button>
+            <button
+              aria-label="重置歌词微调"
+              onClick={() => adjustLyrics(0, true)}
+            >
+              复位
+            </button>
           </div>
         )}
         <button onClick={fullscreen} aria-label="全屏播放">

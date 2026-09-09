@@ -3,6 +3,7 @@ import { packageDir, publishBacking, present } from "./song-package.js";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { inspectPackage } from "./resource-health.js";
+import { waitingWorker } from "./clipping.js";
 import {
   checkProvider,
   runProviderJob,
@@ -47,7 +48,13 @@ export async function separateSong(store, song, cache) {
       );
     try {
       if (candidate.pc) {
-        const health = await checkProvider(candidate, 3000);
+        let health;
+        try {
+          health = await checkProvider(candidate, 3000);
+        } catch (error) {
+          if (!cloud) throw waitingWorker();
+          throw error;
+        }
         // Existing v1 adapters need not advertise load; local concurrency still applies.
         if (
           cloud &&
@@ -89,7 +96,14 @@ export async function separateSong(store, song, cache) {
         await rm(staging, { recursive: true, force: true });
       }
     } catch (error) {
-      last = error;
+      last =
+        candidate.pc &&
+        !cloud &&
+        (error.retryable ||
+          ["TimeoutError", "AbortError"].includes(error.name) ||
+          (error instanceof TypeError && /fetch/i.test(error.message)))
+          ? waitingWorker("PC 连接中断，等待重新上线后继续原任务")
+          : error;
     } finally {
       if (candidate.pc)
         pcActive.set(
@@ -98,5 +112,10 @@ export async function separateSong(store, song, cache) {
         );
     }
   }
-  throw last || new Error("没有可用的分离服务");
+  throw (
+    last ||
+    (config.autoDiscover !== false
+      ? waitingWorker()
+      : new Error("没有可用的分离服务"))
+  );
 }

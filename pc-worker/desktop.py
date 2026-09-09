@@ -12,6 +12,7 @@ import psutil
 
 def register(app, root, config, plan, device):
     from app import auth, ROOT
+    from lan import addresses
     started = time.time()
 
     @app.get('/ui', include_in_schema=False)
@@ -41,6 +42,8 @@ def register(app, root, config, plan, device):
                     if matches and state.get('status') == 'running':
                         state['model_progress'] = min(100, int(matches[-1]))
                 state['elapsed_seconds'] = max(0, int((state.get('updated', time.time()) if state.get('status') in ('done', 'failed') else time.time()) - state.get('created', time.time())))
+                if str(state.get('model', '')).startswith('clip:'):
+                    state['model'] = '视频裁剪'
                 jobs.append(state)
             except (OSError, ValueError):
                 continue
@@ -56,7 +59,7 @@ def register(app, root, config, plan, device):
                 gpu = dict(utilization=values[0], used_mb=values[1], total_mb=values[2], temperature=values[3])
             except (OSError, ValueError, subprocess.SubprocessError):
                 pass
-        return dict(name='好好唱资源 AI 整理器', device=device, gpu_name=plan.get('gpu_name'),
+        return dict(lan=getattr(app.state, 'lan', {}), addresses=[f'http://{ip}:{config["port"]}' for ip in addresses()], name='好好唱资源 AI 整理器', device=device, gpu_name=plan.get('gpu_name'),
                     model='htdemucs', segment=float(os.environ.get('SEPARATION_SEGMENT', 4)),
                     runtime=plan['runtime'], host=config.get('host', '127.0.0.1'), port=config['port'],
                     uptime=round(time.time()-started), cpu=psutil.cpu_percent(),

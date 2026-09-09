@@ -15,6 +15,13 @@ try {
       $online = $health.protocol -eq 'ktv-separation-v1'
     } catch { $online = $false }
     if ($online) {
+      if ($health.capabilities -notcontains 'video-clip-v1') {
+        throw 'An older organizer is running. Stop its Python process before opening this update. Keep worker.json, runtime and data.'
+      }
+      $expectLan = ($env:KTV_LOCAL_ONLY -ne '1') -and ($config.lan -ne $false)
+      if ([bool]$health.lanEnabled -ne $expectLan) {
+        throw 'The organizer is running in a different network mode. Stop it before changing LAN/local-only mode.'
+      }
       if ($env:RESOURCE_AI_OPEN_UI -ne '0') {
         Start-Process "http://127.0.0.1:$($config.port)/ui#$($config.key)"
       }

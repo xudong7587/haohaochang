@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { parseLyrics, progress } from "../shared/lyrics.js";
+import { parseLyrics, progress, lyricFrame } from "../shared/lyrics.js";
 export { parseLyrics } from "../shared/lyrics.js";
-export function Lyrics({ song, time, token, resource }) {
+export function Lyrics({ song, time, token, resource, offsetMs = 0 }) {
   const [style, setStyle] = useState({
     font: "sans-serif",
     size: 48,
@@ -42,10 +42,15 @@ export function Lyrics({ song, time, token, resource }) {
       : song.lyrics;
   const lines = useMemo(() => parseLyrics(text || ""), [text]);
   const clock =
-      time + (Number(style.offset) || 0) + (Number(resource?.offset) || 0),
-    index = lines.reduce((found, l, i) => (l.time <= clock ? i : found), -1),
-    line = lines[index],
-    end = lines[index + 1]?.time ?? song.duration;
+    time +
+    (Number(style.offset) || 0) +
+    (Number(resource?.offset) || 0) +
+    Number(offsetMs || 0) / 1000;
+  const { index, line, next, end, countdown } = lyricFrame(
+    lines,
+    clock,
+    song.duration,
+  );
   return (
     <div
       className="lyrics-scene"
@@ -63,15 +68,32 @@ export function Lyrics({ song, time, token, resource }) {
         </div>
       )}
       {lines.length ? (
-        <div className="lyric-lines">
+        <div className="lyric-lines" data-lyric-index={index}>
+          <div
+            className="lyric-countdown"
+            aria-label={countdown ? "开唱倒数" : undefined}
+            aria-hidden={!countdown}
+          >
+            {[0, 1, 2, 3].map((dot) => (
+              <span
+                key={dot}
+                style={{ opacity: countdown && dot < countdown ? 1 : 0 }}
+              >
+                ●
+              </span>
+            ))}
+          </div>
           <strong
-            className={line?.words?.length ? "" : "karaoke-line"}
+            key={Math.max(0, index)}
+            className={
+              "lyric-current " + (line?.words?.length ? "" : "karaoke-line")
+            }
             style={{
               "--lyric-fill": progress(clock, line?.time ?? 0, end) + "%",
             }}
           >
             {!line
-              ? "前奏，准备开唱…"
+              ? ""
               : line.words.length
                 ? line.words.map((word, i) => (
                     <span
@@ -91,7 +113,7 @@ export function Lyrics({ song, time, token, resource }) {
                   ))
                 : line.text}
           </strong>
-          <span>{lines[Math.max(0, index + 1)]?.text}</span>
+          <span>{next?.text}</span>
         </div>
       ) : (
         <div className="lyric-lines">

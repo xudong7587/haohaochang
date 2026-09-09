@@ -34,7 +34,7 @@ export function Empty({ icon: Icon, title, text, action }) {
     </div>
   );
 }
-export function Modal({ title, close, children }) {
+export function Modal({ title, close, children, className }) {
   const ref = useRef();
   useEffect(() => {
     const prior = document.activeElement;
@@ -47,6 +47,7 @@ export function Modal({ title, close, children }) {
   }, []);
   return (
     <dialog
+      className={className}
       ref={ref}
       onCancel={(e) => {
         e.preventDefault();
