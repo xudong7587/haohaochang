@@ -138,6 +138,81 @@ try {
     .waitFor();
   await mobile.getByRole("button", { name: "发送 👏", exact: true }).click();
   await page.locator(".reaction-layer").getByText("👏").waitFor();
+  // A playing song used to intercept DPAD right globally on the stage page.
+  await page.getByRole("button", { name: "音乐现场", exact: true }).click();
+  await page.getByRole("button", { name: "音乐现场", exact: true }).focus();
+  const lyricsBefore = store.get("lyrics-offset:" + String(1).repeat(24), 0);
+  await page.keyboard.press("ArrowRight");
+  assert.equal(
+    await page.evaluate(() => !!document.activeElement.closest(".sidebar")),
+    false,
+  );
+  assert.equal(
+    store.get("lyrics-offset:" + String(1).repeat(24), 0),
+    lyricsBefore,
+  );
+  await page
+    .getByRole("group", { name: "演唱画面，确认键全屏，左右键微调歌词" })
+    .focus();
+  await page.keyboard.press("ArrowDown");
+  assert.equal(
+    await page.evaluate(
+      () => !!document.activeElement.closest(".video-caption"),
+    ),
+    true,
+  );
+  // Confirm the fullscreen button is reached by directional navigation alone.
+  for (
+    let n = 0;
+    n < 12 &&
+    (await page.locator(":focus").getAttribute("data-fullscreen")) === null;
+    n++
+  )
+    await page.keyboard.press("ArrowRight");
+  assert.notEqual(
+    await page.locator(":focus").getAttribute("data-fullscreen"),
+    null,
+  );
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(".tv-player.is-full");
+  await page.screenshot({
+    path: "test-results/ui/tv-fullscreen.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "退出全屏", exact: true }).focus();
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(
+    await page.evaluate(() => !!document.activeElement.closest(".tv-player")),
+    true,
+  );
+  assert.equal(
+    store.get("lyrics-offset:" + String(1).repeat(24), 0),
+    lyricsBefore,
+  );
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(
+    () => !document.querySelector(".tv-player.is-full"),
+  );
+  // Older HTTP WebViews reject the native API; viewport fullscreen must still work.
+  await page.locator(".tv-player").evaluate((el) => {
+    el.requestFullscreen = () => Promise.reject(new Error("WebView fixture"));
+  });
+  await page.getByRole("button", { name: "全屏播放", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(".tv-player.is-full");
+  const fullscreenRect = await page.locator(".tv-player").boundingBox();
+  assert.equal(fullscreenRect.x, 0);
+  assert.equal(fullscreenRect.y, 0);
+  assert.equal(fullscreenRect.width, 1440);
+  assert.equal(fullscreenRect.height, 1000);
+  await page.evaluate(() =>
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    ),
+  );
+  await page.waitForFunction(
+    () => !document.querySelector(".tv-player.is-full"),
+  );
   await page.goto(base + "/admin");
   await page.getByRole("button", { name: "设置与任务", exact: true }).click();
   await page.getByRole("button", { name: "媒体与导入", exact: true }).click();
@@ -233,7 +308,7 @@ try {
   );
   await writeFile(
     "test-results/ui/result.json",
-    JSON.stringify({ passed: true, checks: 11, pageErrors: errors }, null, 2),
+    JSON.stringify({ passed: true, checks: 15, pageErrors: errors }, null, 2),
   );
 } finally {
   await browser.close();

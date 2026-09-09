@@ -217,6 +217,14 @@ export function Settings({ admin, attempt, refresh }) {
                     {j.artist ? " · " + j.artist : ""}
                     {j.priority === "online" ? " · 优先处理" : ""}
                   </p>
+                  {j.media_progress && (
+                    <div>
+                      <progress max="100" value={j.media_progress.percent} />
+                      <span>
+                        {j.media_progress.label} {j.media_progress.percent}%
+                      </span>
+                    </div>
+                  )}
                   {Number.isFinite(j.model_progress) && (
                     <div>
                       <progress max="100" value={j.model_progress} />

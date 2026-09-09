@@ -32,6 +32,7 @@ export function createScheduler(
           const p = JSON.parse(j.payload);
           return (
             p.url === payload.url &&
+            (p.quality || "legacy") === (payload.quality || "legacy") &&
             JSON.stringify(p.clip || null) ===
               JSON.stringify(payload.clip || null) &&
             (p.title || "") === (payload.title || "") &&
@@ -143,12 +144,12 @@ export function createScheduler(
     db.prepare(
       "UPDATE jobs SET status='running',started=?,finished=NULL WHERE id=?",
     ).run(Date.now(), job.id);
-    emit("library", {});
+    emit("tasks", {});
     const payload = JSON.parse(job.payload);
     try {
       const report = (stage) => {
         db.prepare("UPDATE jobs SET stage=? WHERE id=?").run(stage, job.id);
-        emit("library", {});
+        emit("tasks", {});
       };
       report(job.kind);
       const priority =

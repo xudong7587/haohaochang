@@ -103,3 +103,12 @@ PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时�
 - 已安装的 `C:\Users\Sunny\AppData\Local\Haohaochang\PCWorker` 程序同步，保留 worker.json、runtime、模型和数据。新版分发包为本地 `release/haohaochang-resource-ai-local.zip`。
 
 运行服务边界：自动审批拒绝“停止现有 3210 预览进程”和“启动新的 3211 验收服务”，均只返回 `blocked by policy`。这些启动／停止命令未执行；原 3210 后端仍是旧进程。需手动重启本地服务后再进行完整交互验收；已有 1 首实际歌曲未改变。NAS、家庭 PC、电视和音响仍待用户验收。
+
+## 2026-09-09 · v0.3.5
+
+基线 GitHub main `55e2f89`。所有本地测试使用隔离数据库、临时合成媒体与 localhost，未访问用户 NAS 或更改其曲库。
+
+- Node 97 项通过：新增同 IP 后台读取和媒体请求洪峰后歌词／暂停／心跳仍成功，写入限流与 Retry-After 保留；任务事件合并与状态即时发送；B站会员格式参数、实际档位、预览／下载缓存隔离；真实 1440p NAS 转换及转换／校验百分比。既有剪辑、歌词、资源版本、失败保留、队列、恢复和下载兼容回归通过。
+- Python 17 项通过（协议 14、并发 1、LAN 替身 2）。PC 实际 FFmpeg 输出验证保持 2560×1440、H.264 无声画面与原始文件，NVENC 失败到 CPU 的测试使用替身。本轮未执行真实 GPU 或 LAN 扫描。
+- 前端构建及浏览器检查：scripts/ui-check.mjs、tests/library-ui.browser.mjs、tests/online-player.browser.mjs、tests/feedback.browser.mjs、tests/pc-dashboard.browser.mjs。新增 TV 播放中右键从导航进入功能区且不改歌词、从画面向下到全屏按钮并确认、全屏内焦点、返回退出、原生 API 被拒时铺满 viewport；清晰度切换保留时间／裁剪标记，六个歌词按钮请求量和值正确。
+- scripts/player-check.mjs 通过：真实双音频、暂停／切换、媒体失效回退、租约、切歌清理、原生全屏、自动播放被拒后的恢复。GitHub CI、APK 和镜像发布结果在本节后续补充，正式状态见 Release 和 Actions。用户购买大会员后的可用档位、真实下载与 TV 物理遥控器未在本机替代验收。

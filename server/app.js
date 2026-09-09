@@ -1,3 +1,5 @@
+import { requestLimits } from "./request-limits.js";
+import { liveEvents } from "./live-events.js";
 import { startDiscovery } from "./discovery.js";
 import { pcApi } from "./routes/pc.js";
 import { startBackgroundTasks } from "./background-tasks.js";
@@ -40,8 +42,7 @@ export function createApp(options = {}) {
   if (!adminToken || adminToken.length < 12)
     throw new Error("请设置至少 12 位的 ADMIN_PASSWORD（管理密码）");
   const app = express();
-  const clients = new Set(),
-    limits = new Map();
+  const clients = new Set();
   app.disable("x-powered-by");
   // Validate only the optional QR origin hint; API access uses explicit credentials.
   function allowedOrigin(req, origin) {
@@ -71,25 +72,15 @@ export function createApp(options = {}) {
     equal(token(req), get("roomToken")) || equal(token(req), adminToken)
       ? next()
       : next(fail(401, "请扫描电视二维码加入客厅"));
-  function rate(req, res, next) {
-    const key = req.ip,
-      now = Date.now();
-    if (limits.size > 1000)
-      for (const [k, v] of limits) if (v.until < now) limits.delete(k);
-    const value = limits.get(key) || { n: 0, until: now + 60000 };
-    if (value.until < now) {
-      value.n = 0;
-      value.until = now + 60000;
-    }
-    value.n++;
-    limits.set(key, value);
-    next(value.n > 120 ? fail(429, "操作太快了，请稍后再试") : undefined);
-  }
-  app.use("/api", rate);
-  function emit(type = "state", data = snapshot()) {
-    for (const client of clients)
-      client.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
-  }
+  app.use(
+    "/api",
+    requestLimits({
+      authenticated: (req) =>
+        equal(token(req), adminToken) || equal(token(req), get("roomToken")),
+    }),
+  );
+  const events = liveEvents(clients, () => snapshot());
+  const emit = events.emit;
   const { snapshot, enqueue } = createRoom({
     app,
     member,
@@ -210,6 +201,7 @@ export function createApp(options = {}) {
     addJob,
     close: () => {
       clearInterval(heartbeat);
+      events.close();
       discovery.stop();
       backgroundTasks.stop();
       clients.forEach((c) => c.end());

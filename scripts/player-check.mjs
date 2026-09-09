@@ -159,7 +159,7 @@ try {
   await page.getByRole("button", { name: "全屏播放" }).click();
   await page.waitForFunction(() => !!document.fullscreenElement);
   await page.screenshot({ path: path.join(output, "audio-fullscreen.png") });
-  await page.getByRole("button", { name: "全屏播放" }).click();
+  await page.getByRole("button", { name: "退出全屏" }).click();
   await page.evaluate(() => {
     window.setVocal(false);
     const t = document

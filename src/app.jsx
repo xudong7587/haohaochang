@@ -93,6 +93,7 @@ export function App() {
     [connected, setConnected] = useState(false);
   const [reactions, setReactions] = useState([]),
     [refresh, setRefresh] = useState(0),
+    [taskRefresh, setTaskRefresh] = useState(0),
     [admin, setAdmin] = useState(null),
     [editing, setEditing] = useState(null);
   const [name, setName] = useState(localStorage.getItem("guestName") || "家人");
@@ -141,6 +142,7 @@ export function App() {
       setConnected(true);
     });
     events.addEventListener("library", () => setRefresh((n) => n + 1));
+    events.addEventListener("tasks", () => setTaskRefresh((n) => n + 1));
     events.addEventListener("reaction", (e) => {
       const r = JSON.parse(e.data);
       setReactions((v) => [...v.slice(-7), r]);
@@ -181,14 +183,23 @@ export function App() {
     };
   }, [authenticated, query, artist, tag, refresh]);
   useEffect(() => {
+    let live = true;
     if (authenticated && route === "admin")
       api("/admin", undefined, "GET", true)
-        .then(setAdmin)
-        .catch((e) => notify(e.message));
-  }, [authenticated, refresh]);
+        .then((value) => {
+          if (live) setAdmin(value);
+        })
+        .catch((e) => {
+          if (live) notify(e.message);
+        });
+    return () => {
+      live = false;
+    };
+  }, [authenticated, refresh, taskRefresh]);
   useEffect(() => {
     if (route !== "tv") return;
     function key(e) {
+      if (e.defaultPrevented) return;
       document.body.classList.add("keyboard");
       if (e.key === "Escape" || e.key === "BrowserBack") {
         e.preventDefault();
@@ -205,11 +216,22 @@ export function App() {
         document.activeElement?.tagName === "SELECT"
       )
         return;
+      const focusRoot =
+        document.querySelector("dialog[open]") ||
+        document.fullscreenElement ||
+        document.querySelector(".tv-player.is-full") ||
+        document;
       const items = [
-        ...document.querySelectorAll(
-          "button:not(:disabled),input,a[href],select,video",
+        ...focusRoot.querySelectorAll(
+          "button:not(:disabled),input,a[href],select,textarea,[tabindex]",
         ),
-      ].filter((el) => el.getClientRects().length && !el.closest("[inert]"));
+      ].filter(
+        (el) =>
+          el.tabIndex >= 0 &&
+          el.getClientRects().length &&
+          !el.closest("[inert]") &&
+          getComputedStyle(el).visibility !== "hidden",
+      );
       const active = document.activeElement;
       if (!items.includes(active)) {
         e.preventDefault();
@@ -823,7 +845,7 @@ export function App() {
               <Settings
                 admin={admin}
                 attempt={attempt}
-                refresh={() => setRefresh((n) => n + 1)}
+                refresh={() => setTaskRefresh((n) => n + 1)}
               />
             </>
           )}

@@ -34,6 +34,7 @@ export async function download(job, payload, context) {
             ? path.join(downloads, ".ktv-online", "sources")
             : downloads,
           file,
+          payload.quality,
         ),
     );
     if (payload.clip) context.report?.("clipping");

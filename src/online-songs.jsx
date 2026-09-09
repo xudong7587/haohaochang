@@ -11,6 +11,11 @@ const mediaUrl = (url) =>
 function VideoPreview({ selection, close, notify }) {
   const video = useRef(null),
     audio = useRef(null);
+  const resumeAt = useRef(0);
+  const [quality, setQuality] = useState("highest"),
+    [qualities, setQualities] = useState([
+      { value: "highest", label: "最高可用" },
+    ]);
   const [reload, setReload] = useState(0),
     [preview, setPreview] = useState(null),
     [error, setError] = useState(""),
@@ -24,9 +29,16 @@ function VideoPreview({ selection, close, notify }) {
     let live = true;
     setError("");
     setPreview(null);
-    api("/online/preview", { url: row.url, refresh: reload > 0 }, "POST")
+    api(
+      "/online/preview",
+      { url: row.url, refresh: reload > 0, quality },
+      "POST",
+    )
       .then((v) => {
-        if (live) setPreview(v);
+        if (live) {
+          setPreview(v);
+          if (v.qualities) setQualities(v.qualities);
+        }
       })
       .catch((e) => {
         if (live) setError(e.message);
@@ -34,7 +46,7 @@ function VideoPreview({ selection, close, notify }) {
     return () => {
       live = false;
     };
-  }, [row.url, reload]);
+  }, [row.url, reload, quality]);
   function sync(force = false) {
     const v = video.current,
       a = audio.current;
@@ -74,6 +86,7 @@ function VideoPreview({ selection, close, notify }) {
           artist,
           onlineSelection: true,
           previewId: preview?.id,
+          quality,
           clip: start !== null || end !== null ? { start, end } : null,
         },
         "POST",
@@ -97,6 +110,36 @@ function VideoPreview({ selection, close, notify }) {
     >
       <div className="song-preview">
         <p className="preview-source-title">{row.title}</p>
+        <label className="preview-quality">
+          预览与下载清晰度
+          <select
+            aria-label="视频清晰度"
+            value={quality}
+            disabled={busy || added}
+            onChange={(event) => {
+              resumeAt.current = video.current?.currentTime || position;
+              pause();
+              setPreview(null);
+              setQuality(event.target.value);
+            }}
+          >
+            {qualities.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="note">
+          {preview?.previewHeight
+            ? `当前预览 ${preview.previewHeight}p；下载最高可用 ${preview.downloadHeight || preview.previewHeight}p。`
+            : "按当前 B站账号权限获取清晰度。"}
+          {preview?.downloadHeight > preview?.previewHeight
+            ? " 浏览器使用兼容画质试听，下载保留所选高清画质。"
+            : ""}
+          会员高清需要在“在线资源”保存该会员账号最新的 B站
+          Cookie；仅在网页登录不会同步到 NAS。
+        </p>
         {preview ? (
           <>
             <video
@@ -106,6 +149,13 @@ function VideoPreview({ selection, close, notify }) {
               playsInline
               preload="metadata"
               aria-label="B站视频预览"
+              onLoadedMetadata={() => {
+                video.current.currentTime = Math.min(
+                  resumeAt.current,
+                  video.current.duration || 0,
+                );
+                sync(true);
+              }}
               onTimeUpdate={() => {
                 setPosition(video.current.currentTime);
                 sync();
@@ -159,7 +209,7 @@ function VideoPreview({ selection, close, notify }) {
           <button
             className="primary"
             onClick={add}
-            disabled={busy || invalid || added}
+            disabled={busy || invalid || added || (!preview && !error)}
           >
             {added ? "已加入整理任务" : busy ? "提交中…" : "加入曲库"}
           </button>

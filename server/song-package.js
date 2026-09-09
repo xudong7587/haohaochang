@@ -1,3 +1,4 @@
+import { taskProgress, runWithProgress } from "./task-progress.js";
 import path from "node:path";
 import { mkdir, stat, writeFile, rename, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -69,11 +70,16 @@ export async function savePackageInfo(store, song, cache) {
     ),
   );
 }
-export async function encodeResource(args, out) {
+export async function encodeResource(args, out, progress) {
   const temporary = out + "." + randomUUID() + ".tmp";
+  const execute = async (args, phase) => {
+    if (!progress) return run(process.env.FFMPEG || "ffmpeg", args, 3600000);
+    await runWithProgress(args, progress.duration, (percent) =>
+      progress.report({ phase, percent }),
+    );
+  };
   try {
-    await run(
-      process.env.FFMPEG || "ffmpeg",
+    await execute(
       [
         "-y",
         "-v",
@@ -85,10 +91,9 @@ export async function encodeResource(args, out) {
         "mp4",
         temporary,
       ],
-      3600000,
+      "转换",
     );
-    await run(
-      process.env.FFMPEG || "ffmpeg",
+    await execute(
       [
         "-v",
         "error",
@@ -103,7 +108,7 @@ export async function encodeResource(args, out) {
         "null",
         "-",
       ],
-      3600000,
+      "校验",
     );
     await rename(temporary, out);
     const media = await probe(out),
@@ -132,7 +137,29 @@ export async function encodePackageResource(
     kind === "video" ? "preparing-video" : "preparing-audio",
   );
   const file = path.join(directory, resourceNames[kind]);
-  const { media, info } = await encodeResource(args, file);
+  const job = jobScope();
+  const input = args[args.indexOf("-i") + 1];
+  const duration = job && input ? (await probe(input)).duration : 0;
+  let result;
+  try {
+    result = await encodeResource(
+      args,
+      file,
+      job
+        ? {
+            duration,
+            report: (value) =>
+              taskProgress(store, job, {
+                ...value,
+                label: `${kind === "video" ? "画面" : kind === "vocal" ? "原唱" : "伴奏"}${value.phase}`,
+              }),
+          }
+        : null,
+    );
+  } finally {
+    if (job) taskProgress(store, job, null);
+  }
+  const { media, info } = result;
   if (
     !(media.duration > 0) ||
     (kind === "video"
@@ -174,7 +201,7 @@ export async function encodePicture(
           "-crf",
           "22",
           "-vf",
-          "scale=w='min(1920,iw)':h=-2",
+          "scale=w='trunc(iw/2)*2':h=-2",
           "-pix_fmt",
           "yuv420p",
         ];

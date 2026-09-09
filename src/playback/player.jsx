@@ -20,6 +20,7 @@ export function Player({
 }) {
   const video = useRef(),
     container = useRef(),
+    stage = useRef(),
     latest = useRef(current),
     position = useRef(0),
     previousEntry = useRef(null);
@@ -57,6 +58,10 @@ export function Player({
         /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName) ||
         e.target?.isContentEditable
       )
+        return;
+      // Remote arrows navigate controls everywhere else. Lyrics only consume
+      // arrows when the user explicitly focuses the singing picture.
+      if (![stage.current, video.current].includes(document.activeElement))
         return;
       if (!container.current?.getClientRects().length) return;
       e.preventDefault();
@@ -202,13 +207,40 @@ export function Player({
     };
   }, [full, queue.length > 0]);
   async function fullscreen() {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await container.current.requestFullscreen();
-    } catch {
-      notify("当前浏览器不支持全屏；APK 会自动横屏显示");
+    if (full || document.fullscreenElement) {
+      setFull(false);
+      if (document.fullscreenElement)
+        await document.exitFullscreen().catch(() => {});
+    } else {
+      // CSS also fills the TV WebView on devices which reject the native API.
+      setFull(true);
+      try {
+        await container.current.requestFullscreen?.();
+      } catch {}
     }
   }
+  useEffect(() => {
+    if (!full) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const key = (event) => {
+      if (
+        !["Escape", "BrowserBack"].includes(event.key) ||
+        document.querySelector("dialog[open]")
+      )
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setFull(false);
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      container.current?.querySelector("[data-fullscreen]")?.focus();
+    };
+    document.addEventListener("keydown", key, true);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", key, true);
+    };
+  }, [full]);
   function retry() {
     if (!lease || playback.paused) return;
     setError("");
@@ -232,9 +264,25 @@ export function Player({
     manifest?.version === 2 && (!manifest.resources.video || pictureError);
   return (
     <section ref={container} className={`tv-player ${full ? "is-full" : ""}`}>
-      <div className="video-stage">
+      <div
+        className="video-stage"
+        ref={stage}
+        tabIndex={0}
+        role="group"
+        aria-label="演唱画面，确认键全屏，左右键微调歌词"
+        onKeyDown={(event) => {
+          if (
+            event.target === event.currentTarget &&
+            ["Enter", " "].includes(event.key)
+          ) {
+            event.preventDefault();
+            fullscreen();
+          }
+        }}
+      >
         <video
           ref={video}
+          tabIndex={-1}
           playsInline
           onEnded={() => {
             if (
@@ -351,15 +399,25 @@ export function Player({
         </div>
       </div>
       <div className="video-caption">
-        <span data-audio-variant={actualVariant || variant}>
-          <span className={`dot ${lease ? "" : "offline"}`} />
-          {current?.ambient
-            ? "随机原唱 · " + current.title
-            : current
-              ? "正在舞台上 · " +
-                ((actualVariant || variant) === "vocal" ? "原唱" : "伴奏")
-              : "等待开唱"}
-        </span>
+        <div className="video-caption-heading">
+          <span data-audio-variant={actualVariant || variant}>
+            <span className={`dot ${lease ? "" : "offline"}`} />
+            {current?.ambient
+              ? "随机原唱 · " + current.title
+              : current
+                ? "正在舞台上 · " +
+                  ((actualVariant || variant) === "vocal" ? "原唱" : "伴奏")
+                : "等待开唱"}
+          </span>
+          <button
+            data-fullscreen
+            onClick={fullscreen}
+            aria-label={full ? "退出全屏" : "全屏播放"}
+          >
+            <Monitor size={16} />
+            {full ? "退出全屏" : "全屏"}
+          </button>
+        </div>
         {full && current && (
           <div className="full-controls">
             {[
@@ -387,24 +445,30 @@ export function Player({
         )}
         {current && (
           <div className="lyric-adjust" aria-label="歌词时间微调">
-            <button
-              aria-label="歌词提前 0.1 秒"
-              onClick={() => adjustLyrics(100)}
-            >
-              ← 提前
-            </button>
+            {[10, 3, 0.5].map((seconds) => (
+              <button
+                key={seconds}
+                aria-label={`歌词提前 ${seconds} 秒`}
+                onClick={() => adjustLyrics(seconds * 1000)}
+              >
+                ← {seconds} 秒
+              </button>
+            ))}
             <output aria-live="polite">
               歌词{" "}
               {playback.lyricsOffsetMs
                 ? `${playback.lyricsOffsetMs > 0 ? "提前" : "延后"} ${(Math.abs(playback.lyricsOffsetMs) / 1000).toFixed(1)} 秒`
                 : "原始时间"}
             </output>
-            <button
-              aria-label="歌词延后 0.1 秒"
-              onClick={() => adjustLyrics(-100)}
-            >
-              延后 →
-            </button>
+            {[0.5, 3, 10].map((seconds) => (
+              <button
+                key={seconds}
+                aria-label={`歌词延后 ${seconds} 秒`}
+                onClick={() => adjustLyrics(-seconds * 1000)}
+              >
+                {seconds} 秒 →
+              </button>
+            ))}
             <button
               aria-label="重置歌词微调"
               onClick={() => adjustLyrics(0, true)}
@@ -413,10 +477,6 @@ export function Player({
             </button>
           </div>
         )}
-        <button onClick={fullscreen} aria-label="全屏播放">
-          <Monitor size={16} />
-          {full ? "退出全屏" : "全屏"}
-        </button>
       </div>
     </section>
   );

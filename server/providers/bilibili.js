@@ -1,3 +1,4 @@
+import { videoQuality, qualityChoices } from "../../shared/video-quality.js";
 const headers = (cookie) => ({
   "User-Agent": "Mozilla/5.0",
   Referer: "https://www.bilibili.com/",
@@ -69,16 +70,17 @@ export const bilibiliProvider = {
       duration: page?.duration ?? body.data.duration,
     };
   },
-  async preview(url, cookie = "", fetcher = fetch) {
+  async preview(url, cookie = "", fetcher = fetch, quality = "highest") {
+    quality = videoQuality(quality);
     const info = await this.metadata(url, cookie, fetcher);
     if (!info.cid || !info.bvid) throw new Error("B站视频信息不完整");
     const endpoint = new URL("https://api.bilibili.com/x/player/playurl");
     endpoint.search = new URLSearchParams({
       bvid: info.bvid,
       cid: info.cid,
-      fnval: "16",
-      qn: "64",
-      fourk: "0",
+      fnval: "4048",
+      qn: "127",
+      fourk: "1",
     });
     const response = await fetcher(endpoint, {
       headers: headers(cookie),
@@ -89,19 +91,23 @@ export const bilibiliProvider = {
     const body = await response.json();
     if (body.code !== 0 || !body.data?.dash)
       throw new Error("B站未提供可预览的视频流");
-    const video = body.data.dash.video
-      ?.filter((v) => /^avc1/i.test(v.codecs || ""))
-      .sort(
-        (a, b) =>
-          Math.abs((a.height || 720) - 720) -
-            Math.abs((b.height || 720) - 720) || b.bandwidth - a.bandwidth,
-      )[0];
+    const available = body.data.dash.video || [];
+    const limit = quality === "highest" ? Infinity : Number(quality);
+    const video = available
+      .filter((v) => /^avc1/i.test(v.codecs || "") && v.height <= limit)
+      .sort((a, b) => b.height - a.height || b.bandwidth - a.bandwidth)[0];
     const audio = body.data.dash.audio
       ?.filter((a) => /^mp4a/i.test(a.codecs || ""))
       .sort((a, b) => b.bandwidth - a.bandwidth)[0];
     if (!video || !audio) throw new Error("没有适合浏览器播放的音视频轨道");
     return {
       duration: Number(body.data.timelength) / 1000 || info.duration,
+      quality,
+      qualities: qualityChoices(available),
+      previewHeight: video.height,
+      downloadHeight: Math.max(
+        ...available.filter((v) => v.height <= limit).map((v) => v.height),
+      ),
       video: video.baseUrl || video.base_url,
       audio: audio.baseUrl || audio.base_url,
     };

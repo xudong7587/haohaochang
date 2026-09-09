@@ -78,7 +78,11 @@ test("song-specific lyric offset updates are shared, clamped and reject stale qu
   response = await call({ deltaMs: -100 });
   assert.equal((await response.json()).playback.lyricsOffsetMs, 0);
   assert.equal((await call({ deltaMs: 100, entryId: "stale" })).status, 409);
-  assert.equal((await call({ deltaMs: 10000 })).status, 400);
+  assert.equal((await call({ deltaMs: 10001 })).status, 400);
+  for (const deltaMs of [500, -500, 3000, -3000, 10000, -10000]) {
+    response = await call({ deltaMs });
+    assert.equal(response.status, 200);
+  }
   store.set("lyrics-offset:first", 29900);
   response = await call({ deltaMs: 1000 });
   assert.equal((await response.json()).playback.lyricsOffsetMs, 30000);

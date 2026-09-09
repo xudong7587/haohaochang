@@ -1,3 +1,4 @@
+import { taskProgress } from "./task-progress.js";
 // Shared admin/PC task view: active work is never hidden by recent history.
 export function taskStatus(store) {
   const rows = store.db
@@ -23,6 +24,8 @@ export function taskStatus(store) {
     )?.value?.result;
     return {
       ...row,
+      media_progress:
+        row.status === "running" ? taskProgress(store, row.id) : null,
       title:
         song?.title ||
         p.metadata?.title ||

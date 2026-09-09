@@ -1,3 +1,4 @@
+import { videoQuality } from "../../shared/video-quality.js";
 import { canonicalVideo, onlineSearch } from "../media.js";
 import { canEnqueue } from "../resource-manifest.js";
 
@@ -53,7 +54,10 @@ export function onlineApi({
         canonicalVideo(req.body.url),
         get("favorites", {}).cookie,
         dir,
-        { refresh: req.body.refresh === true },
+        {
+          refresh: req.body.refresh === true,
+          quality: videoQuality(req.body.quality),
+        },
       ),
     );
   });
@@ -128,6 +132,7 @@ export function onlineApi({
       throw fail(429, "在线任务已达到 200 项，请等待部分任务完成");
     const payload = {
       url: canonicalVideo(req.body.url),
+      quality: videoQuality(req.body.quality),
       title: clean(req.body.title) || "在线歌曲",
       artist: clean(req.body.artist) || "未知歌手",
       enqueue: !!req.body.enqueue,

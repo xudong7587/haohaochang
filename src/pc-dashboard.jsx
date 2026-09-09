@@ -57,7 +57,7 @@ export function PcDashboard({ embedded = false }) {
       } catch (e) {
         if (live) {
           setError(e.message);
-          setData(null);
+          // Retain the last useful progress while a poll is temporarily unavailable.
         }
       } finally {
         if (live) {
@@ -184,6 +184,14 @@ export function PcDashboard({ embedded = false }) {
                     PC 任务耗时 {Math.floor((j.elapsed_seconds || 0) / 60)} 分{" "}
                     {(j.elapsed_seconds || 0) % 60} 秒
                   </p>
+                  {j.media_progress && (
+                    <div>
+                      <progress max="100" value={j.media_progress.percent} />
+                      <span>
+                        {j.media_progress.label} {j.media_progress.percent}%
+                      </span>
+                    </div>
+                  )}
                   {Number.isFinite(j.model_progress) && (
                     <div>
                       <progress max="100" value={j.model_progress} />
@@ -223,6 +231,14 @@ export function PcDashboard({ embedded = false }) {
                   ? ` · ${j.finished ? "处理耗时" : "已处理"} ${Math.max(0, Math.round(((j.finished || Date.now()) - j.started) / 1000))} 秒`
                   : ""}
               </p>
+              {j.media_progress && (
+                <div>
+                  <progress max="100" value={j.media_progress.percent} />
+                  <span>
+                    {j.media_progress.label} {j.media_progress.percent}%
+                  </span>
+                </div>
+              )}
               {Number.isFinite(j.model_progress) && (
                 <div>
                   <progress max="100" value={j.model_progress} />

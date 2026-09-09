@@ -135,9 +135,9 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
       const delta = Number(req.body.deltaMs);
       if (
         req.body.reset !== true &&
-        (!Number.isInteger(delta) || Math.abs(delta) > 1000)
+        (!Number.isInteger(delta) || Math.abs(delta) > 10000)
       )
-        throw fail(400, "歌词微调每次最多 1 秒");
+        throw fail(400, "歌词调节每次最多 10 秒");
       const key = "lyrics-offset:" + entry.song_id;
       set(
         key,

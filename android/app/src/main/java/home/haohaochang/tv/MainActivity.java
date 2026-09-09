@@ -35,6 +35,8 @@ public final class MainActivity extends Activity {
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
         web = new WebView(this);
+        web.setFocusable(true);
+        web.setFocusableInTouchMode(true);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
         web.getSettings().setJavaScriptEnabled(true);
@@ -57,7 +59,7 @@ public final class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient() {
             @Override public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (fullVideo != null) { callback.onCustomViewHidden(); return; }
-                fullVideo = view; fullCallback = callback; root.addView(view, new FrameLayout.LayoutParams(-1,-1)); web.setVisibility(View.GONE);
+                fullVideo = view; fullCallback = callback; root.addView(view, new FrameLayout.LayoutParams(-1,-1)); web.setVisibility(View.GONE); view.setFocusableInTouchMode(true); view.requestFocus();
             }
             @Override public void onHideCustomView() { exitFull(); }
         });
@@ -78,7 +80,7 @@ public final class MainActivity extends Activity {
         }));
         dialog.show();
     }
-    private void exitFull() { if(fullVideo != null) { root.removeView(fullVideo); fullVideo = null; web.setVisibility(View.VISIBLE); if(fullCallback != null) { fullCallback.onCustomViewHidden(); fullCallback = null; } } }
+    private void exitFull() { if(fullVideo != null) { root.removeView(fullVideo); fullVideo = null; web.setVisibility(View.VISIBLE); web.requestFocus(); if(fullCallback != null) { fullCallback.onCustomViewHidden(); fullCallback = null; } } }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if(event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_MENU) { settings(); return true; }
         // Let WebView dispatch real DPAD/Enter keyboard events, including IME text input.

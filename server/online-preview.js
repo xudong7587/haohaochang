@@ -1,3 +1,8 @@
+import {
+  videoQuality,
+  videoFormat,
+  qualityChoices,
+} from "../shared/video-quality.js";
 import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -17,12 +22,13 @@ export function biliStreamUrl(value) {
     throw new Error("B站未返回可用的直连视频流");
   return url.href;
 }
-export async function resolvePreview(url, cookie, dir) {
+export async function resolvePreview(url, cookie, dir, quality = "highest") {
+  quality = videoQuality(quality);
   url = canonicalVideo(url);
   if (new URL(url).hostname !== "www.bilibili.com")
     throw new Error("预览仅支持 B站视频");
   try {
-    const data = await bilibiliProvider.preview(url, cookie);
+    const data = await bilibiliProvider.preview(url, cookie, fetch, quality);
     const media = (value) => ({
       url: biliStreamUrl(value),
       headers: {
@@ -32,6 +38,10 @@ export async function resolvePreview(url, cookie, dir) {
     });
     return {
       duration: data.duration,
+      quality,
+      qualities: data.qualities,
+      previewHeight: data.previewHeight,
+      downloadHeight: data.downloadHeight,
       video: media(data.video),
       audio: media(data.audio),
     };
@@ -50,7 +60,9 @@ export async function resolvePreview(url, cookie, dir) {
         "1",
         ...(file ? ["--cookies", file] : []),
         "-f",
-        "b[ext=mp4]/bv[vcodec^=avc1][ext=mp4]+ba[ext=m4a]/bv[ext=mp4]+ba[ext=m4a]",
+        videoFormat(quality)
+          .replace("bv*", "bv[vcodec^=avc1][ext=mp4]")
+          .replace("+ba", "+ba[ext=m4a]"),
         url,
       ],
       60000,
@@ -72,6 +84,18 @@ export async function resolvePreview(url, cookie, dir) {
   });
   return {
     duration: Number(data.duration),
+    quality,
+    qualities: qualityChoices(data.formats || formats),
+    previewHeight: video.height,
+    downloadHeight: Math.max(
+      ...(data.formats || formats)
+        .filter(
+          (f) =>
+            f.height > 0 &&
+            (quality === "highest" || f.height <= Number(quality)),
+        )
+        .map((f) => f.height),
+    ),
     video: stream(video),
     audio: audio ? stream(audio) : null,
   };
@@ -93,11 +117,17 @@ export function previewSessions({ resolve = resolvePreview } = {}) {
   }
   return {
     lookup,
-    async create(url, cookie, dir, { refresh = false } = {}) {
+    async create(
+      url,
+      cookie,
+      dir,
+      { refresh = false, quality = "highest" } = {},
+    ) {
+      quality = videoQuality(quality);
       for (const [key, v] of sessions)
         if (v.expires < Date.now()) sessions.delete(key);
       const cacheKey = createHash("sha256")
-        .update(url + "\n" + cookie)
+        .update(url + "\n" + cookie + "\n" + quality)
         .digest("hex");
       if (refresh)
         for (const [id, data] of sessions)
@@ -105,6 +135,10 @@ export function previewSessions({ resolve = resolvePreview } = {}) {
       const publicData = (id, data) => ({
         id,
         duration: data.duration,
+        quality,
+        qualities: data.qualities || qualityChoices([]),
+        previewHeight: data.previewHeight || null,
+        downloadHeight: data.downloadHeight || null,
         video: `/api/online/preview/${id}/video`,
         audio: data.audio ? `/api/online/preview/${id}/audio` : null,
       });
@@ -116,7 +150,7 @@ export function previewSessions({ resolve = resolvePreview } = {}) {
       pending++;
       const task = (async () => {
         try {
-          const data = await resolve(url, cookie, dir),
+          const data = await resolve(url, cookie, dir, quality),
             id = randomUUID();
           sessions.set(id, {
             ...data,

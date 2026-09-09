@@ -15,7 +15,7 @@ def execute_clip(jobs, job, start, end, video_only=False):
                 '-ss', str(start), '-i', str(folder / 'input.mp4'), '-t', str(end-start),
                 '-map', '0:v:0']
             if video_only:
-                command += ['-an', '-vf', "scale=w='min(1920,iw)':h=-2", '-pix_fmt', 'yuv420p']
+                command += ['-an', '-vf', "scale=w='trunc(iw/2)*2':h=-2", '-pix_fmt', 'yuv420p']
             else:
                 command += ['-map', '0:a:0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k']
             gpu = video_only and os.getenv('SEPARATION_DEVICE') == 'cuda'
@@ -27,7 +27,7 @@ def execute_clip(jobs, job, start, end, video_only=False):
                     selected = list(command)
                     if name == 'NVIDIA NVENC':
                         selected[1:1] = ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda']
-                        selected[selected.index('-vf') + 1] = "scale_cuda=w='min(1920,iw)':h=-2:format=yuv420p"
+                        selected[selected.index('-vf') + 1] = "scale_cuda=w=iw:h=ih:format=yuv420p"
                         pixel = selected.index('-pix_fmt')
                         del selected[pixel:pixel + 2]
                     subprocess.run(selected + encoder + ['-movflags', '+faststart', str(folder / 'clip.mp4')],

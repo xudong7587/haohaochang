@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { videoQuality, videoFormat } from "../shared/video-quality.js";
 import { bilibiliProvider } from "./providers/bilibili.js";
 import { youtubeProvider } from "./providers/youtube.js";
 import {
@@ -47,8 +49,8 @@ export async function onlineSearch(query, provider, cookie = "") {
   if (!adapter) throw new Error("不支持的搜索平台");
   return adapter.search(query, cookie);
 }
-export async function downloadVideo(url, dir, cookieFile) {
-  return defaultDownloader(url, dir, cookieFile, false);
+export async function downloadVideo(url, dir, cookieFile, quality) {
+  return defaultDownloader(url, dir, cookieFile, false, quality);
 }
 export async function downloadAudio(url, dir, cookieFile) {
   return defaultDownloader(url, dir, cookieFile, true);
@@ -60,15 +62,32 @@ export function createMediaDownloader({
   audio = fetchAudio,
 } = {}) {
   const downloadScope = {};
-  return async function lockedDownload(url, dir, cookieFile, audioOnly) {
+  return async function lockedDownload(
+    url,
+    dir,
+    cookieFile,
+    audioOnly,
+    quality,
+  ) {
+    if (!audioOnly) videoQuality(quality);
+    const identity =
+      quality === undefined
+        ? canonicalVideo(url)
+        : canonicalVideo(url) +
+          "\n" +
+          videoQuality(quality) +
+          "\n" +
+          (cookieFile ? await readFile(cookieFile, "utf8") : "");
     const canonical = canonicalVideo(url);
     return withKeyLock(
       downloadScope,
-      path.resolve(dir) + "\n" + canonical,
+      path.resolve(dir) +
+        "\n" +
+        createHash("sha256").update(identity).digest("hex"),
       async () => {
         await mkdir(dir, { recursive: true });
         const id = createHash("sha256")
-          .update(canonical)
+          .update(identity)
           .digest("hex")
           .slice(0, 24);
         for (const extension of audioOnly ? [".m4a"] : [".mp4"]) {
@@ -87,11 +106,15 @@ export function createMediaDownloader({
         try {
           const result = audioOnly
             ? await audio(canonical, staging, cookieFile)
-            : await video(canonical, staging, cookieFile);
+            : await video(canonical, staging, cookieFile, quality);
           const info = await probe(result.file);
           if (!info.audio.length || !(info.duration > 0))
             throw new Error("下载文件不含有效音频");
-          const target = path.join(dir, path.basename(result.file));
+          if (!audioOnly && quality !== undefined && !info.hasVideo)
+            throw new Error(
+              "所选清晰度未返回视频，请更新 B站 Cookie 或重新选择清晰度",
+            );
+          const target = path.join(dir, id + path.extname(result.file));
           await rename(result.file, target);
           return { id, file: target };
         } finally {
@@ -131,7 +154,7 @@ async function fetchAudio(url, dir, cookieFile) {
   );
   return { id, file };
 }
-async function fetchVideo(url, dir, cookieFile) {
+async function fetchVideo(url, dir, cookieFile, quality) {
   await mkdir(dir, { recursive: true });
   const id = createHash("sha256")
     .update(canonicalVideo(url))
@@ -162,7 +185,7 @@ async function fetchVideo(url, dir, cookieFile) {
         "--max-filesize",
         "2G",
         "-f",
-        "bv*[height<=1080]+ba/b[height<=1080]",
+        videoFormat(quality),
         "--merge-output-format",
         "mp4",
         "--recode-video",
@@ -176,7 +199,12 @@ async function fetchVideo(url, dir, cookieFile) {
     );
     await stat(file);
     return { id, file };
-  } catch {
+  } catch (error) {
+    if (quality !== undefined)
+      throw new Error(
+        "视频下载失败，请确认 B站登录 Cookie 和当前账号清晰度权限后重试；未降级为纯音频。",
+        { cause: error },
+      );
     const audio = path.join(dir, `${id}.m4a`);
     await run(
       process.env.YTDLP || "yt-dlp",

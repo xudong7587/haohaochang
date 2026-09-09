@@ -90,3 +90,7 @@ manifest.version=2 是格式代际，不是资源修订号；playback.revision �
 ## 2026-09-09 反馈优化分区
 
 共同基线 `c285a2e`；本轮由同一集成人写入公共文件。F 负责 PC 执行池与进度，G 负责调度优先级、默认设置和新增 `server/task-status.js`（后台与 PC 共用的任务读视图），D 负责设置分区和曲库歌手折叠。独立预处理工具位于 `tools/bili-preprocess/`，不进入 NAS 路由或直接操作正式资源。Q 新增 `tests/feedback.test.js`、`tests/feedback.browser.mjs`、`separator/test_concurrency.py`，更新既有浏览器用例适配功能分区与折叠入口。以上均使用隔离数据和 localhost。
+
+## v0.3.5 反馈修复分区
+
+基线 `55e2f89`，由单一集成人维护本批文件。G：独立请求限额、合并 SSE、内存任务进度和公共路由；B：B站取流、共享 quality 参数（highest/2160/1440/1080/720/480/360，数值表示高度上限）、预览缓存和下载隔离；A/F：NAS 与 PC 保留源画面分辨率；E：歌词步进、遥控焦点、原生及 WebView 后备全屏；Q：tests/playback-quality.test.js、既有浏览器和 Python 真实视频检查、版本与 Release。协议和 schema 未升版，PC 仍使用 video-prepare-v1，旧 PC 可能保留旧的降采样行为，因此一起更新。

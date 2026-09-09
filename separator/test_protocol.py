@@ -231,7 +231,7 @@ class RouteTests(unittest.TestCase):
         if not ffmpeg or not ffprobe: self.skipTest('FFmpeg and ffprobe required')
         job, _ = self.module.jobs.reserve('video:0:1', 'video preparation')
         folder = self.module.ROOT / job
-        subprocess.run([ffmpeg, '-y', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=160x90:r=24:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', str(folder/'input.mp4')], check=True)
+        subprocess.run([ffmpeg, '-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=2560x1440:r=5:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', str(folder/'input.mp4')], check=True)
         original = (folder/'input.mp4').read_bytes()
         with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cpu'}):
             execute_clip(self.module.jobs, job, 0, 1, True)
@@ -239,6 +239,8 @@ class RouteTests(unittest.TestCase):
         info = json.loads(subprocess.check_output([ffprobe, '-v', 'error', '-show_streams', '-of', 'json', str(folder/'clip.mp4')]))
         self.assertEqual([s['codec_type'] for s in info['streams']], ['video'])
         self.assertEqual(info['streams'][0]['codec_name'], 'h264')
+        self.assertEqual(info['streams'][0]['width'], 2560)
+        self.assertEqual(info['streams'][0]['height'], 1440)
         self.assertEqual((folder/'input.mp4').read_bytes(), original)
 
     def test_nvenc_failure_falls_back_to_cpu_for_video_only(self):

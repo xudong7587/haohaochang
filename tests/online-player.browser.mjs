@@ -62,7 +62,8 @@ createRoot(document.getElementById('root')).render(<Fixture/>);
 });
 const app = express();
 app.use(express.json());
-const submissions = [];
+const submissions = [],
+  previewRequests = [];
 app.get("/api/online/songs", (q, r) =>
   r.json({
     duration: 12,
@@ -93,14 +94,23 @@ app.get("/api/online/songs", (q, r) =>
     ],
   }),
 );
-app.post("/api/online/preview", (_q, r) =>
+app.post("/api/online/preview", (q, r) => {
+  previewRequests.push(q.body);
   r.json({
+    quality: q.body.quality,
+    qualities: [
+      { value: "highest", label: "最高可用" },
+      { value: "1080", label: "1080p" },
+      { value: "360", label: "360p" },
+    ],
+    previewHeight: Number(q.body.quality) || 1080,
+    downloadHeight: Number(q.body.quality) || 2160,
     id: "preview-fixture",
     duration: 12,
     video: "/video.mp4",
     audio: "/audio.m4a",
-  }),
-);
+  });
+});
 app.post("/api/online", (q, r) => {
   submissions.push(q.body);
   r.json({ id: "job-fixture" });
@@ -173,12 +183,23 @@ try {
     path: "test-results/online/marked-preview.png",
     fullPage: true,
   });
+  await page.getByLabel("视频清晰度").selectOption("360");
+  await page.waitForFunction(
+    () => document.querySelector("video")?.readyState >= 1,
+  );
+  assert.equal(previewRequests.at(-1).quality, "360");
+  assert.ok(
+    Math.abs(
+      (await page.locator("video").evaluate((v) => v.currentTime)) - 3.75,
+    ) < 0.1,
+  );
   await page.getByRole("button", { name: "加入曲库", exact: true }).click();
   await page
     .getByRole("button", { name: "已加入整理任务", exact: true })
     .waitFor();
   assert.deepEqual(submissions[0].clip, { start: 1.25, end: 3.75 });
   assert.equal(submissions[0].title, "测试歌名");
+  assert.equal(submissions[0].quality, "360");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator(".video-card").nth(1).click();
   await page.waitForFunction(
@@ -238,6 +259,30 @@ try {
     path: "test-results/online/lyrics-countdown.png",
     fullPage: true,
   });
+  for (const direction of ["提前", "延后"]) {
+    for (const seconds of [0.5, 3, 10]) {
+      await page
+        .getByRole("button", {
+          name: `歌词${direction} ${seconds} 秒`,
+          exact: true,
+        })
+        .click();
+      assert.equal(
+        await page.evaluate(() => window.controlCalls.at(-1).deltaMs),
+        (direction === "提前" ? 1 : -1) * seconds * 1000,
+      );
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "test-results/online/lyrics-steps-mobile.png",
+    fullPage: true,
+  });
+  assert.ok(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
   assert.equal(dialogs, 0);
   console.log(
     "PASS online waterfall, preview A/V, paused/playing range marks, full video default, invalid range, identity, mobile layout, lyric countdown and remote keys.",
