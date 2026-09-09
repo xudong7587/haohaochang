@@ -28,3 +28,16 @@ for name, files in bundles.items():
         assert archive.testzip() is None
         assert not any('worker.json' in item or 'settings.json' in item or '.venv' in item for item in archive.namelist())
     print(name, (release / name).stat().st_size)
+
+# Standalone Windows rename tool uses the same layout as the installed NAS share.
+with ZipFile(release / 'haohaochang-preprocess.zip', 'w', ZIP_DEFLATED) as archive:
+    for source, target in [
+        ('启动重命名.cmd', '好好唱重命名.cmd'),
+        ('重命名.ps1', 'RenameTool/app.ps1'),
+        ('core.ps1', 'RenameTool/core.ps1'),
+        ('使用说明.txt', 'RenameTool/使用说明.txt'),
+    ]:
+        archive.write(root / 'tools/bili-preprocess' / source, target)
+with ZipFile(release / 'haohaochang-preprocess.zip') as archive:
+    assert archive.testzip() is None
+print('haohaochang-preprocess.zip', (release / 'haohaochang-preprocess.zip').stat().st_size)

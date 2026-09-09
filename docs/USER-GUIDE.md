@@ -1,6 +1,6 @@
 # 好好唱使用手册
 
-v0.3.2 的功能与验证范围见 [开发状态](PROJECT-STATUS.md)。正式安装先装 NAS，再连接播放设备和手机，最后启用自动下载与 PC 算力。[所有安装文件在 Latest Release](https://github.com/xudong7587/haohaochang/releases/latest)。
+v0.3.3 的功能与验证范围见 [开发状态](PROJECT-STATUS.md)。正式安装先装 NAS，再连接播放设备和手机，最后启用自动下载与 PC 算力。[所有安装文件在 Latest Release](https://github.com/xudong7587/haohaochang/releases/latest)。
 
 ## 1. 安装 NAS
 
