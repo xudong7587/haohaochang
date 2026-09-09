@@ -19,6 +19,7 @@ window.request=async(url,body,method)=>{
  if(url==='/admin/library?hidden=true')return structuredClone(window.hiddenSongs);
  if(url==='/admin/reviews')return [structuredClone(window.videoReview)];
  if(url==='/admin/inbox')return [];
+ if(url==='/admin/organize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已加入整理队列'}))};
  if(url.endsWith('/delete-preview'))return {title:'初始歌名',token:'preview-token',targets:[{path:'/isolated/song-folder',directory:true}]};
  if(url.endsWith('/delete-files')){if(body.token!=='preview-token')throw new Error('无效确认');window.songs=window.songs.filter(row=>row.id!==url.split('/')[3]);return {ok:true};}
  if(url==='/admin/source-info')return {title:'可爱女人',artist:'周杰伦',duration:240,candidateId:'retained-preview-id',candidate:{canonicalUrl:body.url,externalTitle:'第14P',page:14}};
@@ -222,6 +223,33 @@ try {
   await row.getByRole("button", { name: "删除", exact: true }).click();
   await row.getByRole("button", { name: "确认永久删除", exact: true }).click();
   await page.waitForFunction(() => window.songs.length === 0);
+  await page.evaluate(() => {
+    window.songs = [
+      {
+        id: "bulk-no-lyrics",
+        title: "无歌词歌曲",
+        artist: "测试歌手",
+        lyrics: "",
+        tier: "pending",
+        metadataRevision: 0,
+        status: "new",
+      },
+    ];
+  });
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await page.getByRole("button", { name: /^待整理曲库/ }).click();
+  await page.locator('[data-song-id="bulk-no-lyrics"]').waitFor();
+  await page.getByRole("button", { name: "全部整理", exact: true }).click();
+  await page.getByText("已加入整理队列", { exact: true }).waitFor();
+  assert.equal(
+    await page.evaluate(
+      () =>
+        window.calls
+          .filter((call) => call.url === "/admin/organize-batch")
+          .at(-1).body.items[0].id,
+    ),
+    "bulk-no-lyrics",
+  );
   assert.deepEqual(errors, []);
   console.log(
     "Library component browser contracts passed: clean refresh, draft conflicts, stale saves, candidate download, lyric provenance, MV confirmation, review actions, hide/restore.",

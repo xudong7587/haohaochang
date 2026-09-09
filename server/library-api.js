@@ -302,6 +302,8 @@ export function libraryApi({
     for (const item of items) {
       let result = { id: item?.id, title: item?.title, artist: item?.artist };
       try {
+        if (!["song", "inbox", "review"].includes(item?.kind))
+          throw new Error("无效的整理类型");
         const handler = {
           song: organize,
           inbox: submitInbox,
