@@ -1,11 +1,15 @@
 import { probe } from "./media-utils.js";
+import { stat } from "node:fs/promises";
 import { waitingWorker } from "./clipping.js";
 import { checkProvider, runProviderJob } from "./separation/protocol.js";
 
 export async function prepareVideoOnPc(store, song, file, staging) {
   const ai = store.get("ai", {});
   if (!ai.pcEndpoint) return null;
+  // Keep the existing NAS path for sources beyond the PC upload contract.
+  if ((await stat(file)).size > 1024 ** 3) return null;
   const info = await probe(file);
+  if (!(info.duration > 0) || info.duration > 21600) return null;
   const config = {
     endpoint: ai.pcEndpoint,
     apiKey: ai.pcApiKey,
