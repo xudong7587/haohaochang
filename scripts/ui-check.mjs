@@ -200,6 +200,10 @@ try {
   await page.getByRole("button", { name: "全屏播放", exact: true }).focus();
   await page.keyboard.press("Enter");
   await page.waitForSelector(".tv-player.is-full");
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("fullscreenchange")),
+  );
+  await page.waitForSelector(".tv-player.is-full");
   const fullscreenRect = await page.locator(".tv-player").boundingBox();
   assert.equal(fullscreenRect.x, 0);
   assert.equal(fullscreenRect.y, 0);

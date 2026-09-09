@@ -112,3 +112,5 @@ PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时�
 - Python 17 项通过（协议 14、并发 1、LAN 替身 2）。PC 实际 FFmpeg 输出验证保持 2560×1440、H.264 无声画面与原始文件，NVENC 失败到 CPU 的测试使用替身。本轮未执行真实 GPU 或 LAN 扫描。
 - 前端构建及浏览器检查：scripts/ui-check.mjs、tests/library-ui.browser.mjs、tests/online-player.browser.mjs、tests/feedback.browser.mjs、tests/pc-dashboard.browser.mjs。新增 TV 播放中右键从导航进入功能区且不改歌词、从画面向下到全屏按钮并确认、全屏内焦点、返回退出、原生 API 被拒时铺满 viewport；清晰度切换保留时间／裁剪标记，六个歌词按钮请求量和值正确。
 - scripts/player-check.mjs 通过：真实双音频、暂停／切换、媒体失效回退、租约、切歌清理、原生全屏、自动播放被拒后的恢复。GitHub CI、APK 和镜像发布结果在本节后续补充，正式状态见 Release 和 Actions。用户购买大会员后的可用档位、真实下载与 TV 物理遥控器未在本机替代验收。
+
+- 首次 Linux CI 在原生全屏退出／后备全屏立即进入时发现迟到事件覆盖状态，已区分原生／后备全屏模式，并添加主动派发迟到 fullscreenchange 的回归，修复后重新验证。

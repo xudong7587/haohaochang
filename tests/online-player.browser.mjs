@@ -274,6 +274,9 @@ try {
     }
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => {
+    document.querySelector(".app").className = "";
+  });
   await page.screenshot({
     path: "test-results/online/lyrics-steps-mobile.png",
     fullPage: true,
@@ -282,6 +285,19 @@ try {
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
+  );
+  await page.locator(".tv-player").evaluate((el) => {
+    el.requestFullscreen = () => Promise.reject(new Error("WebView fixture"));
+  });
+  await page.getByRole("button", { name: "全屏播放", exact: true }).click();
+  await page.waitForSelector(".tv-player.is-full");
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("fullscreenchange")),
+  );
+  await page.waitForSelector(".tv-player.is-full");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(
+    () => !document.querySelector(".tv-player.is-full"),
   );
   assert.equal(dialogs, 0);
   console.log(

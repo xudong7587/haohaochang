@@ -21,6 +21,7 @@ export function Player({
   const video = useRef(),
     container = useRef(),
     stage = useRef(),
+    fullscreenMode = useRef("none"),
     latest = useRef(current),
     position = useRef(0),
     previousEntry = useRef(null);
@@ -184,8 +185,20 @@ export function Player({
     return () => cancelAnimationFrame(raf);
   }, []);
   useEffect(() => {
-    const handler = () =>
-      setFull(document.fullscreenElement === container.current);
+    const handler = () => {
+      if (document.fullscreenElement === container.current) {
+        if (fullscreenMode.current === "none") {
+          document.exitFullscreen().catch(() => {});
+          return;
+        }
+        fullscreenMode.current = "native";
+        setFull(true);
+      } else if (fullscreenMode.current === "native") {
+        fullscreenMode.current = "none";
+        setFull(false);
+      }
+      // A delayed native exit must not close a newly opened CSS fallback.
+    };
     document.addEventListener("fullscreenchange", handler);
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
@@ -208,11 +221,13 @@ export function Player({
   }, [full, queue.length > 0]);
   async function fullscreen() {
     if (full || document.fullscreenElement) {
+      fullscreenMode.current = "none";
       setFull(false);
       if (document.fullscreenElement)
         await document.exitFullscreen().catch(() => {});
     } else {
       // CSS also fills the TV WebView on devices which reject the native API.
+      fullscreenMode.current = "fallback";
       setFull(true);
       try {
         await container.current.requestFullscreen?.();
@@ -231,6 +246,7 @@ export function Player({
         return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      fullscreenMode.current = "none";
       setFull(false);
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       container.current?.querySelector("[data-fullscreen]")?.focus();
