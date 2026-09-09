@@ -57,48 +57,60 @@ export async function organizeBatch(
   request,
   onProgress = () => {},
 ) {
-  const results = [];
   const reviewSongs = new Set(reviews.map((r) => r.songId).filter(Boolean));
-  for (const row of [
+  const rows = [
     ...reviews.filter((r) => r.kind !== "find-video"),
     ...songs.filter((s) => s.tier === "pending" && !reviewSongs.has(s.id)),
-  ]) {
-    let result = { id: row.id, title: row.title, artist: row.artist };
+  ];
+  const results = rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    artist: row.artist,
+    ...(row.processing
+      ? { status: "skipped", message: "已在整理队列中" }
+      : !row.title?.trim() || !row.artist?.trim() || row.artist === "未知歌手"
+        ? { status: "review", message: "请先填写歌名和歌手" }
+        : { status: "pending", message: "等待提交" }),
+  }));
+  const pending = rows
+    .map((row, index) => ({ row, index }))
+    .filter(({ index }) => results[index].status === "pending");
+  onProgress([...results]);
+  for (let start = 0; start < pending.length; start += 20) {
+    const batch = pending.slice(start, start + 20);
     try {
-      if (row.processing) {
-        result = { ...result, status: "skipped", message: "已在整理队列中" };
-      } else if (
-        !row.title?.trim() ||
-        !row.artist?.trim() ||
-        row.artist === "未知歌手"
-      ) {
-        result = { ...result, status: "review", message: "请先填写歌名和歌手" };
-      } else {
-        const review = reviews.includes(row);
-        await request(
-          review
-            ? row.inbox
-              ? "/admin/inbox"
-              : "/admin/reviews/" + row.id
-            : "/admin/library/" + row.id + "/organize",
-          review
-            ? {
-                title: row.title,
-                artist: row.artist,
-                lyrics: row.lyrics || "",
-                file: row.file,
-                action: "confirm",
-                expectedRevision: row.expectedRevision,
-              }
-            : { expectedRevision: row.metadataRevision },
-          "POST",
-        );
-        result = { ...result, status: "success", message: "已加入整理队列" };
-      }
+      const response = await request(
+        "/admin/organize-batch",
+        {
+          items: batch.map(({ row }) => ({
+            id: row.id,
+            title: row.title,
+            artist: row.artist,
+            file: row.file,
+            kind: reviews.includes(row)
+              ? row.inbox
+                ? "inbox"
+                : "review"
+              : "song",
+            expectedRevision: reviews.includes(row)
+              ? row.expectedRevision
+              : row.metadataRevision,
+          })),
+        },
+        "POST",
+      );
+      batch.forEach(({ index }, position) => {
+        results[index] = { ...results[index], ...response.results[position] };
+      });
     } catch (error) {
-      result = { ...result, status: "failed", message: error.message };
+      batch.forEach(({ index }) => {
+        results[index] = {
+          ...results[index],
+          status: "failed",
+          message: error.message,
+        };
+      });
     }
-    results.push(result);
     onProgress([...results]);
   }
   return results;

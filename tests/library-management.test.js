@@ -120,6 +120,55 @@ test("delete preview checks revisions, queue and real files; organize accepts kn
     200,
   );
   await assert.rejects(stat(idle.file), { code: "ENOENT" });
+  const bulkSongs = Array.from({ length: 105 }, (_, i) => ({
+    id: "bulk" + i,
+    title: "歌" + i,
+    artist: "歌手",
+    tier: "pending",
+    metadataRevision: 0,
+  }));
+  for (const song of bulkSongs)
+    db.prepare(
+      "INSERT INTO songs(id,path,title,artist,created) VALUES(?,?,?,?,?)",
+    ).run(
+      song.id,
+      path.join(root, song.id + ".mp4"),
+      song.title,
+      song.artist,
+      Date.now(),
+    );
+  let bulkRequests = 0;
+  const bulkResults = await organizeBatch(
+    bulkSongs,
+    [],
+    async (route, body) => {
+      bulkRequests++;
+      const response = await request(route.replace("/admin/", ""), body);
+      assert.equal(response.status, 200);
+      return response.json();
+    },
+  );
+  assert.equal(
+    bulkRequests,
+    6,
+    "105 songs use six requests, below the request limiter",
+  );
+  assert.equal(
+    bulkResults.filter((item) => item.status === "success").length,
+    105,
+  );
+  const repeated = await (
+    await request("organize-batch", {
+      items: [
+        { id: "bulk0", kind: "song", expectedRevision: 0 },
+        { id: "missing", kind: "song", expectedRevision: 0 },
+      ],
+    })
+  ).json();
+  assert.deepEqual(
+    repeated.results.map((item) => item.status),
+    ["skipped", "failed"],
+  );
 });
 
 test("batch skips duplicate review songs, missing identity and standard songs while continuing failures", async () => {
@@ -140,12 +189,18 @@ test("batch skips duplicate review songs, missing identity and standard songs wh
         kind: "organize",
       },
     ],
-    async (route) => {
+    async (route, body) => {
       calls.push(route);
-      if (route.includes("reviews")) throw new Error("已处理");
+      return {
+        results: body.items.map((item) => ({
+          id: item.id,
+          status: item.kind === "review" ? "failed" : "success",
+          message: "结果",
+        })),
+      };
     },
   );
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   assert.deepEqual(
     results.map((r) => r.status),
     ["failed", "review", "success"],

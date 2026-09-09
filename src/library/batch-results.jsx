@@ -7,6 +7,7 @@ export function BatchResults({ results }) {
     conflict: "冲突",
     failed: "失败",
     skipped: "已跳过",
+    pending: "等待提交",
   };
   return (
     <div className="settings-card" aria-live="polite">

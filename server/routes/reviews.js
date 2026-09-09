@@ -163,4 +163,5 @@ export function reviewsApi({
     res.json(reviewList()),
   );
   app.post("/api/integrations/reviews/:id", integration, resolveReview);
+  return resolveReview;
 }

@@ -146,7 +146,8 @@ export function createApp(options = {}) {
     snapshot,
     allowedOrigin,
   };
-  libraryApi(routeContext);
+  const resolveReview = reviewsApi(routeContext);
+  libraryApi({ ...routeContext, resolveReview });
   libraryDeleteApi(routeContext);
   backgroundApi(routeContext);
   app.get("/api/health", (req, res) => res.json({ ok: true }));
@@ -171,7 +172,6 @@ export function createApp(options = {}) {
   onlineApi(routeContext);
   settingsApi(routeContext);
   pcApi(routeContext);
-  reviewsApi(routeContext);
   legacyLibraryApi(routeContext);
   app.get("/", (req, res) => res.redirect(302, "/admin"));
   app.use(express.static(path.resolve("dist")));

@@ -36,11 +36,12 @@ export function libraryApi({
   downloads,
   addJob,
   emit,
+  resolveReview,
 }) {
   const { db, get, set } = store;
   const previews = new Map();
   const assertIdle = (id) => assertSongIdle(store, id);
-  app.post("/api/admin/library/:id/organize", admin, (req, res) => {
+  const organize = (req, res) => {
     const song = db
       .prepare("SELECT * FROM songs WHERE id=?")
       .get(req.params.id);
@@ -67,7 +68,8 @@ export function libraryApi({
           : {}),
       }),
     });
-  });
+  };
+  app.post("/api/admin/library/:id/organize", admin, organize);
   app.post("/api/admin/refresh-metadata", admin, async (req, res) => {
     const song = req.body.id
       ? db.prepare("SELECT * FROM songs WHERE id=?").get(req.body.id)
@@ -247,7 +249,7 @@ export function libraryApi({
     }
     res.json(rows);
   });
-  app.post("/api/admin/inbox", admin, async (req, res) => {
+  const submitInbox = async (req, res) => {
     const file = await safeMedia(String(req.body.file || ""), [downloads]),
       info = await stat(file);
     const existing = db
@@ -290,6 +292,62 @@ export function libraryApi({
         },
       }),
     });
+  };
+  app.post("/api/admin/inbox", admin, submitInbox);
+  app.post("/api/admin/organize-batch", admin, async (req, res) => {
+    const items = req.body.items;
+    if (!Array.isArray(items) || items.length > 20)
+      throw new Error("每批最多提交 20 首");
+    const results = [];
+    for (const item of items) {
+      let result = { id: item?.id, title: item?.title, artist: item?.artist };
+      try {
+        const handler = {
+          song: organize,
+          inbox: submitInbox,
+          review: resolveReview,
+        }[item?.kind];
+        if (!handler) throw new Error("无效的整理类型");
+        // Reuse the same revision, queue and file checks as individual actions.
+        let output;
+        await handler(
+          {
+            params: { id: item.id },
+            body: {
+              title: item.title,
+              artist: item.artist,
+              file: item.file,
+              expectedRevision: item.expectedRevision,
+              action: "confirm",
+            },
+          },
+          {
+            json: (value) => {
+              output = value;
+              return value;
+            },
+          },
+        );
+        result = {
+          ...result,
+          status: output?.existing ? "skipped" : "success",
+          message: output?.existing ? "已在整理队列中" : "已加入整理队列",
+        };
+      } catch (error) {
+        result = {
+          ...result,
+          status:
+            error.code === "SONG_BUSY"
+              ? "skipped"
+              : error.code === "REVISION_CONFLICT"
+                ? "conflict"
+                : "failed",
+          message: error.message,
+        };
+      }
+      results.push(result);
+    }
+    res.json({ results });
   });
   app.post("/api/admin/inbox-link", admin, async (req, res) => {
     const url = canonicalVideo(req.body.url);
