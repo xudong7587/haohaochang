@@ -1,3 +1,4 @@
+import { taskStatus } from "../task-status.js";
 import { providerHeaders } from "../separation/protocol.js";
 import { connectionError } from "../connection-error.js";
 
@@ -6,25 +7,7 @@ export function pcApi({ app, admin, store, discovery }) {
   let pending;
   async function status() {
     const config = store.get("ai", {});
-    const tasks = store.db
-      .prepare(
-        "SELECT id,kind,payload,status,stage,error,created,started,finished FROM jobs ORDER BY created DESC LIMIT 200",
-      )
-      .all()
-      .map(({ payload, ...row }) => {
-        const p = JSON.parse(payload);
-        const song =
-          p.id || p.existingId
-            ? store.db
-                .prepare("SELECT title,artist FROM songs WHERE id=?")
-                .get(p.id || p.existingId)
-            : null;
-        return {
-          ...row,
-          title: p.title || p.metadata?.title || song?.title || "",
-          artist: p.artist || p.metadata?.artist || song?.artist || "",
-        };
-      });
+    const tasks = taskStatus(store);
     const base = {
       connected: false,
       endpoint: config.pcEndpoint || "",
@@ -65,7 +48,7 @@ export function pcApi({ app, admin, store, discovery }) {
           code: "INVALID_PROTOCOL",
         });
       const jobs = data.jobs
-        .slice(0, 40)
+        .slice(0, 60)
         .map((j) =>
           Object.fromEntries(
             [
@@ -92,6 +75,7 @@ export function pcApi({ app, admin, store, discovery }) {
         );
       const worker = {
         name: clipText(data.name),
+        concurrency: Number(data.concurrency) || 1,
         device: clipText(data.device),
         gpu_name: clipText(data.gpu_name),
         runtime: clipText(data.runtime),

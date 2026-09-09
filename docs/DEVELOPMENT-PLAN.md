@@ -86,3 +86,7 @@ manifest.version=2 是格式代际，不是资源修订号；playback.revision �
 ## v0.3.0 接续交付
 
 本轮由单一集成任务维护公共路由、调度器和全局界面：server/discovery.js 与 pc-worker/lan.py 管自动发现；server/online-preview.js、online-search.js 与 src/online-songs.jsx 管视频搜索预览；server/clipping.js 与 separator/clipping.py 管 PC 裁剪；shared/lyrics.js、server/room.js 与播放器管歌词微调。独立测试新增 tests/online-flow.test.js、tests/online-player.browser.mjs、tests/lyrics-tuning.test.js、pc-worker/test_lan.py。公开接口继续兼容 ktv-separation-v1，新增 video-clip-v1 能力；LAN 配置必须明确启用。当前发布与实机边界见 PROJECT-STATUS.md。
+
+## 2026-09-09 反馈优化分区
+
+共同基线 `c285a2e`；本轮由同一集成人写入公共文件。F 负责 PC 执行池与进度，G 负责调度优先级、默认设置和新增 `server/task-status.js`（后台与 PC 共用的任务读视图），D 负责设置分区和曲库歌手折叠。独立预处理工具位于 `tools/bili-preprocess/`，不进入 NAS 路由或直接操作正式资源。Q 新增 `tests/feedback.test.js`、`tests/feedback.browser.mjs`、`separator/test_concurrency.py`，更新既有浏览器用例适配功能分区与折叠入口。以上均使用隔离数据和 localhost。

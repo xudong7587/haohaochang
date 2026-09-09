@@ -116,7 +116,7 @@ export function createScheduler(
     return id;
   }
   async function work() {
-    if (running >= 2 || stopped || enabled === false) return;
+    if (running >= 4 || stopped || enabled === false) return;
     const jobSong = (j) => songIdFor(JSON.parse(j.payload));
     const activeSongs = new Set(
       db
@@ -126,9 +126,17 @@ export function createScheduler(
         .filter(Boolean),
     );
     const job = db
-      .prepare("SELECT * FROM jobs WHERE status='queued' ORDER BY created")
+      .prepare(
+        "SELECT * FROM jobs WHERE status='queued' ORDER BY CASE WHEN kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online' THEN 0 ELSE 1 END, created",
+      )
       .all()
-      .find((j) => !jobSong(j) || !activeSongs.has(jobSong(j)));
+      .find(
+        (j) =>
+          (!jobSong(j) || !activeSongs.has(jobSong(j))) &&
+          (running < 3 ||
+            ["acquire", "download"].includes(j.kind) ||
+            JSON.parse(j.payload).priority === "online"),
+      );
     if (!job) return;
     running++;
     setImmediate(work);
@@ -143,7 +151,16 @@ export function createScheduler(
         emit("library", {});
       };
       report(job.kind);
-      const context = { ...dependencies, addJob, enqueue, report };
+      const priority =
+        payload.priority ||
+        (["acquire", "download"].includes(job.kind) ? "online" : undefined);
+      const context = {
+        ...dependencies,
+        addJob: (kind, child) =>
+          addJob(kind, { ...child, ...(priority ? { priority } : {}) }),
+        enqueue,
+        report,
+      };
       const songId = songIdFor(payload);
       const outcome = songId
         ? await withSongWrite(

@@ -1,3 +1,4 @@
+import { taskStatus } from "../task-status.js";
 import { enrichmentConfig, enrichSong } from "../enrichment.js";
 import { favoriteConfig } from "../favorites.js";
 import { providerConfig, testProvider } from "../separation.js";
@@ -33,19 +34,20 @@ export function settingsApi({
       autoImport: get("autoImport", true),
       configPath: store.configPath,
       publicUrl: get("publicUrl", ""),
-      onlineEnabled: get("onlineEnabled", false),
+      onlineEnabled: get("onlineEnabled", true),
       scanProgress: get("scan-progress", null),
       songs: db.prepare("SELECT COUNT(*) AS n FROM songs").get().n,
       ready: db
         .prepare("SELECT COUNT(*) AS n FROM songs WHERE status='ready'")
         .get().n,
-      jobs: db
-        .prepare("SELECT * FROM jobs ORDER BY created DESC LIMIT 50")
-        .all(),
+      jobs: taskStatus(store),
     }),
   );
   app.post("/api/admin/settings", admin, (req, res) => {
-    const value = clean(req.body.publicUrl, 200);
+    const value =
+      req.body.publicUrl === undefined
+        ? get("publicUrl", "")
+        : clean(req.body.publicUrl, 200);
     if (value) {
       const url = new URL(value);
       if (
@@ -59,7 +61,8 @@ export function settingsApi({
         throw fail(400, "请输入 NAS 的完整访问地址，不要包含路径");
     }
     set("publicUrl", value);
-    set("onlineEnabled", req.body.onlineEnabled === true);
+    if (typeof req.body.onlineEnabled === "boolean")
+      set("onlineEnabled", req.body.onlineEnabled);
     res.json({ ok: true });
   });
   app.get("/api/admin/ai", admin, (req, res) => {

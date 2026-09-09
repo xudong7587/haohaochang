@@ -60,7 +60,7 @@ export async function organizeBatch(
   const reviewSongs = new Set(reviews.map((r) => r.songId).filter(Boolean));
   const rows = [
     ...reviews.filter((r) => r.kind !== "find-video"),
-    ...songs.filter((s) => s.tier === "pending" && !reviewSongs.has(s.id)),
+    ...songs.filter((s) => ["pending", "audio"].includes(s.tier) && !reviewSongs.has(s.id)),
   ];
   const results = rows.map((row) => ({
     id: row.id,

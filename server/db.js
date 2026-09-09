@@ -66,7 +66,7 @@ export function openStore(dir) {
     version: 1,
     autoImport: true,
     publicUrl: "",
-    onlineEnabled: false,
+    onlineEnabled: true,
     ai: { enabled: false, endpoint: "", model: "", apiKey: "" },
   };
   let config;
@@ -82,7 +82,7 @@ export function openStore(dir) {
       config = {
         ...defaults,
         publicUrl: readDb("publicUrl", ""),
-        onlineEnabled: readDb("onlineEnabled", false),
+        onlineEnabled: readDb("onlineEnabled", true),
         ai: readDb("ai", defaults.ai),
       };
   } catch (e) {
@@ -96,6 +96,10 @@ export function openStore(dir) {
     });
     renameSync(configPath + ".tmp", configPath);
   };
+  if (!config.onlineDefaultMigrated) {
+    config.onlineEnabled = true;
+    config.onlineDefaultMigrated = true;
+  }
   flush(config);
   const keys = new Set([
     "publicUrl",

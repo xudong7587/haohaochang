@@ -35,17 +35,10 @@ export async function separateSong(store, song, cache) {
     ? { endpoint: config.endpoint, model: config.model, apiKey: config.apiKey }
     : null;
   const resumingPc = pc && hasProviderCheckpoint(store, song, pc);
-  const candidates =
-    pc && pcActive.get(pc.endpoint) && cloud && !resumingPc
-      ? [cloud]
-      : [pc, cloud].filter(Boolean);
+  const candidates = [pc, cloud].filter(Boolean);
   let last;
   for (const candidate of candidates) {
-    if (candidate.pc)
-      pcActive.set(
-        candidate.endpoint,
-        (pcActive.get(candidate.endpoint) || 0) + 1,
-      );
+    let reserved = false;
     try {
       if (candidate.pc) {
         let health;
@@ -59,9 +52,17 @@ export async function separateSong(store, song, cache) {
         if (
           cloud &&
           !resumingPc &&
-          (health.busy === true || Number(health.pending) > 0)
+          (health.busy === true ||
+            Number(health.pending) >= (Number(health.concurrency) || 1) ||
+            (pcActive.get(candidate.endpoint) || 0) >=
+              (Number(health.concurrency) || 1))
         )
           throw new Error("PC 分离服务忙碌，转备用服务");
+        pcActive.set(
+          candidate.endpoint,
+          (pcActive.get(candidate.endpoint) || 0) + 1,
+        );
+        reserved = true;
       }
       const root = path.join(cache, "separation-tasks");
       await mkdir(root, { recursive: true });
@@ -105,7 +106,7 @@ export async function separateSong(store, song, cache) {
           ? waitingWorker("PC 连接中断，等待重新上线后继续原任务")
           : error;
     } finally {
-      if (candidate.pc)
+      if (reserved)
         pcActive.set(
           candidate.endpoint,
           Math.max(0, pcActive.get(candidate.endpoint) - 1),

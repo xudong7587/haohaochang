@@ -436,7 +436,7 @@ export function App() {
           <div className="breadcrumb">
             我的客厅 <span>/</span>{" "}
             {route === "admin"
-              ? "曲库工作台"
+              ? "曲库管理"
               : route === "mobile"
                 ? "随身点歌台"
                 : isWebRoom

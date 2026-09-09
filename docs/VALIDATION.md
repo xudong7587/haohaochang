@@ -90,3 +90,16 @@ PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时�
 - 独立数据库和临时媒体目录验证永久删除：展示目标目录、阻止任务/队列占用、拒绝过期确认、保留无关文件；下载区 105 文件（104 已排队）全部可见，未处理文件可以确认删除。
 - 五类浏览器检查通过：整体管理/点歌、曲库草稿与删除确认、在线选段、PC 管理与日志下载、播放器异常恢复。PC/备用 AI 独立保存和检测由 localhost 协议替身验证。
 - 未操作用户正式曲库；未探测公司局域网或修改防火墙。本地通过不代表家庭 NAS、GPU 音质或电视实机通过。发布构建结果见版本 Release 与 Actions。
+
+## 2026-09-09 用户反馈优化 · 本地验收
+
+基线为 GitHub `main` 的 `c285a2e`，保留此前未跟踪的预处理工具并纳入版本管理。本轮没有推送 GitHub、更新 NAS 镜像或发布 Release。
+
+- `npm test`：85 项全部通过，包含真实 FFmpeg；新增默认在线迁移和主动关闭保留、三路后台与在线预留槽、在线子任务优先级、超过 50 项的在途任务展示与进度、200 项独立在线容量、半标准批量整理。
+- `npm run build` 通过。`scripts/ui-check.mjs`、`tests/library-ui.browser.mjs`、`tests/feedback.browser.mjs`、`tests/online-player.browser.mjs` 和 `tests/pc-dashboard.browser.mjs` 通过。覆盖设置分区、真实步骤百分比、50 条任务、移动端宽度、切换分类和设置保留草稿、歌手折叠后的删除与恢复。截图位于本地 `test-results/feedback/`。
+- Python 协议测试 11 项通过（设置 FFMPEG 与 FFPROBE，包含实际裁剪）；`separator/test_concurrency.py` 额外 1 项通过，验证三个请求并发执行且第四个排队，进度通过协议返回。Windows 隐藏启动测试通过，使用隔离替身、无 LAN。
+- 真实本机 RTX 5080 Laptop GPU / CUDA / htdemucs 同时处理三份 12 秒合成音频，峰值三项并发，约 11 秒全部完成并校验输出。数据与任务均在独立临时目录，复用已有模型文件，没有向实际曲库添加示例。结果记录于 `test-results/feedback/gpu.json`。这是实际 GPU 并发验证，不等同真实歌曲音质或长期显存压力验收。
+- 预处理核心与 WinForms 渲染通过：普通文字替换、批量删除《》、字面量匹配、重复目标拒绝、媒体内容不变、NFO 备份和锁定文件回滚。`Z:\V3 Media\Haohaochang\预处理\RenameTool` 已更新，旧程序备份在其 `code-backup-20260909-164222` 中，未执行用户媒体的批量重命名。
+- 已安装的 `C:\Users\Sunny\AppData\Local\Haohaochang\PCWorker` 程序同步，保留 worker.json、runtime、模型和数据。新版分发包为本地 `release/haohaochang-resource-ai-local.zip`。
+
+运行服务边界：自动审批拒绝“停止现有 3210 预览进程”和“启动新的 3211 验收服务”，均只返回 `blocked by policy`。这些启动／停止命令未执行；原 3210 后端仍是旧进程。需手动重启本地服务后再进行完整交互验收；已有 1 首实际歌曲未改变。NAS、家庭 PC、电视和音响仍待用户验收。

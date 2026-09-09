@@ -27,6 +27,10 @@ try:
         if 'video-clip-v1' not in existing.get('capabilities', []):
             print('An older organizer is still running. Stop it before starting this update; keep worker.json, runtime and data.')
             sys.exit(1)
+        desired = max(1, min(3, int(config.get('concurrency', 3 if existing.get('device') == 'cuda' else 1))))
+        if existing.get('concurrency', 1) != desired:
+            print('Updated concurrency requires a restart. Finish current jobs, stop the old organizer, then run start.cmd again.')
+            sys.exit(1)
         if existing.get('lanEnabled', False) != config['lan']:
             print('The organizer is running in a different network mode. Stop it before changing LAN/local-only mode.')
             sys.exit(1)
@@ -62,6 +66,7 @@ if config.get('device', 'auto') != 'cpu' and plan['device'] == 'cuda':
         reason = 'CUDA check failed; using CPU: ' + str(error)
 os.environ['SEPARATION_SEGMENT'] = str(plan['segment'] if device == 'cuda' else 4)
 os.environ['SEPARATION_DEVICE'] = device
+os.environ['SEPARATION_CONCURRENCY'] = str(max(1, min(3, int(config.get('concurrency', 3 if device == 'cuda' else 1)))))
 os.environ['FFMPEG'] = imageio_ffmpeg.get_ffmpeg_exe()
 sys.path.insert(0, str(root))
 print('\n=== 好好唱资源 AI 整理器 ===')

@@ -11,7 +11,7 @@ import psutil
 
 
 def register(app, root, config, plan, device):
-    from app import auth, ROOT
+    from app import auth, ROOT, CONCURRENCY
     from lan import addresses
     started = time.time()
 
@@ -27,9 +27,14 @@ def register(app, root, config, plan, device):
     def dashboard():
         jobs = []
         files = sorted(ROOT.glob('*/state.json'), key=lambda p: p.stat().st_mtime, reverse=True)
-        for file in files[:40]:
+        finished_count = 0
+        for file in files:
             try:
-                state = json.loads(file.read_text())
+                state = json.loads(file.read_text(encoding='utf-8'))
+                if state.get('status') not in ('uploading', 'queued', 'running'):
+                    if finished_count >= 40:
+                        continue
+                    finished_count += 1
                 info = file.parent / 'info.json'
                 state.update(json.loads(info.read_text(encoding='utf-8')) if info.exists() else {})
                 state['updated'] = file.stat().st_mtime
@@ -39,7 +44,7 @@ def register(app, root, config, plan, device):
                         stream.seek(max(0, log.stat().st_size - 5000))
                         state['log'] = stream.read().decode('utf-8', errors='replace')
                     matches = re.findall(r'(\d{1,3})%\|', state['log'])
-                    if matches and state.get('status') == 'running':
+                    if matches and state.get('status') == 'running' and state.get('stage') == 'separating':
                         state['model_progress'] = min(100, int(matches[-1]))
                 state['elapsed_seconds'] = max(0, int((state.get('updated', time.time()) if state.get('status') in ('done', 'failed') else time.time()) - state.get('created', time.time())))
                 if str(state.get('model', '')).startswith('clip:'):
@@ -47,6 +52,9 @@ def register(app, root, config, plan, device):
                 jobs.append(state)
             except (OSError, ValueError):
                 continue
+        active = [j for j in jobs if j.get('status') in ('uploading', 'queued', 'running')]
+        recent = [j for j in jobs if j not in active][:40]
+        jobs = sorted(active, key=lambda j: j.get('status') != 'running') + recent
         memory = psutil.virtual_memory()
         gpu = None
         if device == 'cuda':
@@ -64,4 +72,4 @@ def register(app, root, config, plan, device):
                     runtime=plan['runtime'], host=config.get('host', '127.0.0.1'), port=config['port'],
                     uptime=round(time.time()-started), cpu=psutil.cpu_percent(),
                     memory=dict(used_gb=round(memory.used/1024**3, 1), total_gb=round(memory.total/1024**3, 1), percent=memory.percent),
-                    gpu=gpu, jobs=jobs)
+                    gpu=gpu, concurrency=CONCURRENCY, jobs=jobs)

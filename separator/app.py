@@ -2,6 +2,7 @@
 import concurrent.futures
 import hmac
 import os
+import re
 from pathlib import Path
 from fastapi import FastAPI, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -12,7 +13,8 @@ from upload_guard import UploadGuard
 ROOT = Path(os.getenv('SEPARATION_DATA_DIR', '/data')) / 'jobs'
 jobs = JobStore(ROOT)
 jobs.recover()
-pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+CONCURRENCY = max(1, min(3, int(os.getenv('SEPARATION_CONCURRENCY', '1'))))
+pool = concurrent.futures.ThreadPoolExecutor(max_workers=CONCURRENCY)
 app = FastAPI()
 app.add_middleware(UploadGuard)
 
@@ -36,7 +38,7 @@ def health():
     pending = jobs.pending()
     return dict(protocol='ktv-separation-v1', models=['htdemucs', 'htdemucs_ft'],
         lanEnabled=getattr(app.state, 'lan', {}).get('enabled', False),
-        device=os.getenv('SEPARATION_DEVICE', 'cpu'), pending=pending, busy=pending > 0,
+        device=os.getenv('SEPARATION_DEVICE', 'cpu'), pending=pending, concurrency=CONCURRENCY, busy=pending >= CONCURRENCY,
         capabilities=['idempotency-key', 'upload-limit', 'restart-recovery', 'video-clip-v1'])
 
 
@@ -94,7 +96,15 @@ def job_path(job):
 def get_job(job: str):
     if not job_path(job).is_dir():
         raise HTTPException(404, 'Unknown job')
-    return jobs.state(job)
+    state = jobs.state(job)
+    log = ROOT / job / 'worker.log'
+    if state.get('status') == 'running' and state.get('stage') == 'separating' and log.exists():
+        with log.open('rb') as stream:
+            stream.seek(max(0, log.stat().st_size - 5000))
+            matches = re.findall(r'(\d{1,3})%\|', stream.read().decode('utf-8', errors='replace'))
+        if matches:
+            state['model_progress'] = min(100, int(matches[-1]))
+    return state
 
 
 @app.get('/artifacts/{job}', dependencies=[Depends(auth)])

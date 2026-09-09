@@ -28,10 +28,10 @@ export function onlineApi({
 }) {
   const previews = previewSessions();
   app.get("/api/online/songs", member, async (req, res) => {
-    if (!get("onlineEnabled", false))
+    if (!get("onlineEnabled", true))
       throw fail(
         403,
-        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+        "在线搜索已手动关闭，请到“设置与任务 → 在线资源”重新启用。",
       );
     const title = clean(req.query.title),
       artist = clean(req.query.artist),
@@ -43,10 +43,10 @@ export function onlineApi({
     );
   });
   app.post("/api/online/preview", member, async (req, res) => {
-    if (!get("onlineEnabled", false))
+    if (!get("onlineEnabled", true))
       throw fail(
         403,
-        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+        "在线搜索已手动关闭，请到“设置与任务 → 在线资源”重新启用。",
       );
     res.json(
       await previews.create(
@@ -58,14 +58,14 @@ export function onlineApi({
     );
   });
   app.get("/api/online/preview/:id/:track", member, async (req, res) => {
-    if (!get("onlineEnabled", false)) throw fail(403, "在线资源已关闭");
+    if (!get("onlineEnabled", true)) throw fail(403, "在线资源已关闭");
     await previews.stream(req, res);
   });
   app.post("/api/requests", member, (req, res) => {
-    if (!get("onlineEnabled", false))
+    if (!get("onlineEnabled", true))
       throw fail(
         403,
-        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+        "在线搜索已手动关闭，请到“设置与任务 → 在线资源”重新启用。",
       );
     const title = clean(req.body.title),
       artist = clean(req.body.artist);
@@ -83,11 +83,11 @@ export function onlineApi({
     if (
       db
         .prepare(
-          "SELECT COUNT(*) n FROM jobs WHERE status IN ('queued','running','waiting-worker')",
+          "SELECT COUNT(*) n FROM jobs WHERE status IN ('queued','running','waiting-worker') AND (kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online')",
         )
-        .get().n >= 20
+        .get().n >= 200
     )
-      throw fail(429, "后台任务已满");
+      throw fail(429, "在线任务已达到 200 项，请等待部分任务完成");
     res.json({
       id: addJob("acquire", {
         title,
@@ -98,10 +98,10 @@ export function onlineApi({
     });
   });
   app.get("/api/online", member, async (req, res) => {
-    if (!get("onlineEnabled", false))
+    if (!get("onlineEnabled", true))
       throw fail(
         403,
-        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+        "在线搜索已手动关闭，请到“设置与任务 → 在线资源”重新启用。",
       );
     const query = clean(req.query.q);
     if (query.length < 2) throw fail(400, "至少输入两个字");
@@ -113,19 +113,19 @@ export function onlineApi({
     );
   });
   app.post("/api/online", member, (req, res) => {
-    if (!get("onlineEnabled", false))
+    if (!get("onlineEnabled", true))
       throw fail(
         403,
-        "在线搜索尚未启用：请到“设置与任务 → 连接与在线资源”勾选“启用在线搜索与入库”并保存。Cookie 已保存也需要打开此开关。",
+        "在线搜索已手动关闭，请到“设置与任务 → 在线资源”重新启用。",
       );
     if (
       db
         .prepare(
-          "SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running','waiting-worker')",
+          "SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running','waiting-worker') AND (kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online')",
         )
-        .get().n >= 20
+        .get().n >= 200
     )
-      throw fail(429, "后台任务已满");
+      throw fail(429, "在线任务已达到 200 项，请等待部分任务完成");
     const payload = {
       url: canonicalVideo(req.body.url),
       title: clean(req.body.title) || "在线歌曲",

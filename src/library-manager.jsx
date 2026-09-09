@@ -62,30 +62,10 @@ export function LibraryManager({ request, notify, onEdit }) {
     <section>
       <div className="section-heading">
         <div>
-          <h2>曲库工作台</h2>
+          <h2>曲库管理</h2>
           <p>按歌曲整理信息、MV、原唱、伴奏和歌词。</p>
         </div>
         <div className="actions">
-          <button
-            className="primary"
-            disabled={busy}
-            onClick={() =>
-              action(async () => {
-                setResults([]);
-                const completed = await organizeBatch(
-                  songs,
-                  reviews,
-                  request,
-                  setResults,
-                );
-                notify(
-                  `已提交 ${completed.filter((r) => r.status === "success").length} 首，逐项结果见下方`,
-                );
-              })
-            }
-          >
-            全部整理
-          </button>
           <button
             disabled={busy || !songs.length}
             onClick={() =>
@@ -109,24 +89,6 @@ export function LibraryManager({ request, notify, onEdit }) {
       </div>
       <BatchResults results={results} />
       <SourceImport {...{ request, action, busy, notify }} />
-      <details className="library-tools">
-        <summary>旧曲库工具</summary>
-        <button
-          disabled={busy}
-          onClick={() =>
-            action(async () => {
-              const result = await request(
-                "/admin/migrate-packages",
-                {},
-                "POST",
-              );
-              notify("已提交 " + result.count + " 首旧资源迁移，旧文件保留");
-            })
-          }
-        >
-          迁移旧播放资源
-        </button>
-      </details>
       <div className="library-tabs">
         {[
           ["pending", "待整理曲库"],
@@ -147,6 +109,31 @@ export function LibraryManager({ request, notify, onEdit }) {
           </button>
         ))}
       </div>
+      {["pending", "audio"].includes(tab) && (
+        <div className="actions tier-actions">
+          {" "}
+          <button
+            className="primary"
+            disabled={busy}
+            onClick={() =>
+              action(async () => {
+                setResults([]);
+                const completed = await organizeBatch(
+                  songs.filter((song) => song.tier === tab),
+                  tab === "pending" ? reviews : [],
+                  request,
+                  setResults,
+                );
+                notify(
+                  `已提交 ${completed.filter((r) => r.status === "success").length} 首，逐项结果见下方`,
+                );
+              })
+            }
+          >
+            全部整理
+          </button>
+        </div>
+      )}
       <input
         aria-label="筛选曲库"
         placeholder="筛选歌名或歌手"
@@ -178,14 +165,69 @@ export function LibraryManager({ request, notify, onEdit }) {
           />
         ),
       )}
-      {songs.map((row) => (
-        <ResourceRow
-          key={row.id}
-          {...{ row, request, action, busy, notify }}
-          hidden={row.tier !== tab || !matches(row)}
-          onEdit={onEdit ? () => onEdit(row) : undefined}
-        />
-      ))}
+      {songs
+        .filter((row) => row.tier !== "standard")
+        .map((row) => (
+          <ResourceRow
+            key={row.id}
+            {...{ row, request, action, busy, notify }}
+            hidden={row.tier !== tab || !matches(row)}
+            onEdit={onEdit ? () => onEdit(row) : undefined}
+          />
+        ))}
+      {[
+        ...new Set(
+          songs
+            .filter((row) => row.tier === "standard")
+            .map((row) => row.artist || "未知歌手"),
+        ),
+      ]
+        .sort((a, b) => a.localeCompare(b, "zh-CN"))
+        .map((artist) => (
+          <details
+            className="artist-library settings-card"
+            key={artist}
+            hidden={
+              tab !== "standard" ||
+              !songs.some(
+                (row) =>
+                  row.tier === "standard" &&
+                  (row.artist || "未知歌手") === artist &&
+                  matches(row),
+              )
+            }
+          >
+            <summary>
+              {artist} ·{" "}
+              {
+                songs.filter(
+                  (row) =>
+                    row.tier === "standard" &&
+                    (row.artist || "未知歌手") === artist &&
+                    matches(row),
+                ).length
+              }{" "}
+              首
+            </summary>
+            <div className="artist-song-list">
+              {songs
+                .filter(
+                  (row) =>
+                    row.tier === "standard" &&
+                    (row.artist || "未知歌手") === artist,
+                )
+                .sort((a, b) => a.title.localeCompare(b.title, "zh-CN"))
+                .map((row) => (
+                  <ResourceRow
+                    key={row.id}
+                    {...{ row, request, action, busy, notify }}
+                    hidden={!matches(row)}
+                    onEdit={onEdit ? () => onEdit(row) : undefined}
+                  />
+                ))}
+            </div>
+          </details>
+        ))}
       {tab === "hidden" &&
         hiddenSongs.filter(matches).map((song) => (
           <article className="workbench-row" key={song.id}>

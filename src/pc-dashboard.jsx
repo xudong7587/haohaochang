@@ -166,6 +166,7 @@ export function PcDashboard({ embedded = false }) {
           </div>
           <section className="settings-card">
             <h2>PC 当前任务</h2>
+            <p>同时处理上限：{worker.concurrency || 1} 首</p>
             <p>
               下方耗时仅指该 PC 任务（包含排队），完整入库还包括 NAS
               上传、资源生成与校验。
@@ -179,6 +180,12 @@ export function PcDashboard({ embedded = false }) {
                     PC 任务耗时 {Math.floor((j.elapsed_seconds || 0) / 60)} 分{" "}
                     {(j.elapsed_seconds || 0) % 60} 秒
                   </p>
+                  {Number.isFinite(j.model_progress) && (
+                    <div>
+                      <progress max="100" value={j.model_progress} />
+                      <span>模型当前步骤 {j.model_progress}%</span>
+                    </div>
+                  )}
                   {j.error && <p className="error">{j.error}</p>}
                   {j.log && (
                     <details>
@@ -212,6 +219,12 @@ export function PcDashboard({ embedded = false }) {
                   ? ` · ${j.finished ? "处理耗时" : "已处理"} ${Math.max(0, Math.round(((j.finished || Date.now()) - j.started) / 1000))} 秒`
                   : ""}
               </p>
+              {Number.isFinite(j.model_progress) && (
+                <div>
+                  <progress max="100" value={j.model_progress} />
+                  <span>模型当前步骤 {j.model_progress}%</span>
+                </div>
+              )}
               {j.error && <p className="error">{j.error}</p>}
             </article>
           ))

@@ -53,3 +53,52 @@ textarea{font:inherit;border:1px solid var(--border);border-radius:8px;padding:1
 
 .pc-dashboard{max-width:1100px;margin:0 auto;padding:24px;display:block}.pc-dashboard .stats{margin-top:20px}.pc-dashboard .stats small{grid-column:1/-1}.pc-login{margin:10vh auto}.pc-connection strong{font-size:16px}.pc-job{padding:18px 0;border-top:1px solid var(--border)}.pc-job pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f4f8;padding:12px;border-radius:8px;font-size:12px}.pc-dashboard .section-heading a{font-size:13px;white-space:nowrap}.pc-dashboard .error{color:#ae4e5a}.pc-dashboard .settings-card p{font-size:13px}@media(max-width:600px){.pc-dashboard{padding:16px}.pc-dashboard .section-heading h1{font-size:23px}.pc-dashboard .stats{grid-template-columns:1fr}.pc-dashboard .section-heading{align-items:start;flex-wrap:wrap}}
 .pc-embedded{max-width:none;padding:0;margin:0}.pc-connection strong{display:block}.pc-connection p{overflow-wrap:anywhere}
+
+[hidden] {
+  display: none !important;
+}
+.settings-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0 20px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg, #f7f6fa);
+}
+.settings-nav .active {
+  background: #665185;
+  color: white;
+  border-color: #665185;
+}
+.artist-library summary {
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 600;
+  padding: 8px 0;
+}
+.artist-song-list {
+  max-height: 65vh;
+  overflow: auto;
+  padding-top: 14px;
+}
+.tier-actions {
+  margin: 16px 0;
+}
+.task-song {
+  font-weight: 600;
+  margin: 8px 0;
+}
+.job progress,
+.pc-job progress {
+  width: min(320px, 70%);
+  margin-right: 12px;
+  accent-color: #8266ac;
+}
+
+.job .task-song {
+  font-size: 15px;
+  font-weight: 600;
+  color: #302b40;
+}

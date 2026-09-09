@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-export function Automation({ request, notify }) {
+export function Automation({ request, notify, section }) {
   const [ai, setAI] = useState(null),
     [favorite, setFavorite] = useState(null),
     [reviews, setReviews] = useState([]),
@@ -33,7 +33,7 @@ export function Automation({ request, notify }) {
   }
   return (
     <>
-      {favorite && (
+      {favorite && (!section || section === "online") && (
         <form
           className="settings-card"
           onSubmit={async (e) => {
@@ -49,12 +49,13 @@ export function Automation({ request, notify }) {
           <h3>B 站收藏夹自动下载</h3>
           <p>
             这里保存的 Cookie
-            也供在线找歌使用。在线找歌另需在下方“连接与在线资源”启用搜索并保存；不必开启收藏夹自动下载。
+            也供在线找歌使用。在线搜索默认启用；不必开启收藏夹自动下载。
           </p>
           <p>
             直接监控收藏夹，无需另装
             bili-sync。首次同步也会下载已有收藏，每轮最多读取 100
-            条并继续分页。每首依次下载、整理和分离，系统最多并行处理两项任务。
+            条并继续分页。每首依次下载、整理和分离，PC GPU
+            默认同时处理三首，在线找歌优先派发。
           </p>
           <label className="checkbox">
             <input
@@ -146,7 +147,7 @@ export function Automation({ request, notify }) {
           </div>
         </form>
       )}
-      {ai && (
+      {ai && (!section || section === "metadata") && (
         <form
           className="settings-card"
           onSubmit={async (e) => {
@@ -235,19 +236,22 @@ export function Automation({ request, notify }) {
           </div>
         </form>
       )}
-      <section className="settings-card">
+      <section
+        className="settings-card"
+        hidden={!!section && section !== "metadata"}
+      >
         <div className="section-heading">
           <h3>待核对 · {reviews.length}</h3>
           <button onClick={refresh}>刷新</button>
         </div>
-        <p>在曲库工作台核对歌曲资料和画面候选，确认后继续处理。</p>
+        <p>在曲库管理核对歌曲资料和画面候选，确认后继续处理。</p>
         {reviews.map((r) => (
           <article key={r.id} className="review-item">
             <p>
               {r.artist} · {r.title}
             </p>
             <p>{r.note}</p>
-            <a href="/admin">前往曲库工作台核对</a>
+            <a href="/admin">前往曲库管理核对</a>
           </article>
         ))}
         <details>

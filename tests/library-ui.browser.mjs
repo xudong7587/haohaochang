@@ -80,6 +80,9 @@ try {
     .getByRole("button", { name: /标准曲库 ·/ })
     .filter({ hasText: /^标准/ })
     .click();
+  await page.locator(".artist-library summary").first().click();
+  assert.equal(await page.getByRole("button", { name: "全部整理", exact: true }).count(), 0);
+  assert.equal(await page.getByText("旧曲库工具", { exact: true }).count(), 0);
   let row = page.locator('[data-song-id="song-a"]');
   assert.deepEqual(await row.locator("header button").allTextContents(), [
     "替换视频",
@@ -220,6 +223,7 @@ try {
   await page.getByRole("button", { name: "恢复歌曲", exact: true }).click();
   assert.equal(await page.evaluate(() => window.songs.length), 1);
   await page.getByRole("button", { name: /^标准曲库/ }).click();
+  await page.locator(".artist-library summary").first().click();
   await row.getByRole("button", { name: "删除", exact: true }).click();
   await row.getByRole("button", { name: "确认永久删除", exact: true }).click();
   await page.waitForFunction(() => window.songs.length === 0);

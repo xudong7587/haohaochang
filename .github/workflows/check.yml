@@ -18,6 +18,8 @@ jobs:
         timeout-minutes: 3
       - run: node tests/online-player.browser.mjs
         timeout-minutes: 3
+      - run: node tests/feedback.browser.mjs
+        timeout-minutes: 3
       - run: node tests/pc-dashboard.browser.mjs
         timeout-minutes: 3
       - run: node scripts/player-check.mjs
@@ -32,6 +34,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/bili-preprocess/test.ps1
       - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/launcher-check.ps1
         timeout-minutes: 2
   worker-protocol:
@@ -43,6 +46,7 @@ jobs:
       - run: pip install fastapi==0.115.12 python-multipart==0.0.20 httpx
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: python -m unittest discover -s separator -p test_protocol.py
+      - run: python -m unittest discover -s separator -p test_concurrency.py
       - run: python -m unittest discover -s pc-worker -p test_lan.py
   apk:
     runs-on: ubuntu-latest

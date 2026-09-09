@@ -71,3 +71,9 @@ B站预览优先使用播放器提供的 AVC/AAC DASH 流，yt-dlp 为后备；�
 `/pc` 是 NAS 前端入口，`GET /api/admin/pc/status` 使用已有管理员认证。NAS 用已配对的工作密钥访问 `/desktop/status`，筛选字段后返回，禁止缓存；浏览器无需访问 PC 地址。管理设置提供同源 `/pc` 链接。
 
 `node tests/pc-dashboard.browser.mjs` 覆盖登录、代理、隐私字段、断线、桌面/手机布局和管理端名称。`npm test` 中的 pc-flow.test.js 用真实 FFmpeg、临时数据库和 localhost 协议替身验证裁剪→提取音频→分离→入库的顺序，不执行模型推理。Windows 运行 `powershell -ExecutionPolicy Bypass -File scripts/launcher-check.ps1` 验证 start.cmd 的隐藏启动链；安装脚本使用临时替身，不下载模型、不启用 LAN。以上检查均纳入 CI。
+
+## 本地反馈优化验证
+
+新增 `node --test tests/feedback.test.js`、`node tests/feedback.browser.mjs`、`python -m unittest discover -s separator -p test_concurrency.py`。Windows 预处理回归为 `powershell -NoProfile -ExecutionPolicy Bypass -File tools/bili-preprocess/test.ps1`。均已纳入 CI 配置，实际本地结果与发布范围见 VALIDATION.md。
+
+在线搜索首次升级启用后记录 `onlineDefaultMigrated`，后续明确关闭不会在重启时重置。设置接口支持独立提交 `onlineEnabled` 或 `publicUrl`，不会覆盖未提交的另一项。后台任务列表保留全部在途任务及有限最近历史；进度为模型当前步骤，无法报告百分比的阶段只显示名称。
