@@ -364,7 +364,7 @@ export function App() {
               setArtist("");
             }}
           >
-            歌星点歌
+            {route === "admin" ? "歌星管理" : "歌星点歌"}
           </IconButton>
           <IconButton
             icon={ListMusic}
@@ -679,8 +679,14 @@ export function App() {
             <>
               <div className="section-heading">
                 <div>
-                  <h1>总有一位，唱进心里。</h1>
-                  <p>按歌手找到你熟悉的旋律。</p>
+                  <h1>
+                    {route === "admin" ? "歌星管理" : "总有一位，唱进心里。"}
+                  </h1>
+                  <p>
+                    {route === "admin"
+                      ? "查看曲库中的歌手与歌曲数量。"
+                      : "按歌手找到你熟悉的旋律。"}
+                  </p>
                 </div>
                 <Users size={30} />
               </div>

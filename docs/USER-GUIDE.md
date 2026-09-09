@@ -1,6 +1,6 @@
 # 好好唱使用手册
 
-v0.3.0 的功能与验证范围见 [开发状态](PROJECT-STATUS.md)。正式安装先装 NAS，再连接播放设备和手机，最后启用自动下载与 PC 算力。[所有安装文件在 Latest Release](https://github.com/xudong7587/haohaochang/releases/latest)。
+v0.3.1 的功能与验证范围见 [开发状态](PROJECT-STATUS.md)。正式安装先装 NAS，再连接播放设备和手机，最后启用自动下载与 PC 算力。[所有安装文件在 Latest Release](https://github.com/xudong7587/haohaochang/releases/latest)。
 
 ## 1. 安装 NAS
 
@@ -71,9 +71,11 @@ docker compose up -d
 
 ## 5. 好好唱资源 AI 整理器（PC）
 
-下载 `haohaochang-resource-ai.zip`，在 Windows 10/11 x64 解压并运行 `start.cmd`。第一次需要下载 Python、PyTorch 和模型；网络失败可重新启动。以后复用环境。
+下载 `haohaochang-resource-ai.zip`，在 Windows 10/11 x64 解压并运行 `start.cmd`，之后安装与任务处理都在后台进行，不会自动打开浏览器或保留命令行窗口。第一次需要下载 Python、PyTorch 和模型；网络失败可重新启动。以后复用环境。
 
 程序先检测显卡和驱动，选择运行环境。兼容 NVIDIA GPU 使用 CUDA，小显存使用短分段；没有支持的显卡、驱动不兼容或实际 CUDA 检查失败时回退 CPU。目前不包含 AMD/Intel GPU 加速后端。
+
+在 NAS 内网地址或反代域名后加 `/pc`，用 NAS 管理密码查看状态，例如 `http://NAS-IP:43210/pc`。管理端 AI 设置也有入口；使用已有反代域名即可，无需单独转发 PC 工作端口。首次安装完成前显示等待连接，安装日志在 PC 的 `runtime/launcher.log`。
 
 默认模型为 `htdemucs`；高级用户可在 NAS 比较耗时更长的 `htdemucs_ft`。状态页显示实际任务阶段、日志，以及整机 CPU、内存和 GPU 占用。
 
@@ -85,7 +87,7 @@ docker compose up -d
 
 PC 空闲时优先使用；分离可按配置使用兼容的备用 API。裁剪必须由支持新版协议的 PC 执行。PC 未上线或连接中断时任务显示“等待 PC 上线”，发现恢复后继续查询保存的任务；手动连接模式可点击重试。没有完成的片段不会冒充可播放歌曲。
 
-配置在 `worker.json`，环境在 `runtime`，模型和任务在 `data`。重复打开快捷方式会进入已有服务；关闭网页不停止服务，关闭启动进程才停止。桌面程序的详细说明见 [PC 说明](../pc-worker/README.md)。
+配置在 `worker.json`，环境在 `runtime`，模型和任务在 `data`。重复运行 `start.cmd` 会复用服务，关闭网页不会停止服务。升级前停止旧整理器进程，再覆盖程序文件，保留这些配置和数据。详细说明见 [PC 说明](../pc-worker/README.md)。
 
 ## 6. 下载、找歌与信息 AI
 
@@ -93,7 +95,7 @@ PC 空闲时优先使用；分离可按配置使用兼容的备用 API。裁剪�
 
 点击视频卡片打开纯视频流预览，下方有播放、暂停、加入曲库。可以在播放或暂停时点击“标记开头”“标记结束”，精确采用当时的视频时间；只标一端时另一端使用视频起点或结尾，不标记则采用整段，“恢复全部”清除标记。结束必须晚于开头。
 
-**加入曲库 → 等待 PC 就绪 → NAS 下载原视频 → PC 裁剪所选片段 → 核对资料与歌词 → 准备独立原唱、伴奏和画面 → 入库。**
+**加入曲库 → 等待 PC 就绪 → NAS 下载原视频 → PC 裁剪所选片段 → 核对资料与歌词 → 从片段提取音频 → PC 去除人声 → 入库。**
 
 加入曲库不会自动点唱。处理进度在后台任务中查看，缺少歌词或版本不确定时进入待核对，补齐后继续。歌名、歌手采用本次搜索确认的输入，不把 UP 主当成歌手。裁剪前的下载保存在 `/download/.ktv-online/sources`，片段也单独保留；这些中间文件不会被自动扫描为完整歌曲。
 

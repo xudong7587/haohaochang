@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $env:PYTHONUTF8 = '1'
+$env:RESOURCE_AI_OPEN_UI = '0'
 $runtime = Join-Path $PSScriptRoot 'runtime'
 New-Item -ItemType Directory -Path $runtime -Force | Out-Null
 $log = Join-Path $runtime 'launcher.log'
@@ -22,10 +23,7 @@ try {
       if ([bool]$health.lanEnabled -ne $expectLan) {
         throw 'The organizer is running in a different network mode. Stop it before changing LAN/local-only mode.'
       }
-      if ($env:RESOURCE_AI_OPEN_UI -ne '0') {
-        Start-Process "http://127.0.0.1:$($config.port)/ui#$($config.key)"
-      }
-      'Existing local service opened.' | Set-Content -LiteralPath $log
+      'Existing worker is running. View status at the NAS /pc page.' | Set-Content -LiteralPath $log
       exit
     }
   }

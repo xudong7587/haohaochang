@@ -1,4 +1,5 @@
 import { startDiscovery } from "./discovery.js";
+import { pcApi } from "./routes/pc.js";
 import { startBackgroundTasks } from "./background-tasks.js";
 import { backgroundApi } from "./background-api.js";
 import { publicLibraryApi } from "./routes/public-library.js";
@@ -167,14 +168,17 @@ export function createApp(options = {}) {
   mediaApi(routeContext);
   onlineApi(routeContext);
   settingsApi(routeContext);
+  pcApi(routeContext);
   reviewsApi(routeContext);
   legacyLibraryApi(routeContext);
   app.get("/", (req, res) => res.redirect(302, "/admin"));
   app.use(express.static(path.resolve("dist")));
-  app.get(["/", "/tv", "/play", "/mobile", "/control", "/admin"], (req, res) =>
-    existsSync(path.resolve("dist/index.html"))
-      ? res.sendFile(path.resolve("dist/index.html"))
-      : res.status(503).send("请先运行 npm run build，或访问 Vite 开发服务"),
+  app.get(
+    ["/", "/tv", "/play", "/mobile", "/control", "/admin", "/pc", "/pc/"],
+    (req, res) =>
+      existsSync(path.resolve("dist/index.html"))
+        ? res.sendFile(path.resolve("dist/index.html"))
+        : res.status(503).send("请先运行 npm run build，或访问 Vite 开发服务"),
   );
   app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);

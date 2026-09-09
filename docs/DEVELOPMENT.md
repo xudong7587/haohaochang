@@ -65,3 +65,9 @@ NAS 从 UDP 回复的源 IPv4 推导 PC 地址，检查发现 nonce，再用绑�
 在线任务使用 .ktv-online 隐藏目录保留原始下载与裁剪结果，避免自动入库器抢先处理完整视频。worker 的 /clip、/jobs/:id、/clip-artifacts/:id 共用持久化队列；NAS 复用分离任务的幂等上传与检查点协议。waiting-worker 状态由重新配对唤醒；手动连接可重试。新浏览器检查为 `node tests/online-player.browser.mjs`，LAN 协议检查为 `python -m unittest discover -s pc-worker -p test_lan.py`，均不探测局域网。
 
 B站预览优先使用播放器提供的 AVC/AAC DASH 流，yt-dlp 为后备；协议实现参考其 [Bilibili 提取器](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/bilibili.py)，平台变动仍可能影响可用性。
+
+## v0.3.1 PC 状态与启动
+
+`/pc` 是 NAS 前端入口，`GET /api/admin/pc/status` 使用已有管理员认证。NAS 用已配对的工作密钥访问 `/desktop/status`，筛选字段后返回，禁止缓存；浏览器无需访问 PC 地址。管理设置提供同源 `/pc` 链接。
+
+`node tests/pc-dashboard.browser.mjs` 覆盖登录、代理、隐私字段、断线、桌面/手机布局和管理端名称。`npm test` 中的 pc-flow.test.js 用真实 FFmpeg、临时数据库和 localhost 协议替身验证裁剪→提取音频→分离→入库的顺序，不执行模型推理。Windows 运行 `powershell -ExecutionPolicy Bypass -File scripts/launcher-check.ps1` 验证 start.cmd 的隐藏启动链；安装脚本使用临时替身，不下载模型、不启用 LAN。以上检查均纳入 CI。

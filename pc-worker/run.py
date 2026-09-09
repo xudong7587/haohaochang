@@ -30,7 +30,7 @@ try:
         if existing.get('lanEnabled', False) != config['lan']:
             print('The organizer is running in a different network mode. Stop it before changing LAN/local-only mode.')
             sys.exit(1)
-        if os.environ.get('RESOURCE_AI_OPEN_UI', '1') == '1':
+        if os.environ.get('RESOURCE_AI_OPEN_UI', '0') == '1':
             import webbrowser
             webbrowser.open(f'http://127.0.0.1:{config["port"]}/ui#{config["key"]}')
         print('Resource AI organizer is already running.')
@@ -81,7 +81,7 @@ register_lan(worker_app.app, config)
 from desktop import register
 register(worker_app.app, root, config, plan, device)
 ui_url = f'http://127.0.0.1:{config["port"]}/ui#{config["key"]}'
-if os.environ.get('RESOURCE_AI_OPEN_UI', '1') == '1':
+if os.environ.get('RESOURCE_AI_OPEN_UI', '0') == '1':
     import threading
     import webbrowser
     threading.Timer(2, lambda: webbrowser.open(ui_url)).start()

@@ -18,6 +18,8 @@ jobs:
         timeout-minutes: 3
       - run: node tests/online-player.browser.mjs
         timeout-minutes: 3
+      - run: node tests/pc-dashboard.browser.mjs
+        timeout-minutes: 3
       - run: node scripts/player-check.mjs
         timeout-minutes: 3
       - uses: actions/upload-artifact@v4
@@ -26,6 +28,12 @@ jobs:
           name: browser-validation
           path: test-results/
       - run: docker build -t haohaochang:test .
+  windows-launcher:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/launcher-check.ps1
+        timeout-minutes: 2
   worker-protocol:
     runs-on: ubuntu-latest
     steps:

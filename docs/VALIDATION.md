@@ -77,3 +77,10 @@ v0.2.0 发布提交为 `f50c823395981343fcff69bbd8740169b84dc408`，已合并 ma
 真实公开 B站搜索返回 20 条；视频预览解析得到独立画面/音频流，NAS 代理两路 Range=bytes=0-1023 均返回 206 与 1024 字节。yt-dlp 重复请求曾触发平台 412，改为播放器 API 优先、yt-dlp 后备，并增加缓存与重试提示。此验证不代表所有视频、Cookie、地区或未来平台变化均可用。
 
 PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时长在 0.15 秒容差内且保留音视频轨道；原输入保留，重试复用任务/结果。LAN 发现测试通过内存 UDP 替身及 localhost HTTP 验证，不代表已测试家庭广播、Docker host 网络或 Windows 防火墙。没有做本版本真实音乐 GPU 音质或家庭 TV 音响验收。发布提交 f9739bdfaa1edc73474a6436d9b17068c2a17316 的 [标签 CI](https://github.com/xudong7587/haohaochang/actions/runs/34312286038)、[main CI](https://github.com/xudong7587/haohaochang/actions/runs/34312285811) 和 [两套镜像启动检查及 latest 更新](https://github.com/xudong7587/haohaochang/actions/runs/34312286052) 均全部成功。
+
+## 2026-09-09 · v0.3.1 本地验证
+
+- `npm test`：77 项通过，包含真实 FFmpeg 媒体处理。新增 pc-flow.test.js 验证 4 秒视频标记 1.25–2.75 秒后，分离接口收到约 1.5 秒音频；不标记收到全长；裁剪失败不派发导入，原视频字节不变。模型输出使用协议替身，此项不证明去人声音质。
+- `npm run build` 通过；ui-check、player-check、library-ui、online-player、pc-dashboard 五类浏览器检查通过。新增页面覆盖管理密码、只访问 NAS 同源、PC 密钥及私有路径过滤、在线/断线、刷新与会话、390px 手机布局、管理端“歌星管理”。截图保存在 test-results/pc-dashboard。
+- Python 工作协议 11 项、模拟 LAN 2 项通过。Windows launcher-check 真实执行 start.cmd→open.vbs→隐藏 PowerShell，验证关闭自动浏览器和保留 local-only 设置；安装入口使用临时替身，未下载模型、未启用 LAN。
+- 家庭 NAS 反代配置、广播发现与电视实机未在本轮验证；发布检查以 v0.3.1 标签的 Actions 和 Release 为准。

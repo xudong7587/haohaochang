@@ -87,6 +87,12 @@ export function AISettings({ attempt }) {
         启用歌曲整理与伴奏分离
       </label>
       <h4>局域网 PC 整理器</h4>
+      <p>
+        <a href="/pc" target="_blank" rel="noreferrer">
+          打开 PC 整理状态
+        </a>{" "}
+        · 使用当前 NAS 内网或反代地址的 /pc 页面。
+      </p>
       <label className="checkbox">
         <input
           type="checkbox"
