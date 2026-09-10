@@ -139,6 +139,7 @@ export async function encodePackageResource(
   kind,
   args,
   directory,
+  verification,
 ) {
   reportResourceStage(
     store,
@@ -151,6 +152,7 @@ export async function encodePackageResource(
   const duration = job && inputInfo ? inputInfo.duration : 0;
   const passthrough =
     kind === "video" && args[args.indexOf("-c:v") + 1] === "copy";
+  verification ||= passthrough ? "packets" : "decode";
   let result;
   try {
     result = await encodeResource(
@@ -166,7 +168,7 @@ export async function encodePackageResource(
               }),
           }
         : null,
-      passthrough ? "packets" : "decode",
+      verification,
     );
   } finally {
     if (job) taskProgress(store, job, null);
@@ -200,7 +202,7 @@ export async function encodePackageResource(
             width: media.width,
             height: media.height,
             codec: media.videoCodec,
-            verification: passthrough ? "packets" : "decode",
+            verification,
           }
         : {}),
     },
@@ -271,6 +273,7 @@ export async function encodePicture(
         ...(!force && info.videoCodec === "hevc" ? ["-tag:v", "hvc1"] : []),
       ],
       directory,
+      prepared ? "decode" : undefined,
     );
     if (prepared) store.set(prepared.checkpointKey, null);
   } finally {
