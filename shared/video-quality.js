@@ -27,3 +27,13 @@ export function qualityChoices(formats) {
       label: value === "highest" ? "最高画质（至少 720p）" : `${value}p`,
     }));
 }
+export function previewDownloadHeight(preview, value) {
+  const quality = videoQuality(value);
+  const limit = quality === "highest" ? Infinity : Number(quality);
+  const heights = (preview.qualities || []).map((item) => Number(item.value));
+  if (preview.downloadHeight) heights.push(preview.downloadHeight);
+  return Math.max(
+    0,
+    ...heights.filter((height) => height > 0 && height <= limit),
+  );
+}

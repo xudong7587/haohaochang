@@ -68,7 +68,9 @@ export const bilibiliProvider = {
       title: page && pages.length > 1 ? page.part : body.data.title,
       videoTitle: body.data.title,
       uploader: body.data.owner?.name,
-      cover: String(body.data.pic || "").replace(/^http:/, "https:").replace(/^\/\//, "https://"),
+      cover: String(body.data.pic || "")
+        .replace(/^http:/, "https:")
+        .replace(/^\/\//, "https://"),
       duration: page?.duration ?? body.data.duration,
     };
   },
@@ -164,7 +166,7 @@ export const bilibiliProvider = {
     }
     const available = body.data.dash.video || [];
     const limit = quality === "highest" ? Infinity : Number(quality);
-    const video = available
+    const downloadVideo = available
       .filter(
         (v) => (download || /^avc1/i.test(v.codecs || "")) && v.height <= limit,
       )
@@ -174,9 +176,22 @@ export const bilibiliProvider = {
           Number(/^avc1/i.test(b.codecs)) - Number(/^avc1/i.test(a.codecs)) ||
           b.bandwidth - a.bandwidth,
       )[0];
+    const compatible = available.filter((v) => /^avc1/i.test(v.codecs || ""));
+    const video = download
+      ? downloadVideo
+      : compatible
+          .filter((v) => v.height <= 360)
+          .sort(
+            (a, b) => b.height - a.height || a.bandwidth - b.bandwidth,
+          )[0] ||
+        compatible.sort(
+          (a, b) => a.height - b.height || a.bandwidth - b.bandwidth,
+        )[0];
     const audio = body.data.dash.audio
       ?.filter((a) => /^mp4a/i.test(a.codecs || ""))
-      .sort((a, b) => b.bandwidth - a.bandwidth)[0];
+      .sort((a, b) =>
+        download ? b.bandwidth - a.bandwidth : a.bandwidth - b.bandwidth,
+      )[0];
     if (!video || !audio) throw new Error("没有适合浏览器播放的音视频轨道");
     return {
       duration: Number(body.data.timelength) / 1000 || info.duration,

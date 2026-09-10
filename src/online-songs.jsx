@@ -39,11 +39,7 @@ function VideoPreview({
     let live = true;
     setError("");
     setPreview(null);
-    api(
-      "/online/preview",
-      { url: row.url, refresh: reload > 0, quality },
-      "POST",
-    )
+    api("/online/preview", { url: row.url, refresh: reload > 0 }, "POST")
       .then((v) => {
         if (live) {
           setPreview(v);
@@ -56,13 +52,12 @@ function VideoPreview({
     return () => {
       live = false;
     };
-  }, [row.url, reload, quality]);
+  }, [row.url, reload]);
   function sync(force = false) {
     const v = video.current,
       a = audio.current;
     if (!v || !a) return;
-    if (force || Math.abs(a.currentTime - v.currentTime) > 0.15)
-      a.currentTime = v.currentTime;
+    if (force) a.currentTime = v.currentTime;
     a.volume = v.volume;
     a.muted = v.muted;
     a.playbackRate = v.playbackRate;
@@ -126,15 +121,12 @@ function VideoPreview({
       <div className="song-preview">
         <p className="preview-source-title">{row.title}</p>
         <label className="preview-quality">
-          预览与下载清晰度
+          下载清晰度
           <select
             aria-label="视频清晰度"
             value={quality}
             disabled={busy || added}
             onChange={(event) => {
-              resumeAt.current = video.current?.currentTime || position;
-              pause();
-              setPreview(null);
               setQuality(event.target.value);
             }}
           >
@@ -147,11 +139,8 @@ function VideoPreview({
         </label>
         <p className="note">
           {preview?.previewHeight
-            ? `当前预览 ${preview.previewHeight}p；下载最高可用 ${preview.downloadHeight || preview.previewHeight}p。`
-            : "按当前 B站账号权限获取清晰度。"}
-          {preview?.downloadHeight > preview?.previewHeight
-            ? " 浏览器使用兼容画质试听，下载保留所选高清画质。"
-            : ""}
+            ? `当前预览 ${preview.previewHeight}p；预览优先使用 360p，下载按所选画质执行。`
+            : "预览优先使用 360p，下载按所选画质执行。"}
           会员高清需要在“在线资源”保存该会员账号最新的 B站
           Cookie；仅在网页登录不会同步到 NAS。
         </p>
@@ -162,7 +151,7 @@ function VideoPreview({
               src={mediaUrl(preview.video)}
               controls
               playsInline
-              preload="metadata"
+              preload="auto"
               aria-label="B站视频预览"
               onLoadedMetadata={() => {
                 video.current.currentTime = Math.min(
@@ -173,7 +162,6 @@ function VideoPreview({
               }}
               onTimeUpdate={() => {
                 setPosition(video.current.currentTime);
-                sync();
               }}
               onSeeking={() => sync(true)}
               onSeeked={() => {
@@ -184,7 +172,7 @@ function VideoPreview({
                     .catch(() => setError("请点击播放以启用声音"));
               }}
               onPlay={() => {
-                sync();
+                sync(true);
                 audio.current?.play().catch((error) => {
                   if (error.name !== "AbortError")
                     setError("请点击下方播放按钮以启用声音");

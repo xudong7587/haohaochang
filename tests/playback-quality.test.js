@@ -9,7 +9,11 @@ import { createApp } from "../server/app.js";
 import { liveEvents } from "../server/live-events.js";
 import { bilibiliProvider } from "../server/providers/bilibili.js";
 import { previewSessions } from "../server/online-preview.js";
-import { videoFormat, videoQuality } from "../shared/video-quality.js";
+import {
+  videoFormat,
+  videoQuality,
+  previewDownloadHeight,
+} from "../shared/video-quality.js";
 import { createMediaDownloader } from "../server/sources.js";
 import { run } from "../server/process.js";
 import { encodeResource, encodePicture } from "../server/song-package.js";
@@ -184,9 +188,12 @@ test("Bilibili requests premium formats, displays actual compatible preview and 
     "SESSDATA=fixture",
     fetcher,
   );
-  assert.equal(highest.video, "1080-premium");
-  assert.equal(highest.previewHeight, 1080);
+  assert.equal(highest.video, "360");
+  assert.equal(highest.previewHeight, 360);
   assert.equal(highest.downloadHeight, 2160);
+  assert.equal(previewDownloadHeight(highest, "highest"), 2160);
+  assert.equal(previewDownloadHeight(highest, "1080"), 1080);
+  assert.equal(previewDownloadHeight(highest, "360"), 360);
   assert.deepEqual(
     highest.qualities.map((q) => q.value),
     ["highest", "2160", "1080", "360"],

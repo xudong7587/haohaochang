@@ -118,8 +118,8 @@ app.post("/api/online/preview", (q, r) => {
       { value: "1080", label: "1080p" },
       { value: "360", label: "360p" },
     ],
-    previewHeight: Number(q.body.quality) || 1080,
-    downloadHeight: Number(q.body.quality) || 2160,
+    previewHeight: 360,
+    downloadHeight: 2160,
     id: "preview-fixture",
     duration: 12,
     video: "/video.mp4",
@@ -200,11 +200,15 @@ try {
     path: "test-results/online/marked-preview.png",
     fullPage: true,
   });
-  await page.getByLabel("视频清晰度").selectOption("360");
+  const previewCount = previewRequests.length;
+  const previewSrc = await page.locator("video").getAttribute("src");
+  await page.getByLabel("视频清晰度").selectOption("1080");
   await page.waitForFunction(
     () => document.querySelector("video")?.readyState >= 1,
   );
-  assert.equal(previewRequests.at(-1).quality, "360");
+  assert.equal(previewRequests.length, previewCount);
+  assert.equal(await page.locator("video").getAttribute("src"), previewSrc);
+  assert.equal(previewRequests.at(-1).quality, undefined);
   assert.ok(
     Math.abs(
       (await page.locator("video").evaluate((v) => v.currentTime)) - 3.75,
@@ -216,7 +220,7 @@ try {
     .waitFor();
   assert.deepEqual(submissions[0].clip, { start: 1.25, end: 3.75 });
   assert.equal(submissions[0].title, "测试歌名");
-  assert.equal(submissions[0].quality, "360");
+  assert.equal(submissions[0].quality, "1080");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator(".video-card").nth(1).click();
   await page.waitForFunction(

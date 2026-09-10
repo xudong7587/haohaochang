@@ -1,8 +1,4 @@
-import {
-  videoQuality,
-  videoFormat,
-  qualityChoices,
-} from "../shared/video-quality.js";
+import { videoQuality, qualityChoices } from "../shared/video-quality.js";
 import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -85,9 +81,7 @@ export async function resolvePreview(url, cookie, dir, quality = "highest") {
           "1",
           ...(file ? ["--cookies", file] : []),
           "-f",
-          videoFormat(quality)
-            .replace("bv*", "bv[vcodec^=avc1][ext=mp4]")
-            .replace("+ba", "+ba[ext=m4a]"),
+          "bv[vcodec^=avc1][ext=mp4][height<=360]+wa[ext=m4a]/b[vcodec^=avc1][ext=mp4][height<=360]/wv[vcodec^=avc1][ext=mp4]+wa[ext=m4a]/worst[vcodec^=avc1][ext=mp4]",
           url,
         ],
         60000,

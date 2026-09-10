@@ -1,4 +1,7 @@
-import { videoQuality } from "../../shared/video-quality.js";
+import {
+  videoQuality,
+  previewDownloadHeight,
+} from "../../shared/video-quality.js";
 import { canonicalVideo, onlineSearch } from "../media.js";
 import { canEnqueue } from "../resource-manifest.js";
 
@@ -105,7 +108,7 @@ export function onlineApi({
         dir,
         {
           refresh: req.body.refresh === true,
-          quality: videoQuality(req.body.quality),
+          quality: "highest",
         },
       ),
     );
@@ -200,13 +203,12 @@ export function onlineApi({
       payload.enqueue = payload.priority === "mobile";
       if (req.body.previewId) {
         const selected = previews.lookup(req.body.previewId);
-        if (
-          selected.url !== payload.url ||
-          selected.quality !== payload.quality
-        )
-          throw fail(400, "清晰度预览已变化，请重新预览");
-        payload.expectedHeight =
-          selected.downloadHeight || selected.previewHeight || 0;
+        if (selected.url !== payload.url)
+          throw fail(400, "预览不属于当前视频，请重新预览");
+        payload.expectedHeight = previewDownloadHeight(
+          selected,
+          payload.quality,
+        );
         if (payload.expectedHeight)
           requireDownloadHeight(payload.expectedHeight, payload.quality);
       }

@@ -22,6 +22,106 @@ import { createApp } from "../server/app.js";
 process.env.FFMPEG = ffmpeg;
 process.env.FFPROBE = ffprobe.path;
 
+test("low-resolution preview accepts a separate HD download choice and preserves clip identity", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-preview-quality-"));
+  const service = createApp({
+    dataDir: path.join(dir, "db"),
+    roots: [path.join(dir, "media")],
+    adminToken: "preview-test-password",
+    worker: false,
+    discovery: false,
+  });
+  service.store.set("ai", { enabled: true });
+  const server = service.app.listen(0, "127.0.0.1");
+  await new Promise((r) => server.once("listening", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await service.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+  const localFetch = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", async (input) => {
+    const url = new URL(input);
+    assert.equal(url.hostname, "api.bilibili.com");
+    return new Response(
+      JSON.stringify(
+        url.pathname.endsWith("/view")
+          ? {
+              code: 0,
+              data: { cid: 123, bvid: "BV1BZbSzZEGT", duration: 120 },
+            }
+          : {
+              code: 0,
+              data: {
+                timelength: 120000,
+                dash: {
+                  video: [360, 1080, 2160].map((height) => ({
+                    height,
+                    codecs: height === 2160 ? "hev1" : "avc1",
+                    bandwidth: height * 1000,
+                    baseUrl: `https://fixture.bilivideo.com/${height}`,
+                  })),
+                  audio: [
+                    {
+                      codecs: "mp4a",
+                      baseUrl: "https://fixture.bilivideo.com/audio",
+                    },
+                  ],
+                },
+              },
+            },
+      ),
+    );
+  });
+  const post = async (endpoint, body) =>
+    localFetch(`http://127.0.0.1:${server.address().port}/api/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + service.store.get("roomToken"),
+      },
+      body: JSON.stringify(body),
+    });
+  const url = "https://www.bilibili.com/video/BV1BZbSzZEGT";
+  const preview = await (
+    await post("online/preview", { url, quality: "2160" })
+  ).json();
+  assert.equal(preview.previewHeight, 360);
+  assert.equal(preview.downloadHeight, 2160);
+  const response = await post("online", {
+    url,
+    title: "测试歌",
+    artist: "测试歌手",
+    onlineSelection: true,
+    previewId: preview.id,
+    quality: "1080",
+    clip: { start: 12, end: 32 },
+  });
+  assert.equal(response.status, 200);
+  const { id } = await response.json();
+  const payload = JSON.parse(
+    service.store.db.prepare("SELECT payload FROM jobs WHERE id=?").get(id)
+      .payload,
+  );
+  assert.equal(payload.quality, "1080");
+  assert.equal(payload.expectedHeight, 1080);
+  assert.deepEqual(payload.clip, { start: 12, end: 32 });
+  assert.equal(
+    (
+      await post("online", {
+        url: "https://www.bilibili.com/video/BV1gF4m1K7Aa",
+        title: "另一首",
+        artist: "歌手",
+        onlineSelection: true,
+        previewId: preview.id,
+        quality: "highest",
+      })
+    ).status,
+    400,
+  );
+});
+
 test("LAN discovery pairs only fresh private sender replies and never broadcasts credentials", async () => {
   const values = new Map(),
     outgoing = [],
