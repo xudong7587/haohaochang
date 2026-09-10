@@ -107,6 +107,12 @@ const browser = await chromium.launch({
     : {}),
 });
 try {
+  for (const id of ["retry-failure", "delete-failure"])
+    service.store.db
+      .prepare(
+        "INSERT INTO jobs(id,kind,payload,status,created) VALUES(?, 'download', ?, 'failed', ?)",
+      )
+      .run(id, JSON.stringify({ title: id, artist: "测试歌手" }), Date.now());
   assert.equal((await fetch(base + "/api/admin/pc/status")).status, 401);
   assert.equal(requests, 0);
   const response = await fetch(base + "/api/admin/pc/status", {
@@ -140,6 +146,33 @@ try {
   await page.getByRole("button", { name: "查看状态" }).click();
   await page.getByText("PC 已连接，任务自动处理", { exact: true }).waitFor();
   await page.getByText("测试视频裁剪", { exact: true }).waitFor();
+  const retryRow = page.locator('[data-task-id="nas-retry-failure"]');
+  await retryRow.getByRole("button", { name: "重试", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      !document.querySelector(
+        '[data-task-id="nas-retry-failure"] .task-actions button',
+      ),
+  );
+  assert.equal(
+    service.store.db
+      .prepare("SELECT status FROM jobs WHERE id='retry-failure'")
+      .get().status,
+    "queued",
+  );
+  await page
+    .locator('[data-task-id="nas-delete-failure"]')
+    .getByRole("button", { name: "删除", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => !document.querySelector('[data-task-id="nas-delete-failure"]'),
+  );
+  assert.equal(
+    service.store.db
+      .prepare("SELECT id FROM jobs WHERE id='delete-failure'")
+      .get(),
+    undefined,
+  );
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
   await page.getByRole("button", { name: "安装新版", exact: true }).waitFor();
   assert.ok(

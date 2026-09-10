@@ -259,6 +259,24 @@ try {
     .waitFor();
   await tv.keyboard.press("Escape");
   assert.equal(await tv.locator(".tv-player.is-full").count(), 0);
+  const queueBeforeReload = service.store.db
+    .prepare("SELECT id,song_id FROM queue ORDER BY position")
+    .all();
+  await tv.getByRole("button", { name: "热更新", exact: true }).focus();
+  await tv.keyboard.press("Enter");
+  await tv.waitForURL(/refresh=\d+/);
+  await tv.locator(".app.tv").waitFor();
+  assert.equal(
+    await tv.evaluate(() => localStorage.getItem("roomToken")),
+    service.store.get("roomToken"),
+  );
+  assert.deepEqual(
+    service.store.db
+      .prepare("SELECT id,song_id FROM queue ORDER BY position")
+      .all(),
+    queueBeforeReload,
+  );
+  assert.equal(await tv.locator(".tv-login-qr").count(), 0);
   await native.close();
   const phone = await browser.newContext({
     viewport: { width: 390, height: 844 },

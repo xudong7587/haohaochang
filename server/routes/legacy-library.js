@@ -114,10 +114,24 @@ export function legacyLibraryApi({
     const job = db.prepare("SELECT * FROM jobs WHERE id=?").get(req.params.id);
     if (!job || !["failed", "waiting-worker"].includes(job.status))
       throw fail(409, "仅失败或等待 PC 的任务可重试");
-    db.prepare("UPDATE jobs SET status='queued',error='' WHERE id=?").run(
-      job.id,
-    );
+    db.prepare(
+      "UPDATE jobs SET status='queued',stage='queued',started=NULL,finished=NULL,error='' WHERE id=?",
+    ).run(job.id);
     setImmediate(work);
+    emit("tasks", {});
+    res.json({ ok: true });
+  });
+  app.delete("/api/admin/jobs/:id", admin, (req, res) => {
+    const job = db
+      .prepare("SELECT status FROM jobs WHERE id=?")
+      .get(req.params.id);
+    if (!job) throw fail(404, "任务不存在或已删除");
+    if (job.status !== "failed")
+      throw fail(409, "只能删除失败任务记录，请等待正在处理的任务结束");
+    db.prepare("DELETE FROM jobs WHERE id=? AND status='failed'").run(
+      req.params.id,
+    );
+    emit("tasks", {});
     res.json({ ok: true });
   });
   app.post("/api/admin/songs/:id/probe", admin, async (req, res) => {

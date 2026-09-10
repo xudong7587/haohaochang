@@ -5,19 +5,13 @@ import { pipeline } from "node:stream/promises";
 import { run } from "./process.js";
 import { withBiliCookie, canonicalVideo } from "./sources.js";
 import { bilibiliProvider } from "./providers/bilibili.js";
+import {
+  biliStreamUrl,
+  biliStreamCandidates,
+  openBiliStream,
+} from "./bili-stream.js";
+export { biliStreamUrl } from "./bili-stream.js";
 
-export function biliStreamUrl(value) {
-  const url = new URL(value);
-  if (
-    url.protocol !== "https:" ||
-    url.port ||
-    url.username ||
-    url.password ||
-    !/(^|\.)bilivideo\.(com|cn)$/.test(url.hostname)
-  )
-    throw new Error("B站未返回可用的直连视频流");
-  return url.href;
-}
 export async function resolvePreview(url, cookie, dir, quality = "highest") {
   quality = videoQuality(quality);
   url = canonicalVideo(url);
@@ -26,41 +20,25 @@ export async function resolvePreview(url, cookie, dir, quality = "highest") {
   let primaryError;
   try {
     const data = await bilibiliProvider.preview(url, cookie, fetch, quality);
-    const media = (value) => ({
-      url: biliStreamUrl(value),
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: "https://www.bilibili.com/",
-      },
-    });
+    const media = (value, backups) => {
+      const urls = biliStreamCandidates(value, backups);
+      return {
+        url: urls[0],
+        backups: urls.slice(1),
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Referer: "https://www.bilibili.com/",
+        },
+      };
+    };
     return {
       duration: data.duration,
       quality,
       qualities: data.qualities,
       previewHeight: data.previewHeight,
       downloadHeight: data.downloadHeight,
-      video: {
-        ...media(data.video),
-        backups: (data.videoBackups || []).filter((value) => {
-          try {
-            biliStreamUrl(value);
-            return true;
-          } catch {
-            return false;
-          }
-        }),
-      },
-      audio: {
-        ...media(data.audio),
-        backups: (data.audioBackups || []).filter((value) => {
-          try {
-            biliStreamUrl(value);
-            return true;
-          } catch {
-            return false;
-          }
-        }),
-      },
+      video: media(data.video, data.videoBackups),
+      audio: media(data.audio, data.audioBackups),
     };
   } catch (error) {
     primaryError = error;
@@ -225,29 +203,20 @@ export function previewSessions({
       streaming++;
       try {
         let response;
-        for (const candidate of [media.url, ...(media.backups || [])].slice(
-          0,
-          4,
+        for (const candidate of biliStreamCandidates(
+          media.url,
+          media.backups,
         )) {
-          let url = candidate;
           try {
-            for (let count = 0; count < 4; count++) {
-              response = await fetcher(biliStreamUrl(url), {
-                headers: {
-                  ...media.headers,
-                  "Accept-Encoding": "identity",
-                  ...(range ? { Range: range } : {}),
-                },
-                signal: controller.signal,
-                redirect: "manual",
-              });
-              if ([301, 302, 303, 307, 308].includes(response.status)) {
-                url = new URL(response.headers.get("location"), url).href;
-                await response.body?.cancel();
-                continue;
-              }
-              break;
-            }
+            response = await openBiliStream(candidate, {
+              fetcher,
+              headers: {
+                ...media.headers,
+                "Accept-Encoding": "identity",
+                ...(range ? { Range: range } : {}),
+              },
+              signal: controller.signal,
+            });
             if ([200, 206, 416].includes(response.status)) break;
             await response.body?.cancel();
           } catch (error) {

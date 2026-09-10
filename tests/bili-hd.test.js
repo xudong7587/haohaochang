@@ -104,7 +104,7 @@ test("real DASH files retain 4K with independent audio through download cache an
     "-f",
     "lavfi",
     "-i",
-    "color=s=3840x2160:r=2:d=1",
+    "color=s=3840x2160:r=2:d=4",
     "-c:v",
     "libx264",
     "-preset",
@@ -125,7 +125,7 @@ test("real DASH files retain 4K with independent audio through download cache an
   ]);
   const resolve = async () => ({
     previewHeight: 2160,
-    duration: 1,
+    duration: 1000,
     video: "video",
     audio: "audio",
   });
@@ -151,6 +151,10 @@ test("real DASH files retain 4K with independent audio through download cache an
   assert.equal(transfers, 2);
   assert.equal((await probe(one.videoFile)).height, 2160);
   assert.equal((await probe(one.file)).hasVideo, false);
+  assert.ok(
+    (await probe(one.videoFile)).duration - (await probe(one.file)).duration >
+      2,
+  );
   assert.equal((await probe(one.videoFile)).audio.length, 0);
   assert.ok(!one.file.includes("secret-fixture"));
   const media = path.join(root, "media");

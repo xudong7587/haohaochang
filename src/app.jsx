@@ -15,6 +15,7 @@ import {
 } from "./api.js";
 import { TvLoginQr, PhonePairing } from "./tv-pairing.jsx";
 import { handleTvBack } from "./tv-back.js";
+import { reloadInterface } from "./reload-interface.js";
 import { modeNames, statusNames } from "./view-constants.js";
 import { SearchBox, Empty, Modal } from "./components.jsx";
 import { Settings } from "./admin-settings.jsx";
@@ -566,6 +567,14 @@ export function App() {
                   : "家庭 KTV"}
           </div>
           <div className="header-right">
+            {route === "tv" && (
+              <button
+                onClick={reloadInterface}
+                title="重新加载 NAS 最新界面，保留登录与已点列表；播放会短暂中断"
+              >
+                <RefreshCw size={18} /> 热更新
+              </button>
+            )}
             {route === "admin" && (
               <a
                 className="web-room-link"

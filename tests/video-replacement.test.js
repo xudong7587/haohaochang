@@ -111,6 +111,25 @@ test("replacing an MV publishes one active version, preserves usable audio, and 
   );
   assert.equal(store.get("package:" + id), dir);
   assert.equal(current().status, "ready");
+  await replaceVideo(
+    store,
+    current(),
+    mismatched,
+    "test:confirmed-long",
+    cache,
+    { confirmed: true, offset: 0 },
+  );
+  const confirmedDir = store.get("package:" + id);
+  assert.notEqual(confirmedDir, dir);
+  assert.deepEqual(
+    await readFile(path.join(confirmedDir, "原唱.m4a")),
+    original,
+  );
+  assert.deepEqual(
+    await readFile(path.join(confirmedDir, "伴奏.m4a")),
+    backing,
+  );
+  assert.equal(current().lyrics, "[00:00]原歌词");
   const pending = "b".repeat(24);
   store.db
     .prepare(

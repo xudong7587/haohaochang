@@ -1,4 +1,5 @@
 import { TaskList } from "./task-list.jsx";
+import { TaskActions } from "./task-actions.jsx";
 import React, { useState, useEffect, useRef } from "react";
 import { BackgroundSettings } from "./background-settings.jsx";
 import { HardDrive, Check, RefreshCw } from "lucide-react";
@@ -192,20 +193,13 @@ export function Settings({ admin, attempt, refresh }) {
           <TaskList
             jobs={admin.jobs}
             label="后台任务"
-            actions={(j) =>
-              ["failed", "waiting-worker"].includes(j.status) && (
-                <button
-                  onClick={async () => {
-                    await attempt(() =>
-                      api(`/admin/jobs/${j.id}/retry`, {}, "POST", true),
-                    );
-                    refresh();
-                  }}
-                >
-                  重试
-                </button>
-              )
-            }
+            actions={(job) => (
+              <TaskActions
+                job={job}
+                request={(url, body, method) => api(url, body, method, true)}
+                refresh={refresh}
+              />
+            )}
           />
         </section>
       </div>

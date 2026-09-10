@@ -35,12 +35,8 @@ export async function upgradeSplitVideo(store, song, file, sourceUrl, cache) {
     );
   } catch {}
   if (previous?.height >= incoming.height) return false;
-  if (
-    !incoming.hasVideo ||
-    incoming.audio.length ||
-    Math.abs(incoming.duration - song.duration) > 1
-  )
-    throw new Error("高清画面与已有音频不匹配，已保留旧资源");
+  if (!incoming.hasVideo || incoming.audio.length || !(incoming.duration > 0))
+    throw new Error("高清画面缺少有效的独立视频轨道，已保留旧资源");
   const stage = await stageResources(store, song, cache, {
     phase: "upgrade-hd",
   });

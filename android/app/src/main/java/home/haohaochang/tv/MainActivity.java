@@ -117,7 +117,8 @@ public final class MainActivity extends Activity {
     private void showOverlay(View view){if(overlay!=null)root.removeView(overlay);overlay=view;web.setVisibility(View.INVISIBLE);root.addView(view,new FrameLayout.LayoutParams(-1,-1));}
     private void hideOverlay(){if(overlay!=null){root.removeView(overlay);overlay=null;}web.setVisibility(View.VISIBLE);}
     private void exitFull(){if(fullVideo!=null){root.removeView(fullVideo);fullVideo=null;web.setVisibility(View.VISIBLE);web.requestFocus();if(fullCallback!=null){fullCallback.onCustomViewHidden();fullCallback=null;}}}
-    @Override public boolean dispatchKeyEvent(KeyEvent event){if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getKeyCode()==KeyEvent.KEYCODE_MENU){new AlertDialog.Builder(this).setTitle("好好唱设置").setItems(new String[]{"连接设置","重新自动发现","检查应用更新"},(d,w)->{if(w==0)settings();else if(w==1)discover();else updater.check();}).show();return true;}return super.dispatchKeyEvent(event);}
+    private void reloadInterface(){if(server.isEmpty()){settings();return;}cancelDiscovery();exitFull();web.clearCache(true);web.loadUrl(server+(television?"/tv":"/play")+"?refresh="+System.currentTimeMillis(),java.util.Collections.singletonMap("Cache-Control","no-cache"));}
+    @Override public boolean dispatchKeyEvent(KeyEvent event){if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getKeyCode()==KeyEvent.KEYCODE_MENU){new AlertDialog.Builder(this).setTitle("好好唱设置").setItems(new String[]{"热更新网页","连接设置","重新自动发现","检查应用更新"},(d,w)->{if(w==0)reloadInterface();else if(w==1)settings();else if(w==2)discover();else updater.check();}).show();return true;}return super.dispatchKeyEvent(event);}
     @Override public void onBackPressed(){handleBack();}
     private void handleBack(){
         if(fullVideo!=null){exitFull();exitPressedAt=0;return;}if(overlay!=null){exitOrHint();return;}if(backPending)return;backPending=true;

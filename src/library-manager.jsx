@@ -9,6 +9,7 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { TaskList, completedTask } from "./task-list.jsx";
+import { TaskActions } from "./task-actions.jsx";
 import { Pagination } from "./workbench-controls.jsx";
 import { ResourceRow } from "./library/resource-row.jsx";
 import { VideoReview } from "./library/video-review.jsx";
@@ -237,20 +238,7 @@ export function LibraryManager({ request, notify, onEdit }) {
           <TaskList
             jobs={tasks}
             label="曲库任务"
-            actions={(j) =>
-              ["failed", "waiting-worker"].includes(j.status) && (
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    action(() =>
-                      request(`/admin/jobs/${j.id}/retry`, {}, "POST"),
-                    )
-                  }
-                >
-                  重试
-                </button>
-              )
-            }
+            actions={(job) => <TaskActions {...{ job, request, refresh }} />}
           />
         </div>
       </section>

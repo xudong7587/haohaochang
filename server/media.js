@@ -115,7 +115,9 @@ export async function scanLibrary(store, roots) {
                   idle: false,
                 });
               if (poster && !song.poster)
-                store.db.prepare("UPDATE songs SET poster=? WHERE id=?").run(poster, id);
+                store.db
+                  .prepare("UPDATE songs SET poster=? WHERE id=?")
+                  .run(poster, id);
               if (
                 /\.(mp3|flac|wav|m4a|ogg|aac)$/i.test(entry.name) &&
                 !store.get("video-source:" + id)?.keepAudio
@@ -171,13 +173,7 @@ export async function prepareSong(store, id, roots, cache) {
       const splitVideo = store.get("split-video:" + id);
       if (splitVideo) {
         const video = await probe(await safeMedia(splitVideo, roots));
-        if (
-          !video.hasVideo ||
-          (splitVideo !==
-            path.join(store.get("package:" + id) || "", "画面.mp4") &&
-            Math.abs(video.duration - info.duration) > 1)
-        )
-          throw new Error("独立画面与音频时长不匹配");
+        if (!video.hasVideo) throw new Error("独立画面文件没有有效视频轨道");
         info.hasVideo = true;
       }
       if (store.get("video-source:" + id)?.keepAudio) {

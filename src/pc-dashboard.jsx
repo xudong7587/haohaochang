@@ -1,4 +1,5 @@
 import { TaskList } from "./task-list.jsx";
+import { TaskActions } from "./task-actions.jsx";
 import React, { useEffect, useState } from "react";
 import { PCSettings } from "./settings.jsx";
 import { PcUpdate } from "./pc-update.jsx";
@@ -118,6 +119,7 @@ export function PcDashboard({ embedded = false }) {
             ...(data?.tasks || []).map((j) => ({
               ...j,
               id: "nas-" + j.id,
+              sourceId: j.id,
               origin: "NAS",
             })),
             ...(worker?.jobs || []).map((j) => ({
@@ -126,6 +128,28 @@ export function PcDashboard({ embedded = false }) {
               origin: "PC",
             })),
           ]}
+          actions={(job) =>
+            job.origin === "NAS" && (
+              <TaskActions
+                job={{ ...job, id: job.sourceId }}
+                refresh={() => setReload((value) => value + 1)}
+                request={async (url, body, method) => {
+                  const response = await fetch("/api" + url, {
+                    method,
+                    headers: {
+                      Authorization: "Bearer " + token,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(body),
+                  });
+                  const result = await response.json();
+                  if (!response.ok)
+                    throw new Error(result.error || "任务操作失败，请重试");
+                  return result;
+                }}
+              />
+            )
+          }
         />
       </section>
       {worker && (

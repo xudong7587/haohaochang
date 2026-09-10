@@ -45,6 +45,7 @@ export async function replaceVideo(
         throw new Error("视频偏移必须在 -600 至 600 秒之间");
       if (
         keepAudio &&
+        !options.confirmed &&
         latest.duration &&
         Math.abs(info.duration - latest.duration) > 4
       )

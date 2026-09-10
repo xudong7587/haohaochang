@@ -1,11 +1,11 @@
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { bilibiliProvider } from "./providers/bilibili.js";
-import { biliStreamUrl } from "./online-preview.js";
+import { biliStreamCandidates, openBiliStream } from "./bili-stream.js";
 import { probe } from "./media-utils.js";
 import { withKeyLock } from "./song-writes.js";
 import { videoQuality } from "../shared/video-quality.js";
@@ -59,10 +59,9 @@ export async function downloadBiliTracks(
         !v.hasVideo ||
         v.audio.length ||
         !(a.duration > 0) ||
-        Math.abs(a.duration - v.duration) > 1 ||
-        Math.abs(v.duration - streams.duration) > 1
+        !(v.duration > 0)
       )
-        throw new Error("B站独立音视频轨道不完整或时长不匹配");
+        throw new Error("B站下载文件缺少有效的独立画面或原唱轨道，请重试下载");
       return v.height;
     };
     try {
@@ -74,11 +73,13 @@ export async function downloadBiliTracks(
         streams.video,
         path.join(staging, "video.mp4"),
         2 * 1024 ** 3,
+        { backups: streams.videoBackups },
       );
       await transfer(
         streams.audio,
         path.join(staging, "audio.m4a"),
         200 * 1024 ** 2,
+        { backups: streams.audioBackups },
       );
       const height = await validate(
         path.join(staging, "audio.m4a"),
@@ -93,29 +94,78 @@ export async function downloadBiliTracks(
     }
   });
 }
-async function downloadStream(value, target, maximum) {
-  const response = await fetch(biliStreamUrl(value), {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      Referer: "https://www.bilibili.com/",
-    },
-    redirect: "error",
-    signal: AbortSignal.timeout(1800000),
-  });
-  if (!response.ok || !response.body)
-    throw new Error(`B站轨道下载失败 (${response.status})，请重试`);
-  let bytes = 0;
-  await pipeline(
-    Readable.fromWeb(response.body),
-    new Transform({
-      transform(chunk, encoding, callback) {
-        bytes += chunk.length;
-        callback(
-          bytes > maximum ? new Error("B站轨道超过下载大小限制") : null,
-          chunk,
+export async function downloadStream(
+  value,
+  target,
+  maximum,
+  { backups = [], fetcher = fetch } = {},
+) {
+  let last;
+  for (const url of biliStreamCandidates(value, backups)) {
+    const temporary = target + "." + randomUUID() + ".part";
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), 1800000);
+    let stalled = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await openBiliStream(url, {
+        fetcher,
+        signal: controller.signal,
+      });
+      clearTimeout(stalled);
+      stalled = setTimeout(() => controller.abort(), 30000);
+      const length = Number(response.headers.get("content-length")) || 0;
+      const range = response.headers
+        .get("content-range")
+        ?.match(/^bytes 0-(\d+)\/(\d+)$/);
+      if (
+        ![200, 206].includes(response.status) ||
+        !response.body ||
+        (response.status === 206 &&
+          (!range || Number(range[1]) + 1 !== Number(range[2])))
+      ) {
+        await response.body?.cancel();
+        throw new Error(
+          `B站轨道下载失败或返回了不完整分段 (${response.status})`,
         );
-      },
-    }),
-    createWriteStream(target, { flags: "wx" }),
+      }
+      if (length > maximum) {
+        await response.body.cancel();
+        throw new Error("B站轨道超过下载大小限制");
+      }
+      let bytes = 0;
+      await pipeline(
+        Readable.fromWeb(response.body),
+        new Transform({
+          transform(chunk, encoding, callback) {
+            clearTimeout(stalled);
+            stalled = setTimeout(() => controller.abort(), 30000);
+            bytes += chunk.length;
+            callback(
+              bytes > maximum ? new Error("B站轨道超过下载大小限制") : null,
+              chunk,
+            );
+          },
+        }),
+        createWriteStream(temporary, { flags: "wx" }),
+        { signal: controller.signal },
+      );
+      if (
+        !bytes ||
+        (length && length !== bytes) ||
+        (range && Number(range[2]) !== bytes)
+      )
+        throw new Error("B站轨道传输不完整");
+      await rename(temporary, target);
+      return;
+    } catch (error) {
+      last = error;
+    } finally {
+      clearTimeout(deadline);
+      clearTimeout(stalled);
+      await rm(temporary, { force: true });
+    }
+  }
+  throw new Error(
+    `B站下载线路均未成功，请重试下载（${last?.name === "AbortError" ? "线路超时" : "连接中断、拒绝或文件不完整"}）`,
   );
 }

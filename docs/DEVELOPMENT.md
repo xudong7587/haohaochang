@@ -4,6 +4,8 @@
 
 ## 开发和验证
 
+v0.3.14：人工选择的 B站独立画面／原唱不使用时长差异拦截；已确认的 MV 替换也跳过时长比较。保留生成结果与其输入的完整性校验、分离音轨校验和自动匹配逻辑。`bili-stream.js` 统一限定 HTTPS bilivideo.com/cn、v1d.szbdyd.com 子域及默认／4483 端口，逐跳检查重定向；优先普通 CDN，下载按备用线路重试并核对 Content-Length／完整 Content-Range，原子替换文件。线路分类参考 [bili-sync 配置说明](https://bili-sync.amto.cc/configuration#启动-cdn-排序)。`DELETE /api/admin/jobs/:id` 仅删除失败记录，媒体不动；热更新通过带时间戳 URL 重新加载页面，APK 菜单同时清 HTTP 缓存，保留 DOM 存储。
+
 需要 Node.js 22.13+，推荐 Node 24。媒体处理需要 FFmpeg、ffprobe；在线下载需要 yt-dlp。Dockerfile 已安装这些工具。
 
 ```sh
