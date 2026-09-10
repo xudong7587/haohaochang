@@ -46,7 +46,8 @@ export function matchCandidates(items, title, artist, video = false) {
     );
 }
 
-async function candidates(title, artist, video, search = onlineSearch) {
+export async function candidates(title, artist, video, search = onlineSearch) {
+  const found = [];
   for (const provider of ["bilibili", "youtube"]) {
     try {
       const items = await search(
@@ -56,10 +57,13 @@ async function candidates(title, artist, video, search = onlineSearch) {
       const matches = matchCandidates(items, title, artist, video).filter(
         (v) => video || !/伴奏|instrumental|karaoke/i.test(v.title),
       );
-      if (matches.length) return matches;
+      if (matches.length) {
+        if (video) return matches;
+        found.push(...matches.slice(0, 3));
+      }
     } catch {}
   }
-  return [];
+  return found;
 }
 
 export async function acquireSong(
@@ -103,7 +107,7 @@ export async function acquireSong(
       metadata: { title, artist },
     };
   let last;
-  for (const candidate of found.slice(0, 3)) {
+  for (const candidate of found.slice(0, 6)) {
     if (
       candidate.reviewReasons.length &&
       !payload.approved &&

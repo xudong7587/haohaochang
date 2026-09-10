@@ -28,7 +28,10 @@ export async function acquire(job, payload, context) {
         "UPDATE jobs SET status='review',payload=?,error=? WHERE id=?",
       ).run(
         JSON.stringify({
-          ...payload,
+          ...JSON.parse(
+            db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id)
+              .payload,
+          ),
           metadata: result.metadata,
           candidatePath: result.candidatePath,
           candidate: result.candidate,
@@ -52,7 +55,10 @@ export async function acquire(job, payload, context) {
       );
     }
     if (result.id) {
-      if (payload.enqueue) enqueue(result.id, payload.name || "在线点歌");
+      const latest = JSON.parse(
+        db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id).payload,
+      );
+      if (latest.enqueue) enqueue(result.id, latest.name || "在线点歌");
       addJob("find-video", {
         id: result.id,
         title: result.title,

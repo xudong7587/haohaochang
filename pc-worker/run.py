@@ -84,10 +84,16 @@ import app as worker_app
 from lan import register as register_lan
 register_lan(worker_app.app, config)
 from desktop import register
-register(worker_app.app, root, config, plan, device)
+server = uvicorn.Server(uvicorn.Config(worker_app.app, host=host, port=int(config['port'])))
+register(worker_app.app, root, config, plan, device, lambda: setattr(server, 'should_exit', True))
 ui_url = f'http://127.0.0.1:{config["port"]}/ui#{config["key"]}'
 if os.environ.get('RESOURCE_AI_OPEN_UI', '0') == '1':
     import threading
     import webbrowser
     threading.Timer(2, lambda: webbrowser.open(ui_url)).start()
-uvicorn.run(worker_app.app, host=host, port=int(config['port']))
+if os.name == 'nt' and (root / 'tray.ps1').exists():
+    import subprocess
+    subprocess.Popen(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+                      '-File', str(root / 'tray.ps1')], cwd=root,
+                     creationflags=subprocess.CREATE_NO_WINDOW)
+server.run()

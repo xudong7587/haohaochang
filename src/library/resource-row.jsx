@@ -2,6 +2,8 @@ import React, { useEffect, useReducer, useState } from "react";
 import { WorkbenchDialog } from "../workbench-dialog.jsx";
 import { createDraft, draftReducer, isRevisionConflict } from "./draft.js";
 import { VideoConfirmation, validOffset } from "./video-confirmation.jsx";
+import { SongArtwork } from "../song-artwork.jsx";
+import { roomToken } from "../api.js";
 
 const resourceNames = {
   video: "视频画面",
@@ -15,7 +17,7 @@ export function ResourceRow({
   request,
   action,
   busy,
-  notify,
+  notify: notifyPage,
   onEdit,
   hidden,
   collapseKey,
@@ -25,6 +27,11 @@ export function ResourceRow({
   const [open, setOpen] = useState(false),
     [draft, dispatch] = useReducer(draftReducer, row, createDraft);
   const [pane, setPane] = useState("metadata");
+  const [feedback, setFeedback] = useState(null);
+  function notify(message) {
+    setFeedback({ message, error: false });
+    if (!open) notifyPage(message);
+  }
   useEffect(() => {
     setOpen(false);
     setDeletion(null);
@@ -63,10 +70,15 @@ export function ResourceRow({
   }, [form.url]);
   const edit = (patch) => dispatch({ type: "edit", patch });
   async function run(fn) {
+    setFeedback({ message: "正在处理…", error: false });
     await action(async () => {
       try {
         return await fn();
       } catch (error) {
+        setFeedback({
+          message: error.message,
+          error: !isRevisionConflict(error),
+        });
         if (isRevisionConflict(error)) {
           dispatch({ type: "conflict" });
           setConflictLoaded(false);
@@ -171,7 +183,8 @@ export function ResourceRow({
       const { lyrics, ...lyricsSource } = result;
       edit({ lyrics, lyricsSource });
       notify(
-        `${result.source || result.provider || "歌词提供者"} 候选已载入，请试听核对录音版本与字幕节奏后保存`,
+        result.warning ||
+          `${result.source || result.provider || "歌词提供者"} 候选已载入，请试听核对录音版本与字幕节奏后保存`,
       );
     });
   }
@@ -207,6 +220,9 @@ export function ResourceRow({
             onChange={onSelect}
           />
         )}
+        <div className="resource-artwork">
+          <SongArtwork song={row} token={roomToken} size={30} />
+        </div>
         <div className="resource-identity">
           <strong>{row.title || "未识别歌名"}</strong>
           <p>
@@ -247,14 +263,6 @@ export function ResourceRow({
           >
             编辑歌曲
           </button>
-          <button
-            onClick={() => {
-              setPane("actions");
-              setOpen(true);
-            }}
-          >
-            更多操作
-          </button>
         </div>
       </header>
       {row.missing?.length > 0 && (
@@ -271,6 +279,14 @@ export function ResourceRow({
         }}
         title={`${row.title || "未识别歌名"} · ${row.artist || "未识别歌手"}`}
       >
+        {feedback && (
+          <div
+            className={`dialog-feedback ${feedback.error ? "error" : ""}`}
+            role={feedback.error ? "alert" : "status"}
+          >
+            {feedback.message}
+          </div>
+        )}
         <nav className="detail-tabs" aria-label="歌曲详情分类">
           {[
             ["metadata", "歌曲资料"],

@@ -8,6 +8,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '24', cache: npm}
       - run: npm ci
+      - run: node scripts/check-release-version.mjs
       - run: npm test
         timeout-minutes: 3
       - run: npm run build
@@ -51,11 +52,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
-      - run: pip install fastapi==0.115.12 python-multipart==0.0.20 httpx
+      - run: pip install fastapi==0.115.12 python-multipart==0.0.20 httpx psutil==7.0.0
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: python -m unittest discover -s separator -p test_protocol.py
       - run: python -m unittest discover -s separator -p test_concurrency.py
       - run: python -m unittest discover -s pc-worker -p test_lan.py
+      - run: python -m unittest discover -s pc-worker -p test_update.py
   apk:
     runs-on: ubuntu-latest
     steps:
@@ -65,7 +67,24 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: '9.4.1'}
-      - run: gradle -p android assembleDebug
+      - run: gradle -p android testDebugUnitTest assembleDebug
+      - name: Build signed TV update
+        if: github.event_name != 'pull_request'
+        env:
+          TV_KEYSTORE_BASE64: ${{ secrets.TV_KEYSTORE_BASE64 }}
+          TV_KEYSTORE_PASSWORD: ${{ secrets.TV_KEYSTORE_PASSWORD }}
+        run: |
+          test -n "$TV_KEYSTORE_BASE64"
+          export TV_KEYSTORE_FILE="$RUNNER_TEMP/tv-release.p12"
+          printf '%s' "$TV_KEYSTORE_BASE64" | base64 --decode > "$TV_KEYSTORE_FILE"
+          gradle -p android assembleRelease
+          cp android/app/build/outputs/apk/release/app-release.apk haohaochang-tv.apk
+          rm -f "$TV_KEYSTORE_FILE"
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: haohaochang-tv
+          path: haohaochang-tv.apk
       - uses: actions/upload-artifact@v4
         with:
           name: haohaochang-tv-debug

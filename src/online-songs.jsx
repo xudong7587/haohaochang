@@ -3,13 +3,22 @@ import { api, roomToken } from "./api.js";
 import { Modal } from "./components.jsx";
 import { rankVideos } from "../shared/video-ranking.js";
 import { BiliLogin } from "./bili-login.jsx";
+import { MobileRequests } from "./mobile-requests.jsx";
 
 const time = (n) =>
   `${Math.floor((n || 0) / 60)}:${((n || 0) % 60).toFixed(1).padStart(4, "0")}`;
 const mediaUrl = (url) =>
   url ? `${url}?token=${encodeURIComponent(roomToken)}` : undefined;
 
-function VideoPreview({ selection, close, notify, canLogin = false }) {
+function VideoPreview({
+  selection,
+  close,
+  notify,
+  canLogin = false,
+  mobile = false,
+  name = "家人",
+  onSubmitted = () => {},
+}) {
   const video = useRef(null),
     audio = useRef(null);
   const resumeAt = useRef(0);
@@ -86,6 +95,8 @@ function VideoPreview({ selection, close, notify, canLogin = false }) {
           title,
           artist,
           onlineSelection: true,
+          client: mobile ? "mobile" : "admin",
+          name,
           previewId: preview?.id,
           quality,
           clip: start !== null || end !== null ? { start, end } : null,
@@ -93,8 +104,11 @@ function VideoPreview({ selection, close, notify, canLogin = false }) {
         "POST",
       );
       setAdded(true);
+      onSubmitted();
       notify(
-        "已加入整理任务：下载 → PC 裁剪与分离 → 入库。可在后台任务查看进度。",
+        mobile
+          ? "已优先安排整理，完成后自动加入已点歌曲；画面下载失败会尝试音频与歌词。"
+          : "已加入整理任务：下载 → PC 裁剪与分离 → 入库。可在后台任务查看进度。",
       );
     } catch (e) {
       setError(e.message);
@@ -218,7 +232,13 @@ function VideoPreview({ selection, close, notify, canLogin = false }) {
             onClick={add}
             disabled={busy || invalid || added || (!preview && !error)}
           >
-            {added ? "已加入整理任务" : busy ? "提交中…" : "加入曲库"}
+            {added
+              ? "已加入整理任务"
+              : busy
+                ? "提交中…"
+                : mobile
+                  ? "整理并点歌"
+                  : "加入曲库"}
           </button>
         </div>
         <div className="clip-panel">
@@ -279,13 +299,38 @@ function VideoPreview({ selection, close, notify, canLogin = false }) {
   );
 }
 
-export function OnlineSongs({ initialTitle = "", notify, canLogin = false }) {
+export function OnlineSongs({
+  initialTitle = "",
+  notify,
+  canLogin = false,
+  mobile = false,
+  name = "家人",
+}) {
   const [title, setTitle] = useState(initialTitle),
     [artist, setArtist] = useState(""),
     [data, setData] = useState(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [selection, setSelection] = useState(null);
+  const [audioBusy, setAudioBusy] = useState(false),
+    [requestRevision, setRequestRevision] = useState(0);
+  async function requestAudio() {
+    setAudioBusy(true);
+    setError("");
+    try {
+      await api(
+        "/requests",
+        { title: title.trim(), artist: artist.trim(), name },
+        "POST",
+      );
+      setRequestRevision((v) => v + 1);
+      notify("已优先寻找音频与歌词，准备好后自动点歌。");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAudioBusy(false);
+    }
+  }
   const searchId = useRef(0);
   useEffect(
     () => () => {
@@ -339,7 +384,11 @@ export function OnlineSongs({ initialTitle = "", notify, canLogin = false }) {
       <div className="section-heading">
         <div>
           <h1>找到想唱的那一版。</h1>
-          <p>搜索 B站视频，试听并选取片段，再交给 PC 整理入库。</p>
+          <p>
+            {mobile
+              ? "优先找 B站视频，试听后点歌；没有合适画面，也可以先用音频和歌词开唱。"
+              : "搜索 B站视频，试听并选取片段，再交给 PC 整理入库。"}
+          </p>
         </div>
       </div>
       <form
@@ -379,6 +428,18 @@ export function OnlineSongs({ initialTitle = "", notify, canLogin = false }) {
         </button>
       </form>
       {error && <p role="alert">{error}</p>}
+      {mobile && (
+        <div className="mobile-audio-fallback">
+          <p>没找到合适视频？先找音频和歌词，画面可以稍后补齐。</p>
+          <button
+            disabled={busy || audioBusy || !title.trim() || !artist.trim()}
+            onClick={requestAudio}
+          >
+            {audioBusy ? "提交中…" : "先找音频 + 歌词"}
+          </button>
+        </div>
+      )}
+      {mobile && <MobileRequests revision={requestRevision} />}
       {data && (
         <p className="note">
           {data.duration
@@ -435,6 +496,9 @@ export function OnlineSongs({ initialTitle = "", notify, canLogin = false }) {
           close={() => setSelection(null)}
           notify={notify}
           canLogin={canLogin}
+          mobile={mobile}
+          name={name}
+          onSubmitted={() => setRequestRevision((v) => v + 1)}
         />
       )}
     </section>

@@ -26,10 +26,14 @@ npm test
 APK 使用 Java 21、Gradle 9.4.1、Android SDK 36 构建：
 
 ```sh
-gradle -p android assembleDebug
+gradle -p android testDebugUnitTest assembleDebug
 ```
 
-最低 Android 6；WebView 需支持现代 JavaScript，建议 Chromium/WebView 90 及以上。APK 是原生连接外壳加 WebView 终端，播放调用系统媒体解码；没有在 TV 端嵌入 FFmpeg 或 AI。当前是 debug 签名测试包，正式分发前需要建立自己的 release 签名和升级策略。
+最低 Android 6；WebView 需支持现代 JavaScript，建议 Chromium/WebView 90 及以上。APK 是原生连接外壳加 WebView 终端，播放调用系统媒体解码；没有在 TV 端嵌入 FFmpeg 或 AI。v0.3.10 起正式分发使用持久 PKCS12 签名，CI 从 `TV_KEYSTORE_BASE64` 与 `TV_KEYSTORE_PASSWORD` Secrets 构建固定名称 `haohaochang-tv.apk`；密钥不进入 Git。独立构建 release 时设置 `TV_KEYSTORE_FILE`、`TV_KEYSTORE_PASSWORD` 并运行 `gradle -p android assembleRelease`。PR 只构建 debug 包。旧 CI debug 签名可能不同，迁移说明见用户手册。
+
+PC 更新器协议验证：安装 `psutil==7.0.0` 后执行 `python -m unittest discover -s pc-worker -p test_update.py`。打包脚本 `scripts/package-release.py` 生成带逐文件 SHA-256 清单的更新 ZIP；发布前需放入同提交的正式 APK。`node scripts/check-release-version.mjs` 校验前端、PC、Android、README 与用户手册版本。
+
+本地 NAS 预览仅放行 `POST /api/admin/find-lyrics` 作为读取远程歌词操作，其他管理写入继续拒绝；查得内容只是编辑草稿，不能保存到正式媒体。自动歌词匹配保留 120 秒时差限制，手动查找可展示超时差候选并提示核对。Live 后缀和合唱顺序在 `shared/lyrics-identity.js` 统一处理。
 
 本机验证记录与待验收项见 [验证记录](VALIDATION.md)，系统决策见 [系统设计](DESIGN.md)。
 

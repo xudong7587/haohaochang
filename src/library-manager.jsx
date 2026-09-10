@@ -5,6 +5,8 @@ import {
   ChevronRight,
   RefreshCw,
   Plus,
+  List,
+  LayoutGrid,
 } from "lucide-react";
 import { TaskList, completedTask } from "./task-list.jsx";
 import { Pagination } from "./workbench-controls.jsx";
@@ -34,8 +36,17 @@ export function LibraryManager({ request, notify, onEdit }) {
     [busy, setBusy] = useState(false),
     [results, setResults] = useState([]);
   const [page, setPage] = useState(1),
-    [sort, setSort] = useState("artist"),
-    [grouped, setGrouped] = useState(true);
+    [sort, setSort] = useState("title"),
+    [grouped, setGrouped] = useState(false);
+  const [view, setView] = useState(() => {
+    try {
+      return localStorage.getItem("haohaochang.libraryView") === "posters"
+        ? "posters"
+        : "list";
+    } catch {
+      return "list";
+    }
+  });
   const [openGroups, setOpenGroups] = useState({}),
     [collapseKey, setCollapseKey] = useState(0),
     [selected, setSelected] = useState(new Set());
@@ -122,8 +133,7 @@ export function LibraryManager({ request, notify, onEdit }) {
   const batchSongs = batchEntries.filter((e) => !e.review).map((e) => e.row);
   const batchReviews = batchEntries.filter((e) => e.review).map((e) => e.row);
   const artists = [...new Set(visible.map((e) => e.row.artist || "未知歌手"))];
-  const groupOpen = (artist) =>
-    openGroups[`${tab}:${artist}`] ?? (tab !== "standard" || !!query.trim());
+  const groupOpen = (artist) => openGroups[`${tab}:${artist}`] ?? true;
   function changeTab(id) {
     setTab(id);
     setPage(1);
@@ -255,6 +265,30 @@ export function LibraryManager({ request, notify, onEdit }) {
             <option value="artist">按歌手排序</option>
             <option value="title">按歌名排序</option>
           </select>
+          <div
+            className="library-view-switch"
+            role="group"
+            aria-label="曲库展示方式"
+          >
+            {[
+              ["list", "行列表", List],
+              ["posters", "海报墙", LayoutGrid],
+            ].map(([id, label, Icon]) => (
+              <button
+                key={id}
+                aria-pressed={view === id}
+                onClick={() => {
+                  setView(id);
+                  try {
+                    localStorage.setItem("haohaochang.libraryView", id);
+                  } catch {}
+                }}
+              >
+                <Icon size={16} />
+                {label}
+              </button>
+            ))}
+          </div>
           <label className="checkbox">
             <input
               type="checkbox"
@@ -311,15 +345,17 @@ export function LibraryManager({ request, notify, onEdit }) {
               <button onClick={() => setSelected(new Set())}>取消选择</button>
             )}
           </div>
-          <div className="actions">
-            <button
-              disabled={!grouped || !visible.length}
-              onClick={() => expandAll(true)}
-            >
-              展开本页
-            </button>
-            <button onClick={() => expandAll(false)}>全部收起</button>
-          </div>
+          {grouped && (
+            <div className="actions">
+              <button
+                disabled={!grouped || !visible.length}
+                onClick={() => expandAll(true)}
+              >
+                展开本页
+              </button>
+              <button onClick={() => expandAll(false)}>全部收起</button>
+            </div>
+          )}
         </div>
         {tab !== "hidden" && (
           <div className="batch-toolbar">
@@ -414,7 +450,9 @@ export function LibraryManager({ request, notify, onEdit }) {
             )}
           </div>
         )}
-        <div className="library-rows">
+        <div
+          className={`library-rows ${view === "posters" ? "library-posters" : "library-list"}`}
+        >
           {entries
             .filter((e) => visited.current.has(e.key))
             .sort((a, b) => {

@@ -30,9 +30,11 @@ public final class MainActivity extends Activity {
     private String server;
     private long exitPressedAt;
     private boolean backPending;
+    private AppUpdater updater;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        updater = new AppUpdater(this);
         if (Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                 android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
@@ -90,7 +92,9 @@ public final class MainActivity extends Activity {
     }
     private void exitFull() { if(fullVideo != null) { root.removeView(fullVideo); fullVideo = null; web.setVisibility(View.VISIBLE); web.requestFocus(); if(fullCallback != null) { fullCallback.onCustomViewHidden(); fullCallback = null; } } }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
-        if(event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_MENU) { settings(); return true; }
+        if(event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
+            new AlertDialog.Builder(this).setTitle("好好唱设置").setItems(new String[]{"连接设置", "检查应用更新"}, (d,w) -> { if (w == 0) settings(); else updater.check(); }).show(); return true;
+        }
         // Let WebView dispatch real DPAD/Enter keyboard events, including IME text input.
         return super.dispatchKeyEvent(event);
     }
@@ -112,6 +116,6 @@ public final class MainActivity extends Activity {
         });
     }
     @Override protected void onPause() { super.onPause(); web.onPause(); }
-    @Override protected void onResume() { super.onResume(); if(web != null)web.onResume(); }
-    @Override protected void onDestroy() { web.destroy(); super.onDestroy(); }
+    @Override protected void onResume() { super.onResume(); if(web != null)web.onResume(); if(updater != null)updater.resume(); }
+    @Override protected void onDestroy() { updater.destroy(); web.destroy(); super.onDestroy(); }
 }

@@ -35,10 +35,12 @@ def separate(job, model):
 
 @app.get('/health', dependencies=[Depends(auth)])
 def health():
+    if hasattr(app.state, 'updater'):
+        app.state.updater.snapshot()
     pending = jobs.pending()
     return dict(protocol='ktv-separation-v1', models=['htdemucs', 'htdemucs_ft'],
         lanEnabled=getattr(app.state, 'lan', {}).get('enabled', False),
-        device=os.getenv('SEPARATION_DEVICE', 'cpu'), pending=pending, concurrency=CONCURRENCY, busy=pending >= CONCURRENCY,
+        device=os.getenv('SEPARATION_DEVICE', 'cpu'), pending=pending, concurrency=CONCURRENCY, busy=not jobs.accepting or pending >= CONCURRENCY,
         capabilities=['idempotency-key', 'upload-limit', 'restart-recovery', 'video-clip-v1', 'video-prepare-v1'])
 
 

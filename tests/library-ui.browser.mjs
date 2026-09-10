@@ -81,12 +81,13 @@ try {
     .getByRole("button", { name: /标准曲库 ·/ })
     .filter({ hasText: /^标准/ })
     .click();
-  await page.locator(".artist-library").first().click();
+  assert.equal(await page.locator(".artist-library").count(), 0);
   await page.getByText("曲库维护", { exact: true }).click();
   await page
     .getByRole("button", { name: "老版本多视频合一", exact: true })
     .click();
-  if ((await page.locator(".batch-results").getAttribute("open")) === null) await page.locator(".batch-results summary").click();
+  if ((await page.locator(".batch-results").getAttribute("open")) === null)
+    await page.locator(".batch-results summary").click();
   await page.getByText("已排队检查格式并回收旧版本", { exact: true }).waitFor();
   assert.deepEqual(
     await page.evaluate(
@@ -104,12 +105,18 @@ try {
   let row = page.locator('[data-song-id="song-a"]');
   assert.deepEqual(await row.locator("header button").allTextContents(), [
     "编辑歌曲",
-    "更多操作",
   ]);
-  await row.getByRole("button", { name: "更多操作", exact: true }).click();
+  await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
+  await row.getByRole("button", { name: "维护操作", exact: true }).click();
   await row.getByRole("button", { name: "删除", exact: true }).click();
   await row.getByRole("dialog", { name: "确认删除媒体" }).waitFor();
-  assert.ok((await row.getByRole("dialog", { name: "确认删除媒体", exact: true }).textContent()).includes("整个目录"));
+  assert.ok(
+    (
+      await row
+        .getByRole("dialog", { name: "确认删除媒体", exact: true })
+        .textContent()
+    ).includes("整个目录"),
+  );
   await row.getByRole("button", { name: "取消", exact: true }).click();
   assert.equal(await page.evaluate(() => window.songs.length), 1);
   await row.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
@@ -120,7 +127,7 @@ try {
   );
   await row.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
   await page.getByRole("button", { name: "刷新列表", exact: true }).click();
-  await row.locator("header strong").filter({hasText:"后台更新"}).waitFor();
+  await row.locator("header strong").filter({ hasText: "后台更新" }).waitFor();
   await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
   assert.equal(await title.inputValue(), "后台更新");
   await title.fill("保留我的草稿");
@@ -132,7 +139,10 @@ try {
   );
   await row.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
   await page.getByRole("button", { name: "刷新列表", exact: true }).click();
-  await row.locator("header strong").filter({hasText:"另一窗口更新"}).waitFor();
+  await row
+    .locator("header strong")
+    .filter({ hasText: "另一窗口更新" })
+    .waitFor();
   await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
   await row.getByRole("alert").waitFor();
   assert.equal(await title.inputValue(), "保留我的草稿");
@@ -225,8 +235,12 @@ try {
   assert.equal(source.expectedRevision, 6);
   await row.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
   await page.getByRole("button", { name: /^待整理曲库/ }).click();
-  const video = page.locator("article").filter({has: page.getByRole("button", {name:"核对视频", exact:true})});
-  await video.getByRole("button", {name:"核对视频", exact:true}).click();
+  const video = page
+    .locator("article")
+    .filter({
+      has: page.getByRole("button", { name: "核对视频", exact: true }),
+    });
+  await video.getByRole("button", { name: "核对视频", exact: true }).click();
   await video.getByLabel("我已试听核对，这是与当前音轨对应的录音版本").check();
   await video.getByLabel("视频相对音轨偏移（秒）").fill("0");
   await video
@@ -244,16 +258,20 @@ try {
     ),
     ["confirm", "reject", "research"],
   );
-  await video.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
+  await video
+    .getByRole("button", { name: "关闭歌曲详情", exact: true })
+    .click();
   await page.getByRole("button", { name: /^标准曲库/ }).click();
-  await row.getByRole("button", { name: "更多操作", exact: true }).click();
+  await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
+  await row.getByRole("button", { name: "维护操作", exact: true }).click();
   await row.getByRole("button", { name: "移出曲库", exact: true }).click();
   await page.getByRole("button", { name: /^已隐藏/ }).click();
   await page.getByRole("button", { name: "恢复歌曲", exact: true }).click();
   assert.equal(await page.evaluate(() => window.songs.length), 1);
   await page.getByRole("button", { name: /^标准曲库/ }).click();
-  await page.getByRole("button", { name: "展开本页", exact: true }).click();
-  await row.getByRole("button", { name: "更多操作", exact: true }).click();
+
+  await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
+  await row.getByRole("button", { name: "维护操作", exact: true }).click();
   await row.getByRole("button", { name: "删除", exact: true }).click();
   await row.getByRole("button", { name: "确认永久删除", exact: true }).click();
   await page.waitForFunction(() => window.songs.length === 0);
@@ -274,7 +292,8 @@ try {
   await page.getByRole("button", { name: /^待整理曲库/ }).click();
   await page.locator('[data-song-id="bulk-no-lyrics"]').waitFor();
   await page.getByRole("button", { name: "全部整理", exact: true }).click();
-  if ((await page.locator(".batch-results").getAttribute("open")) === null) await page.locator(".batch-results summary").click();
+  if ((await page.locator(".batch-results").getAttribute("open")) === null)
+    await page.locator(".batch-results summary").click();
   await page.getByText("已加入整理队列", { exact: true }).waitFor();
   assert.equal(
     await page.evaluate(

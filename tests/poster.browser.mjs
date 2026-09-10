@@ -66,7 +66,7 @@ for (let n = 0; n < 28; n++) {
       "separated",
       "ready",
       8,
-      path.join(folder, "封面.png"),
+      n === 27 ? "" : path.join(folder, "封面.png"),
       Date.now() + n,
     );
   service.store.set("package:" + id, folder);
@@ -137,6 +137,72 @@ try {
       window.previewAudio.every((a) => a.paused && !a.getAttribute("src")),
     ),
   );
+  await page.getByRole("button", { name: "曲库管理", exact: true }).click();
+  await page.getByRole("button", { name: /^标准曲库/ }).click();
+  await page
+    .locator(".library-list .workbench-row:not([hidden])")
+    .first()
+    .waitFor();
+  assert.equal(await page.locator(".artist-library").count(), 0);
+  assert.equal(
+    await page.locator(".library-list .workbench-row:not([hidden])").count(),
+    20,
+  );
+  assert.equal(
+    await page.getByRole("button", { name: "更多操作", exact: true }).count(),
+    0,
+  );
+  await page.locator(".resource-artwork img").first().waitFor();
+  await page.screenshot({
+    path: "test-results/poster/library-list.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "海报墙", exact: true }).click();
+  assert.ok(await page.locator(".library-posters").isVisible());
+  await page.screenshot({
+    path: "test-results/poster/library-wall.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  await page.screenshot({
+    path: "test-results/poster/library-wall-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.route("**/api/admin/find-lyrics", (route) =>
+    route.fulfill({
+      json: {
+        lyrics: "[00:01]测试候选",
+        source: "测试歌词",
+        warning: "测试候选已载入，请试听核对。",
+      },
+    }),
+  );
+  await page
+    .locator(".workbench-row:not([hidden])")
+    .first()
+    .getByRole("button", { name: "编辑歌曲", exact: true })
+    .click();
+  await page.getByRole("button", { name: "同步歌词", exact: true }).click();
+  await page
+    .getByRole("button", { name: /自动.*歌词|查找歌词/ })
+    .first()
+    .click();
+  await page
+    .locator("dialog[open] .dialog-feedback")
+    .filter({ hasText: "测试候选已载入" })
+    .waitFor();
+  const feedbackBox = await page
+    .locator("dialog[open] .dialog-feedback")
+    .boundingBox();
+  assert.ok(feedbackBox.y >= 0 && feedbackBox.y + feedbackBox.height <= 1000);
+  await page.screenshot({ path: "test-results/poster/editor-feedback.png" });
+  await page.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
   for (const route of ["/play", "/tv"]) {
     await page.goto(base + route);
     await page.locator(".stage-card img").first().waitFor();
@@ -146,6 +212,54 @@ try {
         .first()
         .evaluate((i) => i.complete && i.naturalWidth > 0),
     );
+  }
+  for (const route of ["/play", "/tv"]) {
+    await page.goto(base + route);
+    await page.getByRole("button", { name: "歌名点歌", exact: true }).click();
+    await page.locator(".song-poster-card").first().waitFor();
+    const colors = await page.evaluate(() => {
+      const luminance = (color) => {
+        const rgb = color
+          .match(/[\d.]+/g)
+          .slice(0, 3)
+          .map(Number)
+          .map((n) => n / 255)
+          .map((n) =>
+            n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4,
+          );
+        return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+      };
+      const card = document.querySelector(".song-poster-card"),
+        bg = luminance(getComputedStyle(card).backgroundColor);
+      const contrast = (selector) => {
+        const text = luminance(
+          getComputedStyle(card.querySelector(selector)).color,
+        );
+        return (Math.max(text, bg) + 0.05) / (Math.min(text, bg) + 0.05);
+      };
+      return {
+        bg,
+        contrast: [
+          contrast(".poster-song-info strong"),
+          contrast(".poster-song-info small"),
+          contrast(".poster-song-actions>small"),
+        ],
+        placeholder: getComputedStyle(
+          document.querySelector(".song-poster-image"),
+        ).backgroundImage,
+      };
+    });
+    assert.ok(colors.bg < 0.04, route + " cards must remain dark");
+    assert.ok(
+      colors.contrast.every((value) => value >= 4.5),
+      JSON.stringify(colors),
+    );
+    assert.ok(!colors.placeholder.includes("228, 222, 239"));
+    await mkdir("test-results/poster", { recursive: true });
+    await page.screenshot({
+      path: "test-results/poster/" + route.slice(1) + "-search-dark.png",
+      fullPage: true,
+    });
   }
   await page.goto(base + "/mobile");
   await page.setViewportSize({ width: 390, height: 844 });

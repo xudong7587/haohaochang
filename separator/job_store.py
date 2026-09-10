@@ -10,6 +10,15 @@ class JobStore:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
+        self.accepting = True
+
+    def pause(self):
+        with self.lock:
+            self.accepting = False
+
+    def resume(self):
+        with self.lock:
+            self.accepting = True
 
     def state(self, job):
         # Windows cannot replace a file while another thread has it open.
@@ -51,7 +60,7 @@ class JobStore:
                         if record.get('model') != model:
                             raise ValueError('Idempotency key already belongs to another model')
                         return info.parent.name, False
-            if self.pending() >= capacity:
+            if not self.accepting or self.pending() >= capacity:
                 raise OverflowError('Queue full')
             job = uuid.uuid4().hex
             folder = self.root / job

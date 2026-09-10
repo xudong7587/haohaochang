@@ -3,6 +3,19 @@ import { providerHeaders } from "../separation/protocol.js";
 import { connectionError } from "../connection-error.js";
 
 const clipText = (v, max = 240) => String(v ?? "").slice(0, max);
+const updateStatus = (v) =>
+  v && typeof v === "object"
+    ? Object.fromEntries(
+        ["phase", "current", "latest", "progress", "error"]
+          .filter((k) => k in v)
+          .map((k) => [
+            k,
+            k === "progress"
+              ? Math.max(0, Math.min(100, Number(v[k]) || 0))
+              : clipText(v[k], 400),
+          ]),
+      )
+    : null;
 export function pcApi({ app, admin, store, discovery }) {
   let pending;
   async function status() {
@@ -84,6 +97,7 @@ export function pcApi({ app, admin, store, discovery }) {
           };
       }
       const worker = {
+        update: updateStatus(data.update),
         version: clipText(data.version || "旧版（未报告版本）"),
         name: clipText(data.name),
         concurrency: Number(data.concurrency) || 1,
@@ -135,6 +149,52 @@ export function pcApi({ app, admin, store, discovery }) {
       pending = null;
     });
     res.set("Cache-Control", "no-store").json(await pending);
+  });
+  app.post("/api/admin/pc/update/:action", admin, async (req, res) => {
+    if (!["check", "install", "cancel"].includes(req.params.action))
+      return res.status(404).json({ error: "未知更新操作" });
+    const config = store.get("ai", {});
+    if (!config.pcEndpoint)
+      return res.status(409).json({ error: "请先连接 PC 整理器" });
+    try {
+      const response = await fetch(
+        config.pcEndpoint + "/desktop/update/" + req.params.action,
+        {
+          method: "POST",
+          headers: {
+            ...providerHeaders({ apiKey: config.pcApiKey }),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ version: clipText(req.body.version, 32) }),
+          redirect: "error",
+          signal: AbortSignal.timeout(40000),
+        },
+      );
+      if (response.status === 404)
+        return res
+          .status(409)
+          .json({
+            error: "旧版整理器没有更新入口，请先手动安装 v0.3.10 或更新版本",
+          });
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of response.body) {
+        size += chunk.length;
+        if (size > 16384) throw new Error("更新响应过大");
+        chunks.push(Buffer.from(chunk));
+      }
+      const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      res
+        .set("Cache-Control", "no-store")
+        .status(response.ok ? 200 : 409)
+        .json(
+          response.ok
+            ? updateStatus(value)
+            : { error: clipText(value.detail || "更新操作失败", 400) },
+        );
+    } catch {
+      res.status(502).json({ error: "PC 更新服务暂不可用，请稍后重试" });
+    }
   });
   app.get("/api/admin/pc/logs", admin, async (_req, res) => {
     const report = await status();

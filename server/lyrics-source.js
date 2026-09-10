@@ -1,6 +1,7 @@
 import { parseLyrics } from "../shared/lyrics.js";
 import { localLyricsProvider } from "./providers/local-lyrics.js";
 import { lrclibProvider } from "./providers/lrclib.js";
+import { sameLyricsTitle, lyricsArtist } from "../shared/lyrics-identity.js";
 
 const normalize = (s) =>
   String(s || "")
@@ -10,9 +11,8 @@ const normalize = (s) =>
 
 export function lyricsMatchReasons(row, query) {
   const reasons = [];
-  if (normalize(row.title) !== normalize(query.title))
-    reasons.push("title-mismatch");
-  if (normalize(row.artist) !== normalize(query.artist))
+  if (!sameLyricsTitle(row.title, query.title)) reasons.push("title-mismatch");
+  if (lyricsArtist(row.artist) !== lyricsArtist(query.artist))
     reasons.push("artist-mismatch");
   if (
     query.duration > 0 &&
@@ -59,7 +59,9 @@ export async function findLyrics(title, artist, duration, options = {}) {
       continue;
     }
     const matches = rows.filter((row) => {
-      const reasons = lyricsMatchReasons(row, query);
+      const reasons = lyricsMatchReasons(row, query).filter(
+        (reason) => !(options.manual && reason === "duration-mismatch"),
+      );
       if (reasons.length)
         diagnostics.push({
           provider: provider.id,
@@ -95,11 +97,24 @@ export async function findLyrics(title, artist, duration, options = {}) {
       status: "candidate",
       candidateCount: candidates.length,
       selection: candidates.length > 1 ? "closest-duration" : "single-match",
-      reviewReasons: ["recording-alignment-needs-review"],
+      reviewReasons: [
+        "recording-alignment-needs-review",
+        ...lyricsMatchReasons(row, query),
+      ],
+      warning: lyricsMatchReasons(row, query).includes("duration-mismatch")
+        ? "歌词与视频时长相差超过两分钟，已作为候选载入，请先试听核对。"
+        : "",
     };
   }
+  const unavailable =
+    providers.length > 0 &&
+    diagnostics.filter((d) => d.error).length === providers.length;
   const error = new Error(
-    "没有找到歌名、歌手匹配且时长相差不超过两分钟的 LRC，请手动补充",
+    unavailable
+      ? "歌词来源暂时无法连接，请稍后重试，或导入本地 LRC。"
+      : options.manual
+        ? "没有找到同歌名、同演唱者且带时间戳的 LRC；可导入本地歌词或修改搜索信息。"
+        : "没有找到歌名、歌手匹配且时长相差不超过两分钟的 LRC，请手动补充",
   );
   error.code = "LYRICS_NOT_FOUND";
   error.diagnostics = diagnostics;

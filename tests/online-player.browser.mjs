@@ -51,7 +51,7 @@ await build({
     contents: `
 import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{OnlineSongs}from'./src/online-songs.jsx';import{Player}from'./src/playback/player.jsx';import './src/style.css';
 function Fixture(){const[offset,setOffset]=useState(0);window.controlCalls ||= [];async function request(url,body){if(url==='/control'){window.controlCalls.push(body);setOffset(v=>body.reset?0:v+body.deltaMs);}return{ok:true};}
-return location.pathname==='/lyrics'?<div className="app tv stage-home"><input aria-label="测试输入框"/><Player keyboardLyrics current={{id:'entry-fixture',song_id:'fixture',title:'歌词测试',artist:'合成测试',duration:12,mode:'tracks',lyrics:'[00:08]第一句歌词\\n[00:10]第二句歌词'}} playback={{paused:true,vocal:true,lyricsOffsetMs:offset}} request={request} token="fixture" notify={()=>{}}/></div>:<main style={{maxWidth:1100,margin:'auto',padding:24}}><OnlineSongs notify={message=>window.notice=message}/></main>;}
+return location.pathname==='/lyrics'?<div className="app tv stage-home"><input aria-label="测试输入框"/><Player keyboardLyrics current={{id:'entry-fixture',song_id:'fixture',title:'歌词测试',artist:'合成测试',duration:12,mode:'tracks',lyrics:'[00:08]第一句歌词\\n[00:10]第二句歌词'}} playback={{paused:true,vocal:true,lyricsOffsetMs:offset}} request={request} token="fixture" notify={()=>{}}/></div>:<main style={{maxWidth:1100,margin:'auto',padding:24}}><OnlineSongs mobile={location.pathname==='/mobile'} notify={message=>window.notice=message}/></main>;}
 createRoot(document.getElementById('root')).render(<Fixture/>);
 `,
     resolveDir: process.cwd(),
@@ -62,6 +62,21 @@ createRoot(document.getElementById('root')).render(<Fixture/>);
 });
 const app = express();
 app.use(express.json());
+const audioRequests = [];
+app.get("/api/requests/status", (_q, r) =>
+  r.json(
+    audioRequests.map((p, i) => ({
+      ...p,
+      id: "request-" + i,
+      status: "queued",
+      stage: "acquire",
+    })),
+  ),
+);
+app.post("/api/requests", (q, r) => {
+  audioRequests.push(q.body);
+  r.json({ id: "audio-fixture" });
+});
 const submissions = [],
   previewRequests = [];
 app.get("/api/online/songs", (q, r) =>
@@ -121,7 +136,9 @@ app.get("/api/media/*path", (_q, r) =>
 );
 app.get("/api/lyrics-style", (_q, r) => r.json({}));
 app.use(express.static(temp));
-app.get("/lyrics", (_q, r) => r.sendFile(path.join(temp, "index.html")));
+app.get(["/lyrics", "/mobile"], (_q, r) =>
+  r.sendFile(path.join(temp, "index.html")),
+);
 const server = app.listen(0, "127.0.0.1");
 await new Promise((r) => server.once("listening", r));
 const origin = `http://127.0.0.1:${server.address().port}`;
@@ -315,6 +332,33 @@ try {
     () => !document.querySelector(".tv-player.is-full"),
   );
   assert.equal(dialogs, 0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(origin + "/mobile");
+  await page.getByLabel("在线歌名").fill("手机测试歌曲");
+  await page.getByLabel("在线歌手").fill("手机测试歌手");
+  await page.getByRole("button", { name: "搜索视频", exact: true }).click();
+  await page.locator(".video-card").first().click();
+  await page.getByRole("button", { name: "整理并点歌", exact: true }).click();
+  await page
+    .getByRole("button", { name: "已加入整理任务", exact: true })
+    .waitFor();
+  assert.equal(submissions.at(-1).client, "mobile");
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page
+    .getByRole("button", { name: "先找音频 + 歌词", exact: true })
+    .click();
+  await page.getByRole("heading", { name: "手机找歌进度" }).waitFor();
+  assert.equal(audioRequests.at(-1).title, "手机测试歌曲");
+  assert.equal(audioRequests.at(-1).artist, "手机测试歌手");
+  assert.ok(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  await page.screenshot({
+    path: "test-results/online/mobile-request.png",
+    fullPage: true,
+  });
   console.log(
     "PASS online waterfall, preview A/V, paused/playing range marks, full video default, invalid range, identity, mobile layout, lyric countdown and remote keys.",
   );

@@ -7,3 +7,4 @@
 - 每个任务使用独立测试数据库、媒体目录和端口，不向用户已清空曲库添加示例。公司网络只测试 localhost，不探测局域网或修改防火墙。
 - npm test 含真实 FFmpeg 测试，npm run build 构建前端。scripts/ui-check.mjs、scripts/player-check.mjs、tests/library-ui.browser.mjs 和 tests/online-player.browser.mjs 已纳入 CI；scripts/adversarial-check.mjs 退出 0 仅代表观察完成，不代表缺陷已修复。
 - 启动与工具配置见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。按改动验证，区分本地通过、实机通过与已发布。
+- 每次推送 Git 前同步 README 的相关功能和当前版本号；涉及用户操作时一并更新 docs/USER-GUIDE.md。版本、安装包名称和更新步骤应与当次发布一致，从使用者的操作流程组织说明。

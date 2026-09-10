@@ -184,7 +184,11 @@ export function libraryApi({
     const rows = db
       .prepare("SELECT * FROM songs ORDER BY created DESC")
       .all()
-      .filter((s) => !!get("hidden:" + s.id) === (req.query.hidden === "true") && (!req.query.artist || s.artist === req.query.artist));
+      .filter(
+        (s) =>
+          !!get("hidden:" + s.id) === (req.query.hidden === "true") &&
+          (!req.query.artist || s.artist === req.query.artist),
+      );
     const result = await Promise.all(
       rows.map(async (row) => {
         if (get("package-ready:" + row.id) && get("package:" + row.id))
@@ -543,6 +547,7 @@ export function libraryApi({
         req.body.title,
         req.body.artist,
         Number(req.body.duration) || 0,
+        { manual: true },
       ),
     ),
   );

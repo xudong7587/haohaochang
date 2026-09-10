@@ -30,6 +30,35 @@ export function onlineApi({
   allowedOrigin,
 }) {
   const previews = previewSessions();
+  app.get("/api/requests/status", member, (_req, res) => {
+    const rows = db
+      .prepare(
+        "SELECT id,kind,status,stage,payload,error,created FROM jobs WHERE json_extract(payload,'$.priority')='mobile' ORDER BY CASE WHEN status IN ('queued','running','waiting-worker','review') THEN 0 ELSE 1 END, created DESC LIMIT 60",
+      )
+      .all();
+    res.set("Cache-Control", "no-store").json(
+      rows.map((row) => {
+        const p = JSON.parse(row.payload);
+        return {
+          id: row.id,
+          requestId: p.requestId || row.id,
+          title: clean(p.title || p.metadata?.title),
+          artist: clean(p.artist || p.metadata?.artist),
+          status: row.status,
+          stage: row.stage || row.kind,
+          created: row.created,
+          message:
+            row.status === "review"
+              ? "需要管理员核对歌曲或补充歌词"
+              : row.status === "failed"
+                ? "暂未完成，请稍后重试或联系管理员"
+                : row.status === "waiting-worker"
+                  ? "等待 PC 整理器连接"
+                  : "",
+        };
+      }),
+    );
+  });
   let loginCache;
   app.get("/api/online/bilibili/status", member, async (req, res) => {
     const cookie = get("favorites", {}).cookie || "";
@@ -93,7 +122,7 @@ export function onlineApi({
       );
     const title = clean(req.body.title),
       artist = clean(req.body.artist);
-    if (!title) throw fail(400, "请填写歌名");
+    if (!title || !artist) throw fail(400, "请填写歌名和歌手");
     const local = db
       .prepare(
         "SELECT * FROM songs WHERE title=? AND artist=? AND status='ready' AND mode IN ('separated','tracks','channels') AND lyrics!=''",
@@ -107,7 +136,7 @@ export function onlineApi({
     if (
       db
         .prepare(
-          "SELECT COUNT(*) n FROM jobs WHERE status IN ('queued','running','waiting-worker') AND (kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online')",
+          "SELECT COUNT(*) n FROM jobs WHERE status IN ('queued','running','waiting-worker') AND (kind IN ('acquire','download') OR json_extract(payload,'$.priority') IN ('online','mobile'))",
         )
         .get().n >= 200
     )
@@ -116,6 +145,7 @@ export function onlineApi({
       id: addJob("acquire", {
         title,
         artist,
+        priority: "mobile",
         enqueue: true,
         name: clean(req.body.name) || "家人",
       }),
@@ -145,7 +175,7 @@ export function onlineApi({
     if (
       db
         .prepare(
-          "SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running','waiting-worker') AND (kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online')",
+          "SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running','waiting-worker') AND (kind IN ('acquire','download') OR json_extract(payload,'$.priority') IN ('online','mobile'))",
         )
         .get().n >= 200
     )
@@ -158,6 +188,7 @@ export function onlineApi({
       enqueue: !!req.body.enqueue,
       name: clean(req.body.name, 24) || "家人",
       isBacking: req.body.isBacking === true,
+      priority: req.body.client === "mobile" ? "mobile" : "online",
     };
     if (req.body.onlineSelection === true) {
       if (!clean(req.body.title) || !clean(req.body.artist))
@@ -166,7 +197,7 @@ export function onlineApi({
         throw fail(400, "请先启用 PC 整理与伴奏分离");
       payload.onlineSelection = true;
       payload.isBacking = false;
-      payload.enqueue = false;
+      payload.enqueue = payload.priority === "mobile";
       if (req.body.previewId) {
         const selected = previews.lookup(req.body.previewId);
         if (

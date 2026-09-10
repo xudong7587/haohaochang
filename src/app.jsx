@@ -1,5 +1,6 @@
 import { ArtistLibrary } from "./artist-library.jsx";
 import { SongArtwork } from "./song-artwork.jsx";
+import { FeedbackToast } from "./feedback-toast.jsx";
 import { version as buildVersion } from "../package.json";
 import {
   api,
@@ -892,6 +893,8 @@ export function App() {
               initialTitle={query}
               notify={notify}
               canLogin={route === "admin"}
+              mobile={route === "mobile"}
+              name={name}
             />
           )}
           {tab === "settings" && admin && (
@@ -1045,11 +1048,7 @@ export function App() {
           refresh={() => setRefresh((n) => n + 1)}
         />
       )}
-      {message && (
-        <div className="toast" role="status">
-          {message}
-        </div>
-      )}
+      <FeedbackToast message={message} />
     </div>
   );
 }

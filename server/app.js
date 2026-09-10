@@ -72,13 +72,17 @@ export function createApp(options = {}) {
         /^\/(login|tv-pairing|queue|playback|control|player|room|reactions)(\/|$)/.test(
           req.path,
         );
-      if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && !writable)
-        return res
-          .status(403)
-          .json({
-            error:
-              "本地预览使用 NAS 媒体只读副本；请在正式管理端执行整理和资源修改。",
-          });
+      const readOnlyLyricsSearch =
+        req.method === "POST" && req.path === "/admin/find-lyrics";
+      if (
+        !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+        !writable &&
+        !readOnlyLyricsSearch
+      )
+        return res.status(403).json({
+          error:
+            "本地预览使用 NAS 媒体只读副本；请在正式管理端执行整理和资源修改。",
+        });
       next();
     });
   const token = (req) =>

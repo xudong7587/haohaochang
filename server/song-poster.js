@@ -2,12 +2,17 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile, readFile, stat, rename, rm } from "node:fs/promises";
 import { randomUUID, createHash } from "node:crypto";
-import { findPoster, downloadPoster } from "./poster-source.js";
+import {
+  findPoster,
+  findArtistPoster,
+  downloadPoster,
+} from "./poster-source.js";
 import { withSongWrite, currentSong } from "./song-writes.js";
 import { safeMedia, inside } from "./media-utils.js";
 import { run } from "./process.js";
 
 export const posterName = "封面.jpg";
+export const posterSearchVersion = 2;
 export const posterBase = (store, id, cache) =>
   store.get("package-base:" + id) ||
   store.get("package:" + id) ||
@@ -19,7 +24,12 @@ export function needsPoster(store, song) {
     !store.get("package-ready:" + song.id)
   )
     return false;
-  if (store.get("poster-attempt:" + song.id)?.at > Date.now() - 24 * 3600000)
+  const attempt = store.get("poster-attempt:" + song.id);
+  if (
+    attempt?.at > Date.now() - 24 * 3600000 &&
+    (attempt.status === "success" ||
+      attempt.searchVersion === posterSearchVersion)
+  )
     return false;
   return (
     !song.poster ||
@@ -36,6 +46,7 @@ export async function scrapePoster(
     outputDirectory,
     sourceRoots = [cache],
     find = findPoster,
+    findArtist = findArtistPoster,
     download = downloadPoster,
     report = () => {},
   } = {},
@@ -90,14 +101,26 @@ export async function scrapePoster(
           });
           let bytes;
           try {
-            bytes = await download(source.imageUrl);
+            try {
+              bytes = await download(source.imageUrl);
+            } catch (error) {
+              if (
+                !source.fallbackImageUrl ||
+                source.fallbackImageUrl === source.imageUrl
+              )
+                throw error;
+              bytes = await download(source.fallbackImageUrl);
+            }
           } catch (error) {
             if (
-              !source.fallbackImageUrl ||
-              source.fallbackImageUrl === source.imageUrl
+              source.fallback === "artist" ||
+              (song.poster && existsSync(song.poster))
             )
               throw error;
-            bytes = await download(source.fallbackImageUrl);
+            const artist = await findArtist(song.artist);
+            if (!artist) throw error;
+            bytes = await download(artist.imageUrl);
+            source = artist;
           }
           await writeFile(input, bytes, { flag: "wx" });
         }
@@ -141,6 +164,7 @@ export async function scrapePoster(
         store.set("poster-attempt:" + id, {
           at: Date.now(),
           status: "success",
+          searchVersion: posterSearchVersion,
         });
         return {
           status: "success",
@@ -151,6 +175,7 @@ export async function scrapePoster(
         store.set("poster-attempt:" + id, {
           at: Date.now(),
           status: "failed",
+          searchVersion: posterSearchVersion,
           error: error.message,
         });
         throw error;

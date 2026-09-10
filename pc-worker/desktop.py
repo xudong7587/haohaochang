@@ -5,15 +5,52 @@ import subprocess
 import time
 import re
 from pathlib import Path
-from fastapi import Depends
+from fastapi import Depends, HTTPException
+from pydantic import BaseModel
 from fastapi.responses import FileResponse
 import psutil
 
 
-def register(app, root, config, plan, device):
+def register(app, root, config, plan, device, stop=lambda: None):
     from app import auth, ROOT, CONCURRENCY, jobs as job_store
     from lan import addresses
     started = time.time()
+    from updater import UpdateManager
+    from version import VERSION
+    updater = UpdateManager(root, job_store, config, stop)
+    app.state.updater = updater
+
+    class InstallRequest(BaseModel):
+        version: str
+
+    @app.post('/desktop/update/check', dependencies=[Depends(auth)])
+    def check_update():
+        return updater.check()
+
+    @app.post('/desktop/update/install', dependencies=[Depends(auth)])
+    def install_update(body: InstallRequest):
+        try:
+            return updater.install(body.version)
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @app.post('/desktop/update/cancel', dependencies=[Depends(auth)])
+    def cancel_update():
+        try:
+            return updater.cancel()
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @app.post('/desktop/shutdown', dependencies=[Depends(auth)])
+    def shutdown():
+        if updater.snapshot()['phase'] in ('checking', 'downloading', 'waiting', 'installing', 'restarting'):
+            raise HTTPException(409, '请先取消更新或等待更新完成')
+        job_store.pause()
+        if job_store.pending():
+            job_store.resume()
+            raise HTTPException(409, '当前任务尚未完成，请完成后再退出')
+        stop()
+        return {'stopping': True}
 
     @app.get('/ui', include_in_schema=False)
     def ui():
@@ -22,6 +59,10 @@ def register(app, root, config, plan, device):
     @app.get('/icon.svg', include_in_schema=False)
     def icon():
         return FileResponse(root / 'ui' / 'icon.svg', media_type='image/svg+xml')
+
+    @app.get('/update.js', include_in_schema=False)
+    def update_script():
+        return FileResponse(root / 'ui' / 'update.js', media_type='text/javascript')
 
     @app.get('/desktop/status', dependencies=[Depends(auth)])
     def dashboard():
@@ -74,7 +115,7 @@ def register(app, root, config, plan, device):
                     encoder=encoder, decoder=decoder, busiest=max((v for v in (compute, encoder, decoder) if v is not None), default=None))
             except (OSError, ValueError, subprocess.SubprocessError):
                 pass
-        return dict(version='0.3.9', lan=getattr(app.state, 'lan', {}), addresses=[f'http://{ip}:{config["port"]}' for ip in addresses()], name='好好唱资源 AI 整理器', device=device, gpu_name=plan.get('gpu_name'),
+        return dict(version=VERSION, update=updater.snapshot(), lan=getattr(app.state, 'lan', {}), addresses=[f'http://{ip}:{config["port"]}' for ip in addresses()], name='好好唱资源 AI 整理器', device=device, gpu_name=plan.get('gpu_name'),
                     model='htdemucs', segment=float(os.environ.get('SEPARATION_SEGMENT', 4)),
                     runtime=plan['runtime'], host=config.get('host', '127.0.0.1'), port=config['port'],
                     uptime=round(time.time()-started), cpu=psutil.cpu_percent(),

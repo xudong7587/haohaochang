@@ -15,6 +15,25 @@ const service = createApp({
   discovery: false,
 });
 const worker = express();
+worker.use(express.json());
+let updateState = { phase: "idle", current: "0.3.10" };
+const updateCalls = [];
+worker.post("/desktop/update/:action", (q, r) => {
+  assert.equal(q.headers.authorization, "Bearer worker-test-secret");
+  updateCalls.push(q.params.action);
+  if (q.params.action === "check")
+    updateState = {
+      phase: "available",
+      current: "0.3.10",
+      latest: "0.3.11",
+      secret: "never-forward-update-secret",
+    };
+  else if (q.params.action === "install") {
+    assert.equal(q.body.version, "0.3.11");
+    updateState = { phase: "waiting", latest: "0.3.11" };
+  } else updateState = { phase: "cancelled", latest: "0.3.11" };
+  r.json(updateState);
+});
 let mode = "online",
   requests = 0;
 worker.get("/desktop/status", (q, r) => {
@@ -22,6 +41,8 @@ worker.get("/desktop/status", (q, r) => {
   assert.equal(q.headers.authorization, "Bearer worker-test-secret");
   if (mode === "offline") return r.status(503).end();
   r.json({
+    version: "0.3.10",
+    update: updateState,
     name: "测试 PC",
     device: "cuda",
     runtime: "cu128",
@@ -119,6 +140,18 @@ try {
   await page.getByRole("button", { name: "查看状态" }).click();
   await page.getByText("PC 已连接，任务自动处理", { exact: true }).waitFor();
   await page.getByText("测试视频裁剪", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "检查更新", exact: true }).click();
+  await page.getByRole("button", { name: "安装新版", exact: true }).waitFor();
+  assert.ok(
+    !(await page.locator("body").textContent()).includes(
+      "never-forward-update-secret",
+    ),
+  );
+  await page.getByRole("button", { name: "安装新版", exact: true }).click();
+  await page.getByRole("button", { name: "取消更新", exact: true }).waitFor();
+  await page.getByRole("button", { name: "取消更新", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "已取消更新" }).waitFor();
+  assert.deepEqual(updateCalls, ["check", "install", "cancel"]);
   assert.equal(
     await page.getByText("已整理旧歌曲", { exact: true }).isVisible(),
     false,

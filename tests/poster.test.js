@@ -6,7 +6,11 @@ import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
 import ffmpeg from "ffmpeg-static";
 import { openStore } from "../server/db.js";
 import { run } from "../server/process.js";
-import { scrapePoster, needsPoster } from "../server/song-poster.js";
+import {
+  scrapePoster,
+  needsPoster,
+  posterSearchVersion,
+} from "../server/song-poster.js";
 import {
   findPoster,
   downloadPoster,
@@ -31,7 +35,11 @@ test("automatic backfill caps batches, skips busy/hidden songs and observes retr
     store.set("package-ready:" + n, true);
   }
   store.set("hidden:0", true);
-  store.set("poster-attempt:1", { at: Date.now(), status: "missing" });
+  store.set("poster-attempt:1", {
+    at: Date.now(),
+    status: "missing",
+    searchVersion: posterSearchVersion,
+  });
   store.db
     .prepare(
       "INSERT INTO jobs(id,kind,payload,status,created) VALUES(?,?,?,?,?)",
@@ -51,10 +59,15 @@ test("automatic backfill caps batches, skips busy/hidden songs and observes retr
   assert.equal(queueMissingPosters({ store, addJob }), 0);
   store.db.prepare("UPDATE jobs SET status='done' WHERE kind='poster'").run();
   for (const id of queued)
-    store.set("poster-attempt:" + id, { at: Date.now(), status: "missing" });
+    store.set("poster-attempt:" + id, {
+      at: Date.now(),
+      status: "missing",
+      searchVersion: posterSearchVersion,
+    });
   store.set("poster-attempt:1", {
     at: Date.now() - 25 * 3600000,
     status: "missing",
+    searchVersion: posterSearchVersion,
   });
   assert.equal(queueMissingPosters({ store, addJob }), 3);
   assert.deepEqual(queued.slice(4), ["1", "7", "8"]);

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { sameLyricsTitle, lyricsArtist } from "../../shared/lyrics-identity.js";
 
 const normalize = (value) =>
   String(value || "")
@@ -35,8 +36,8 @@ export function localLyricsProvider(indexPath) {
       const matches = records.filter(
         (row) =>
           row &&
-          normalize(row.title) === normalize(query.title) &&
-          normalize(row.artist) === normalize(query.artist),
+          sameLyricsTitle(row.title, query.title) &&
+          lyricsArtist(row.artist) === lyricsArtist(query.artist),
       );
       const results = [];
       for (const row of matches.slice(0, 200)) {

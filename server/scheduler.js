@@ -21,6 +21,24 @@ export function createScheduler(
     resolveStop();
   }
   function addJob(kind, payload) {
+    function promote(existing) {
+      if (payload.priority === "mobile" || payload.enqueue) {
+        const p = JSON.parse(existing.payload);
+        db.prepare("UPDATE jobs SET payload=? WHERE id=?").run(
+          JSON.stringify({
+            ...p,
+            ...(payload.priority === "mobile"
+              ? { priority: "mobile", requestId: p.requestId || existing.id }
+              : {}),
+            ...(payload.enqueue ? { enqueue: true, name: payload.name } : {}),
+          }),
+          existing.id,
+        );
+        emit();
+        setImmediate(work);
+      }
+      return existing.id;
+    }
     if (kind === "acquire") {
       const existing = db
         .prepare(
@@ -31,7 +49,7 @@ export function createScheduler(
           const p = JSON.parse(j.payload);
           return p.title === payload.title && p.artist === payload.artist;
         });
-      if (existing) return existing.id;
+      if (existing) return promote(existing);
     }
     if (["download", "favorite-download"].includes(kind)) {
       const duplicate = db
@@ -51,16 +69,7 @@ export function createScheduler(
           );
         });
       if (duplicate) {
-        if (payload.enqueue)
-          db.prepare("UPDATE jobs SET payload=? WHERE id=?").run(
-            JSON.stringify({
-              ...JSON.parse(duplicate.payload),
-              enqueue: true,
-              name: payload.name,
-            }),
-            duplicate.id,
-          );
-        return duplicate.id;
+        return promote(duplicate);
       }
     }
     if (kind === "prepare") {
@@ -119,7 +128,15 @@ export function createScheduler(
           currentSong(store, songId).metadataRevision,
       };
     const id = randomUUID();
-    payload = { ...payload, operationKey, jobId: id, stagingId: id };
+    payload = {
+      ...payload,
+      operationKey,
+      jobId: id,
+      stagingId: id,
+      ...(payload.priority === "mobile"
+        ? { requestId: payload.requestId || id }
+        : {}),
+    };
     db.prepare(
       "INSERT INTO jobs (id,kind,payload,status,created) VALUES (?,?,?,?,?)",
     ).run(id, kind, JSON.stringify(payload), "queued", Date.now());
@@ -139,7 +156,7 @@ export function createScheduler(
     );
     const job = db
       .prepare(
-        "SELECT * FROM jobs WHERE status='queued' ORDER BY CASE WHEN kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online' THEN 0 WHEN kind='resource-cleanup' THEN 1 WHEN kind='poster' THEN 3 ELSE 2 END, created",
+        "SELECT * FROM jobs WHERE status='queued' ORDER BY CASE WHEN json_extract(payload,'$.priority')='mobile' THEN -1 WHEN kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online' THEN 0 WHEN kind='resource-cleanup' THEN 1 WHEN kind='poster' THEN 3 ELSE 2 END, created",
       )
       .all()
       .find(
@@ -147,7 +164,7 @@ export function createScheduler(
           (!jobSong(j) || !activeSongs.has(jobSong(j))) &&
           (running < 3 ||
             ["acquire", "download"].includes(j.kind) ||
-            JSON.parse(j.payload).priority === "online"),
+            ["online", "mobile"].includes(JSON.parse(j.payload).priority)),
       );
     if (!job) return;
     running++;
@@ -168,8 +185,21 @@ export function createScheduler(
         (["acquire", "download"].includes(job.kind) ? "online" : undefined);
       const context = {
         ...dependencies,
-        addJob: (kind, child) =>
-          addJob(kind, { ...child, ...(priority ? { priority } : {}) }),
+        addJob: (kind, child) => {
+          const fresh = JSON.parse(
+            db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id)
+              .payload,
+          );
+          const nextPriority = fresh.priority || priority;
+          return addJob(kind, {
+            ...child,
+            ...(nextPriority ? { priority: nextPriority } : {}),
+            ...(fresh.requestId ? { requestId: fresh.requestId } : {}),
+            ...(nextPriority === "mobile" && fresh.enqueue
+              ? { enqueue: true, name: fresh.name }
+              : {}),
+          });
+        },
         enqueue,
         report,
       };
@@ -237,6 +267,23 @@ export function createScheduler(
         db.prepare(
           "UPDATE jobs SET status='waiting-worker',stage='waiting-worker',error=? WHERE id=?",
         ).run(e.message, job.id);
+        return;
+      }
+      const fresh = JSON.parse(
+        db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id).payload,
+      );
+      if (job.kind === "download" && fresh.priority === "mobile") {
+        const fallbackJob = addJob("acquire", {
+          title: fresh.title,
+          artist: fresh.artist,
+          priority: "mobile",
+          enqueue: true,
+          name: fresh.name,
+          requestId: fresh.requestId || job.id,
+        });
+        db.prepare(
+          "UPDATE jobs SET status='done',stage='audio-fallback',payload=?,error='' WHERE id=?",
+        ).run(JSON.stringify({ ...fresh, fallbackJob }), job.id);
         return;
       }
       db.prepare("UPDATE jobs SET status='failed',error=? WHERE id=?").run(

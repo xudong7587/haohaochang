@@ -6,8 +6,20 @@ android {
         applicationId 'home.haohaochang.tv'
         minSdk 23
         targetSdk 28
-        versionCode 12
-        versionName '0.3.9'
+        versionCode 13
+        versionName '0.3.10'
     }
-    buildTypes { release { minifyEnabled false } }
+    signingConfigs {
+        release {
+            if (System.getenv('TV_KEYSTORE_FILE')) {
+                storeFile file(System.getenv('TV_KEYSTORE_FILE'))
+                storeType 'PKCS12'
+                storePassword System.getenv('TV_KEYSTORE_PASSWORD')
+                keyAlias 'haohaochang'
+                keyPassword System.getenv('TV_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
 }
+dependencies { testImplementation 'junit:junit:4.13.2' }

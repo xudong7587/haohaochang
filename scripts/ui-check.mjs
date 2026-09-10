@@ -233,7 +233,7 @@ try {
   await page.screenshot({ path: "test-results/ui/admin.png", fullPage: true });
   await page.getByRole("button", { name: "曲库管理", exact: true }).click();
   await page.getByRole("button", { name: /^标准曲库/ }).click();
-  await page.locator(".artist-library").first().click();
+  assert.equal(await page.locator(".artist-library").count(), 0);
   const row = page.locator('[data-song-id="' + String(2).repeat(24) + '"]');
   await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
   await row.getByLabel("歌名", { exact: true }).fill("保留中的草稿");

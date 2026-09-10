@@ -1,8 +1,23 @@
 # 功能模块与并行开发分工
 
-更新于 2026-09-09。本文是分工与接口变更的统一入口；[审查报告](ADVERSARIAL-REVIEW.md)保存问题证据，[开发状态](PROJECT-STATUS.md)记录当前功能与实机限制。
+更新于 2026-09-10。本文是分工与接口变更的统一入口；[审查报告](ADVERSARIAL-REVIEW.md)保存问题证据，[开发状态](PROJECT-STATUS.md)记录当前功能与实机限制。
 
 NAS 保存资料、任务、队列与资源；PC／云端执行分离；网页、手机和 TV 消费 NAS 状态。第 0 批和第 1 批 T1–T8 已集成，模块按下列边界拆分。
+
+## v0.3.10：TV APK 与 PC 整理器应用内更新
+
+2026-09-10 已按后续授权实现，当前实现与验证边界见 [开发状态](PROJECT-STATUS.md)。下文保留最初的设计目标供核对。正式附件固定为 `haohaochang-tv.apk` 和 `haohaochang-resource-ai.zip`，使用 Release asset digest 校验；TV 持久签名已配置。Docker 继续由用户手动拉取镜像、重新部署，不增加自动部署功能。
+
+目标流程：检查 GitHub 最新正式 Release → 显示版本与更新说明 → 用户点击更新 → 下载、校验 → 安装或覆盖程序 → 重新打开。无需另建更新服务器。
+
+- TV APK：提供遥控器可操作的“检查更新／下载更新”，下载后调用 Android 系统安装器，由用户确认安装；按系统要求引导开启安装来源权限。覆盖升级必须保持包名、兼容签名与递增 versionCode。现有包是 CI 生成的 debug APK，下一版先核实旧包签名，建立持久签名与旧版本过渡方案，不假定现有包一定能直接覆盖。保留 NAS 地址与登录状态；TV 的 NAS 网页部分仍随 NAS 更新，APK 更新用于原生外壳。
+- PC 整理器：使用 GitHub 的 `haohaochang-resource-ai.zip`，等任务空闲后由独立隐藏更新进程停止服务、替换程序并重启。保留 `worker.json`、`runtime`、`.venv` 和 `data`（模型、任务、结果与日志）；更新前备份程序，失败恢复，避免服务运行时直接覆盖文件。
+- 发布下载：读取 `/repos/xudong7587/haohaochang/releases/latest` 的版本和附件，选定该次 Release 后固定下载地址及校验文件，避免检查和下载跨版本。PC 附件已有固定文件名；APK 当前文件名含版本号，应从附件列表解析，或发布固定名称的 APK 别名后使用 `/releases/latest/download/<附件名>`。首次带更新器的版本仍需手动安装一次。
+- 验收：最新版本无更新、发现新版、网络中断、校验失败、取消安装、签名不符、PC 忙碌等待、文件占用、替换失败回滚，以及更新后配置、模型、任务与登录状态保留。使用隔离 localhost 传输替身和临时程序目录；TV 安装确认与覆盖升级需实机验证。
+
+主责 E/F/Q：TV 外壳、PC 更新器及 Release 附件／签名；只有需要 NAS 代理更新入口时才涉及 G，届时再确定接口。
+
+依据：[GitHub 最新 Release 下载链接](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases)、[GitHub Releases API](https://docs.github.com/en/rest/releases/releases)、[Android 安装器](https://developer.android.com/reference/android/content/pm/PackageInstaller)、[Android 应用签名](https://developer.android.com/studio/publish/app-signing)。
 
 ## 模块归属
 

@@ -52,6 +52,14 @@ export function Player({
       localStorage.setItem("haohaochang.lyricsVisible", String(visible));
     } catch {}
   }
+  useEffect(() => {
+    const sync = (event) => {
+      if (event.key === "haohaochang.lyricsVisible")
+        setLyricsVisible(event.newValue !== "false");
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
   const [time, setTime] = useState(0),
     [showQueue, setShowQueue] = useState(false),
     [actualVariant, setActualVariant] = useState(null);
@@ -320,7 +328,11 @@ export function Player({
   const audioStage =
     manifest?.version === 2 && (!manifest.resources.video || pictureError);
   return (
-    <section ref={container} className={`tv-player ${full ? "is-full" : ""}`}>
+    <section
+      ref={container}
+      data-system-lyrics={lyricsVisible ? "visible" : "hidden"}
+      className={`tv-player ${full ? "is-full" : ""}`}
+    >
       <div
         className="video-stage"
         ref={stage}

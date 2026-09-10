@@ -16,6 +16,9 @@ try {
       $online = $health.protocol -eq 'ktv-separation-v1'
     } catch { $online = $false }
     if ($online) {
+      if (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'tray.ps1')) {
+        Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $PSScriptRoot 'tray.ps1') + '"'))
+      }
       if ($health.capabilities -notcontains 'video-clip-v1') {
         throw 'An older organizer is running. Stop its Python process before opening this update. Keep worker.json, runtime and data.'
       }
