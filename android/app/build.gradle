@@ -21,5 +21,8 @@ android {
         }
     }
     buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
+    // Distributed directly to home TVs, not Google Play. Keep the existing TV
+    // behavior target; all other release lint checks remain enabled.
+    lint { disable 'ExpiredTargetSdkVersion' }
 }
 dependencies { testImplementation 'junit:junit:4.13.2' }
