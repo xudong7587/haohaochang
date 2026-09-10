@@ -22,6 +22,8 @@ export function Player({
     container = useRef(),
     stage = useRef(),
     fullscreenMode = useRef("none"),
+    fullscreenRequest = useRef(0),
+    fullscreenExit = useRef(Promise.resolve()),
     latest = useRef(current),
     position = useRef(0),
     previousEntry = useRef(null);
@@ -191,8 +193,9 @@ export function Player({
           document.exitFullscreen().catch(() => {});
           return;
         }
-        fullscreenMode.current = "native";
-        setFull(true);
+        // requestFullscreen's promise owns native entry. Old native events must
+        // not turn a newly requested CSS fallback into a native session.
+        if (fullscreenMode.current === "native") setFull(true);
       } else if (fullscreenMode.current === "native") {
         fullscreenMode.current = "none";
         setFull(false);
@@ -219,18 +222,34 @@ export function Player({
       clearInterval(interval);
     };
   }, [full, queue.length > 0]);
+  function exitNativeFullscreen() {
+    if (document.fullscreenElement)
+      fullscreenExit.current = document.exitFullscreen().catch(() => {});
+    return fullscreenExit.current;
+  }
   async function fullscreen() {
-    if (full || document.fullscreenElement) {
+    const request = ++fullscreenRequest.current;
+    if (full) {
       fullscreenMode.current = "none";
       setFull(false);
-      if (document.fullscreenElement)
-        await document.exitFullscreen().catch(() => {});
+      await exitNativeFullscreen();
     } else {
       // CSS also fills the TV WebView on devices which reject the native API.
       fullscreenMode.current = "fallback";
       setFull(true);
       try {
+        // Escape updates React before the browser finishes its native exit.
+        await fullscreenExit.current;
+        if (request !== fullscreenRequest.current) return;
+        if (document.fullscreenElement) await exitNativeFullscreen();
+        if (request !== fullscreenRequest.current) return;
         await container.current.requestFullscreen?.();
+        if (request !== fullscreenRequest.current) {
+          await exitNativeFullscreen();
+          return;
+        }
+        if (document.fullscreenElement === container.current)
+          fullscreenMode.current = "native";
       } catch {}
     }
   }
@@ -246,9 +265,10 @@ export function Player({
         return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      fullscreenRequest.current++;
       fullscreenMode.current = "none";
       setFull(false);
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      void exitNativeFullscreen();
       container.current?.querySelector("[data-fullscreen]")?.focus();
     };
     document.addEventListener("keydown", key, true);

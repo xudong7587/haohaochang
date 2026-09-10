@@ -190,7 +190,13 @@ try {
     store.get("lyrics-offset:" + String(1).repeat(24), 0),
     lyricsBefore,
   );
-  await page.keyboard.press("Escape");
+  // Force a slow native exit, then immediately ask for CSS fullscreen again.
+  await page.evaluate(() => {
+    const exit = document.exitFullscreen.bind(document);
+    document.exitFullscreen = () =>
+      new Promise((resolve) => setTimeout(resolve, 350)).then(exit);
+    window.haohaochangBack();
+  });
   await page.waitForFunction(
     () => !document.querySelector(".tv-player.is-full"),
   );
