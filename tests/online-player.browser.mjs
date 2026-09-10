@@ -245,6 +245,17 @@ try {
     /第一句歌词/,
   );
   assert.equal(await page.locator(".lyric-countdown span").count(), 4);
+  await page.getByRole("button", { name: "隐藏歌词", exact: true }).click();
+  assert.equal(await page.locator(".lyrics-scene").count(), 0);
+  assert.equal(await page.getByLabel("歌词时间微调").count(), 0);
+  await page.locator(".video-stage").focus();
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(await page.evaluate(() => window.controlCalls.length), 0);
+  await page.reload();
+  await page.getByRole("button", { name: "显示歌词", exact: true }).waitFor();
+  assert.equal(await page.locator(".lyrics-scene").count(), 0);
+  await page.getByRole("button", { name: "显示歌词", exact: true }).click();
+  await page.waitForSelector(".lyric-countdown");
   await page.locator(".video-stage").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("ArrowLeft");
   await page.waitForFunction(() => window.controlCalls.length === 1);
@@ -295,6 +306,10 @@ try {
     document.dispatchEvent(new Event("fullscreenchange")),
   );
   await page.waitForSelector(".tv-player.is-full");
+  await page.getByRole("button", { name: "隐藏歌词", exact: true }).click();
+  assert.equal(await page.locator(".lyrics-scene").count(), 0);
+  await page.getByRole("button", { name: "显示歌词", exact: true }).click();
+  await page.waitForSelector(".lyrics-scene");
   await page.keyboard.press("Escape");
   await page.waitForFunction(
     () => !document.querySelector(".tv-player.is-full"),

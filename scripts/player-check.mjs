@@ -214,6 +214,28 @@ try {
     await page.evaluate(() => window.oldTracks.every((t) => t.el.paused)),
     true,
   );
+  await page.evaluate(() => {
+    window.lyricsToggleVideo = document.querySelector("video");
+    window.lyricsToggleTracks = window.lyricsToggleVideo._audioTracks;
+    window.lyricsToggleTime = window.lyricsToggleVideo._playback.getTime();
+  });
+  await page.getByRole("button", { name: "隐藏歌词", exact: true }).click();
+  assert.equal(await page.locator(".lyrics-scene").count(), 0);
+  await page.waitForFunction(
+    () =>
+      document.querySelector("video")._playback.getTime() >
+      window.lyricsToggleTime + 0.3,
+  );
+  assert.ok(
+    await page.evaluate(
+      () =>
+        document.querySelector("video") === window.lyricsToggleVideo &&
+        window.lyricsToggleVideo._audioTracks === window.lyricsToggleTracks &&
+        window.lyricsToggleTracks.some((t) => !t.failed && !t.el.paused),
+    ),
+  );
+  await page.getByRole("button", { name: "显示歌词", exact: true }).click();
+  await page.waitForSelector(".lyrics-scene");
   await page.goto(base + "/?song=picture");
   await page.waitForFunction(() => document.querySelector("video")?.ended);
   assert.equal(await page.evaluate(() => window.endedCalls || 0), 0);

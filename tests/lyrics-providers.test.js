@@ -45,37 +45,32 @@ test("configured local Chinese enhanced LRC is preferred and records origin, off
   assert.equal(result.status, "candidate");
   assert.ok(result.reviewReasons.includes("recording-alignment-needs-review"));
 });
-test("same name, cover artist, missing duration and recording version do not auto-match", async (t) => {
+test("lyrics match title and artist, allow two minute differences and ignore recording-version labels", async (t) => {
   const { localIndex } = await fixture(t, [{ ...row, version: "live" }]);
-  for (const [artist, duration, options] of [
-    [row.artist, 200, {}],
-    ["翻唱歌手", 200, { version: "live" }],
-    [row.artist, 205, { version: "live" }],
+  for (const duration of [80, 200, 205, 320]) {
+    const result = await findLyrics(row.title, row.artist, duration, {
+      localIndex,
+      lrclib: false,
+    });
+    assert.equal(result.recording.version, "live");
+  }
+  for (const [title, artist, duration] of [
+    ["另一首歌", row.artist, 200],
+    [row.title, "翻唱歌手", 200],
+    [row.title, row.artist, 321],
+    [row.title, row.artist, 79],
   ]) {
     await assert.rejects(
-      findLyrics(row.title, artist, duration, {
-        localIndex,
-        lrclib: false,
-        ...options,
-      }),
+      findLyrics(title, artist, duration, { localIndex, lrclib: false }),
       { code: "LYRICS_NOT_FOUND" },
     );
   }
-  assert.equal(
-    (
-      await findLyrics(row.title, row.artist, 200, {
-        localIndex,
-        lrclib: false,
-        version: "live",
-      })
-    ).recording.version,
-    "live",
-  );
-  assert.ok(
+  assert.deepEqual(
     lyricsMatchReasons(
       { ...row, lyrics: "[00:00]词", duration: 0 },
       { ...row, duration: 200 },
-    ).includes("duration-mismatch"),
+    ),
+    [],
   );
 });
 test("same-duration matching lyrics select a candidate without blocking", async (t) => {

@@ -31,6 +31,20 @@ export function Player({
   const { playerId, lease, leaseError } = usePlayerLease({ request, token });
   const playState = useRef({});
   playState.current = { lease, paused: playback.paused, entryId: current?.id };
+  const [lyricsVisible, setLyricsVisible] = useState(() => {
+    try {
+      return localStorage.getItem("haohaochang.lyricsVisible") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  function toggleLyrics() {
+    const visible = !lyricsVisible;
+    setLyricsVisible(visible);
+    try {
+      localStorage.setItem("haohaochang.lyricsVisible", String(visible));
+    } catch {}
+  }
   const [time, setTime] = useState(0),
     [showQueue, setShowQueue] = useState(false),
     [actualVariant, setActualVariant] = useState(null);
@@ -49,7 +63,7 @@ export function Player({
     ).catch((e) => notify(e.message));
   }
   useEffect(() => {
-    if (!current || !(full || keyboardLyrics)) return;
+    if (!current || !lyricsVisible || !(full || keyboardLyrics)) return;
     let last = 0;
     const key = (e) => {
       if (
@@ -75,7 +89,7 @@ export function Player({
     };
     document.addEventListener("keydown", key, true);
     return () => document.removeEventListener("keydown", key, true);
-  }, [current?.id, full, keyboardLyrics, request]);
+  }, [current?.id, full, keyboardLyrics, request, lyricsVisible]);
   const variant =
     current?.mode === "original" || playback.vocal ? "vocal" : "backing";
   function ended(entryId) {
@@ -305,7 +319,11 @@ export function Player({
         ref={stage}
         tabIndex={0}
         role="group"
-        aria-label="演唱画面，确认键全屏，左右键微调歌词"
+        aria-label={
+          lyricsVisible
+            ? "演唱画面，确认键全屏，左右键微调歌词"
+            : "演唱画面，确认键全屏"
+        }
         onKeyDown={(event) => {
           if (
             event.target === event.currentTarget &&
@@ -345,7 +363,7 @@ export function Player({
             <Spectrum video={video} />
           </>
         )}
-        {current && (
+        {current && lyricsVisible && (
           <Lyrics
             song={current}
             time={time}
@@ -446,6 +464,14 @@ export function Player({
                 : "等待开唱"}
           </span>
           <button
+            type="button"
+            onClick={toggleLyrics}
+            aria-pressed={lyricsVisible}
+            aria-label={lyricsVisible ? "隐藏歌词" : "显示歌词"}
+          >
+            {lyricsVisible ? "隐藏歌词" : "显示歌词"}
+          </button>
+          <button
             data-fullscreen
             onClick={fullscreen}
             aria-label={full ? "退出全屏" : "全屏播放"}
@@ -479,7 +505,7 @@ export function Player({
             ))}
           </div>
         )}
-        {current && (
+        {current && lyricsVisible && (
           <div className="lyric-adjust" aria-label="歌词时间微调">
             {[10, 3, 0.5].map((seconds) => (
               <button

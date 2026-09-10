@@ -68,7 +68,7 @@ test("lyrics acquisition rejects mismatched singer or recording duration", async
   });
   assert.equal((await findLyrics("歌", "歌手", 201, fetcher)).sourceId, 1);
   await assert.rejects(findLyrics("歌", "翻唱者", 200, fetcher));
-  await assert.rejects(findLyrics("歌", "歌手", 240, fetcher));
+  await assert.rejects(findLyrics("歌", "歌手", 321, fetcher));
 });
 test("bili-sync credentials assemble cookie and preserve explicit episode", () => {
   const config = favoriteConfig({

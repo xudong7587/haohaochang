@@ -1,5 +1,4 @@
 import { parseLyrics } from "../shared/lyrics.js";
-import { recordingVersion } from "../shared/catalog.js";
 import { localLyricsProvider } from "./providers/local-lyrics.js";
 import { lrclibProvider } from "./providers/lrclib.js";
 
@@ -17,20 +16,10 @@ export function lyricsMatchReasons(row, query) {
     reasons.push("artist-mismatch");
   if (
     query.duration > 0 &&
-    (!(row.duration > 0) || Math.abs(row.duration - query.duration) > 4)
+    row.duration > 0 &&
+    Math.abs(row.duration - query.duration) > 120
   )
     reasons.push("duration-mismatch");
-  const expected = normalize(
-      recordingVersion(query.version) ||
-        query.version ||
-        recordingVersion(query.title),
-    ),
-    actual = normalize(
-      recordingVersion(row.version) ||
-        row.version ||
-        recordingVersion(row.title),
-    );
-  if (expected !== actual) reasons.push("recording-version-mismatch");
   if (!parseLyrics(row.lyrics || "").length)
     reasons.push("synced-lyrics-missing");
   return reasons;
@@ -110,7 +99,7 @@ export async function findLyrics(title, artist, duration, options = {}) {
     };
   }
   const error = new Error(
-    "没有找到歌名、歌手、时长和版本匹配的 LRC，请手动补充",
+    "没有找到歌名、歌手匹配且时长相差不超过两分钟的 LRC，请手动补充",
   );
   error.code = "LYRICS_NOT_FOUND";
   error.diagnostics = diagnostics;
