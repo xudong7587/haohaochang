@@ -73,6 +73,7 @@ export function createSourceCandidate(info, identity = info.identity) {
         ? Number(url.searchParams.get("p") || 1)
         : null,
     externalTitle,
+    cover: typeof info.cover === "string" ? info.cover.slice(0, 2000) : "",
     duration: Number.isFinite(duration) && duration > 0 ? duration : null,
     identity: {
       title: String(parsed.title || "").slice(0, 120),

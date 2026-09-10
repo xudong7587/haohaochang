@@ -1,3 +1,4 @@
+import { createPlayerLease } from "./player-lease.js";
 import { clampLyricsOffset } from "../shared/lyrics.js";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -6,8 +7,8 @@ import { inspectPackage } from "./resource-health.js";
 import { fail, clean } from "./http-utils.js";
 export function createRoom({ app, member, store, cache, emit, addJob }) {
   const { db, get, set } = store;
-  let player = null,
-    ambient = null;
+  const playerLease = createPlayerLease();
+  let ambient = null;
   function snapshot() {
     const queue = db
       .prepare(
@@ -16,7 +17,7 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
       .all();
     const pending = db
       .prepare(
-        "SELECT id,kind,payload,status FROM jobs WHERE status IN ('queued','running') AND kind!='scan' ORDER BY created",
+        "SELECT id,kind,payload,status FROM jobs WHERE status IN ('queued','running') AND kind NOT IN ('scan','poster') ORDER BY created",
       )
       .all()
       .map((j) => {
@@ -44,7 +45,8 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
           0,
         ),
       },
-      playerOnline: !!player && Date.now() - player.seen < 15000,
+      playerOnline: !!playerLease.snapshot(),
+      player: playerLease.snapshot(),
     };
   }
   const revise = (patch = {}) => {
@@ -176,18 +178,17 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
   app.post("/api/player/heartbeat", member, (req, res) => {
     const id = clean(req.body.id, 80);
     if (!id) throw fail(400, "缺少播放器标识");
-    if (player && player.id !== id && Date.now() - player.seen < 15000)
-      throw fail(409, "另一台电视正在播放，请关闭另一台的播放页面后等待 15 秒");
-    player = { id, seen: Date.now() };
+    const result = playerLease.heartbeat({
+      id,
+      type: req.body.type,
+      claim: req.body.claim,
+    });
     if (!snapshot().queue.length && !ambient) pickAmbient();
-    res.json({ ok: true });
+    else if (result.changed) emit();
+    res.json({ ok: true, owner: result.owner });
   });
   app.post("/api/player/ended", member, (req, res) => {
-    if (
-      !player ||
-      player.id !== req.body.playerId ||
-      Date.now() - player.seen > 15000
-    )
+    if (!playerLease.owns(req.body.playerId))
       throw fail(409, "播放器连接已失效");
     if (ambient?.id === req.body.entryId && !snapshot().queue.length) {
       pickAmbient();

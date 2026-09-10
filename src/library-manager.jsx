@@ -1,5 +1,13 @@
-import { statusNames } from "./view-constants.js";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Search,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  Plus,
+} from "lucide-react";
+import { TaskList, completedTask } from "./task-list.jsx";
+import { Pagination } from "./workbench-controls.jsx";
 import { ResourceRow } from "./library/resource-row.jsx";
 import { VideoReview } from "./library/video-review.jsx";
 import { SourceImport } from "./library/source-import.jsx";
@@ -10,7 +18,12 @@ import {
   standardizeBatch,
 } from "./library/batch.js";
 export { LyricsSettings } from "./library/lyrics-settings.jsx";
-
+const tiers = [
+  ["pending", "待整理曲库"],
+  ["audio", "半标准曲库"],
+  ["standard", "标准曲库"],
+  ["hidden", "已隐藏"],
+];
 export function LibraryManager({ request, notify, onEdit }) {
   const [songs, setSongs] = useState([]),
     [tasks, setTasks] = useState([]),
@@ -20,6 +33,15 @@ export function LibraryManager({ request, notify, onEdit }) {
     [query, setQuery] = useState(""),
     [busy, setBusy] = useState(false),
     [results, setResults] = useState([]);
+  const [page, setPage] = useState(1),
+    [sort, setSort] = useState("artist"),
+    [grouped, setGrouped] = useState(true);
+  const [openGroups, setOpenGroups] = useState({}),
+    [collapseKey, setCollapseKey] = useState(0),
+    [selected, setSelected] = useState(new Set());
+  const [taskOpen, setTaskOpen] = useState(false),
+    [importOpen, setImportOpen] = useState(false);
+  const visited = useRef(new Set());
   async function refresh() {
     const [library, pending, inbox, hidden, jobs] = await Promise.all([
       request("/admin/library"),
@@ -56,299 +78,462 @@ export function LibraryManager({ request, notify, onEdit }) {
       setBusy(false);
     }
   }
-  const matches = (row) =>
-    (String(row.title || "") + " " + String(row.artist || ""))
+  const entries = [
+    ...reviews.map((row) => ({
+      key: `review:${row.inbox ? "inbox" : "review"}:${row.id || row.file}`,
+      row,
+      review: true,
+      tier: "pending",
+    })),
+    ...songs.map((row) => ({ key: `song:${row.id}`, row, tier: row.tier })),
+    ...hiddenSongs.map((row) => ({
+      key: `hidden:${row.id}`,
+      row,
+      tier: "hidden",
+    })),
+  ];
+  const matches = ({ row }) =>
+    `${row.title || ""} ${row.artist || ""}`
       .toLowerCase()
-      .includes(query.toLowerCase());
-  const visibleCount =
-    tab === "hidden"
-      ? hiddenSongs.filter(matches).length
-      : songs.filter((song) => song.tier === tab && matches(song)).length +
-        (tab === "pending" ? reviews.filter(matches).length : 0);
+      .includes(query.trim().toLowerCase());
+  const filtered = entries
+    .filter((e) => e.tier === tab && matches(e))
+    .sort((a, b) => {
+      if (sort === "title" && !grouped)
+        return (a.row.title || "").localeCompare(b.row.title || "", "zh-CN");
+      return (
+        (a.row.artist || "未知歌手").localeCompare(
+          b.row.artist || "未知歌手",
+          "zh-CN",
+        ) || (a.row.title || "").localeCompare(b.row.title || "", "zh-CN")
+      );
+    });
+  const currentPage = Math.min(
+    page,
+    Math.max(1, Math.ceil(filtered.length / 20)),
+  );
+  const visible = filtered.slice((currentPage - 1) * 20, currentPage * 20);
+  const visibleKeys = new Set(visible.map((e) => e.key));
+  visible.forEach((e) => visited.current.add(e.key));
+  const chosen = entries.filter(
+    (e) => selected.has(e.key) && e.tier === tab && e.tier !== "hidden",
+  );
+  const batchEntries = chosen.length ? chosen : filtered;
+  const batchSongs = batchEntries.filter((e) => !e.review).map((e) => e.row);
+  const batchReviews = batchEntries.filter((e) => e.review).map((e) => e.row);
+  const artists = [...new Set(visible.map((e) => e.row.artist || "未知歌手"))];
+  const groupOpen = (artist) =>
+    openGroups[`${tab}:${artist}`] ?? (tab !== "standard" || !!query.trim());
+  function changeTab(id) {
+    setTab(id);
+    setPage(1);
+    setSelected(new Set());
+    setCollapseKey((v) => v + 1);
+  }
+  function expandAll(open) {
+    setOpenGroups((v) => ({
+      ...v,
+      ...Object.fromEntries(artists.map((a) => [`${tab}:${a}`, open])),
+    }));
+    if (!open) setCollapseKey((v) => v + 1);
+  }
+  function choose(key) {
+    setSelected((v) => {
+      const next = new Set(v);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+  function batch(fn) {
+    return action(async () => {
+      setResults([]);
+      const result = await fn();
+      notify(`本批 ${result.length} 首，提交结果可在下方查看`);
+    });
+  }
+  const activeTasks = tasks.filter((j) => !completedTask(j));
   return (
-    <section>
+    <section className="library-workspace">
       <div className="section-heading">
         <div>
           <h2>曲库管理</h2>
-          <p>按歌曲整理信息、MV、原唱、伴奏和歌词。</p>
+          <p>先找到歌曲，再处理需要补充的资源。</p>
         </div>
         <div className="actions">
           <button
-            disabled={busy || !songs.length}
-            onClick={() =>
-              action(async () => {
-                setResults([]);
-                const completed = await refreshMetadataBatch(
-                  songs,
-                  request,
-                  setResults,
-                );
-                notify(`本批已处理 ${completed.length} 首，请查看逐项结果`);
-              })
-            }
+            onClick={() => setImportOpen((v) => !v)}
+            aria-expanded={importOpen}
           >
-            重新识别歌名与歌手
+            <Plus size={16} />
+            添加链接
           </button>
           <button disabled={busy} onClick={() => action(async () => {})}>
+            <RefreshCw size={16} />
             刷新列表
           </button>
         </div>
       </div>
-      {tasks.some((j) =>
-        ["running", "queued", "waiting-worker"].includes(j.status),
-      ) && (
-        <section className="settings-card">
-          <h3>正在整理</h3>
-          {tasks
-            .filter((j) =>
-              ["running", "queued", "waiting-worker"].includes(j.status),
-            )
-            .sort(
-              (a, b) =>
-                Number(b.status === "running") - Number(a.status === "running"),
-            )
-            .map((j) => (
-              <article className="pc-job" key={j.id}>
-                <strong>
-                  {j.title || "后台任务"}
-                  {j.artist ? " · " + j.artist : ""}
-                </strong>
-                <p>
-                  {statusNames[j.status]} ·{" "}
-                  {j.media_progress?.label ||
-                    {
-                      separating: "去除人声",
-                      decoding: "提取音频",
-                      downloading: "下载视频",
-                      clipping: "裁剪片段",
-                      "preparing-video": "保存原画面",
-                      "preparing-audio": "准备音轨",
-                      "preparing-video-pc": "转换画面",
-                    }[j.stage] ||
-                    "等待处理"}
-                </p>
-                {j.media_progress && (
-                  <progress max="100" value={j.media_progress.percent} />
-                )}
-                {Number.isFinite(j.model_progress) && (
-                  <progress max="100" value={j.model_progress} />
-                )}
-              </article>
-            ))}
-        </section>
-      )}
-      <p className="note">
-        “重新识别歌名与歌手”会批量更新歌曲名称；“刷新列表”只读取最新任务和曲库状态。列表也会每
-        10 秒自动刷新。
-      </p>
-      <BatchResults
-        results={results.filter(
-          (r) => !["success", "skipped"].includes(r.status),
-        )}
-      />
-
-      <div className="library-tabs">
-        {[
-          ["pending", "待整理曲库"],
-          ["audio", "半标准曲库"],
-          ["standard", "标准曲库"],
-          ["hidden", "已隐藏"],
-        ].map(([id, label]) => (
+      <div hidden={!importOpen}>
+        <SourceImport {...{ request, action, busy, notify }} />
+      </div>
+      <section className="library-task-summary">
+        <button
+          className="group-heading"
+          aria-expanded={taskOpen}
+          onClick={() => setTaskOpen((v) => !v)}
+        >
+          {taskOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          <strong>整理任务</strong>
+          <span>
+            {activeTasks.filter((j) => j.status === "running").length} 处理中 ·{" "}
+            {
+              activeTasks.filter((j) =>
+                ["queued", "waiting-worker"].includes(j.status),
+              ).length
+            }{" "}
+            等待 · {activeTasks.filter((j) => j.status === "failed").length}{" "}
+            失败
+          </span>
+          <small>{taskOpen ? "收起任务" : "查看任务"}</small>
+        </button>
+        <div hidden={!taskOpen}>
+          <TaskList
+            jobs={tasks}
+            label="曲库任务"
+            actions={(j) =>
+              ["failed", "waiting-worker"].includes(j.status) && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    action(() =>
+                      request(`/admin/jobs/${j.id}/retry`, {}, "POST"),
+                    )
+                  }
+                >
+                  重试
+                </button>
+              )
+            }
+          />
+        </div>
+      </section>
+      <div className="library-tabs" aria-label="曲库分类">
+        {tiers.map(([id, label]) => (
           <button
             key={id}
             className={tab === id ? "active" : ""}
-            onClick={() => setTab(id)}
+            aria-pressed={tab === id}
+            onClick={() => changeTab(id)}
           >
-            {label} ·{" "}
-            {id === "hidden"
-              ? hiddenSongs.length
-              : songs.filter((song) => song.tier === id).length +
-                (id === "pending" ? reviews.length : 0)}
+            {label} · {entries.filter((e) => e.tier === id).length}
           </button>
         ))}
       </div>
-      {["pending", "audio"].includes(tab) && (
-        <div className="actions tier-actions">
-          {" "}
-          <button
-            className="primary"
-            disabled={busy}
-            onClick={() =>
-              action(async () => {
-                setResults([]);
-                const completed = await organizeBatch(
-                  songs.filter((song) => song.tier === tab),
-                  tab === "pending" ? reviews : [],
-                  request,
-                  setResults,
-                );
-                notify(
-                  `已提交 ${completed.filter((r) => r.status === "success").length} 首，逐项结果见下方`,
-                );
-              })
-            }
+      <div className="library-collection">
+        <div className="list-toolbar">
+          <label className="list-search">
+            <Search size={16} />
+            <input
+              aria-label="筛选曲库"
+              placeholder="筛选歌名或歌手"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+                setSelected(new Set());
+              }}
+            />
+          </label>
+          <select
+            aria-label="歌曲排序"
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value);
+              setPage(1);
+            }}
           >
-            全部整理
-          </button>
+            <option value="artist">按歌手排序</option>
+            <option value="title">按歌名排序</option>
+          </select>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={grouped}
+              onChange={(e) => setGrouped(e.target.checked)}
+            />
+            按歌手分组
+          </label>
         </div>
-      )}
-      {tab === "standard" && (
-        <div className="actions tier-actions">
-          <button
-            className="primary"
-            disabled={busy || !songs.some((song) => song.tier === "standard")}
-            onClick={() =>
-              action(async () => {
-                setResults([]);
-                const completed = await standardizeBatch(
-                  songs,
-                  request,
-                  setResults,
-                );
-                notify(
-                  `已提交 ${completed.filter((result) => result.status === "success").length} 首，逐项结果见下方`,
-                );
-              })
-            }
-          >
-            老版本多视频合一
-          </button>
-          <small>
-            每首只保留当前画面，保留原唱、伴奏和歌词；播放中或已点入队列的歌曲会跳过。
-          </small>
+        <div className="collection-description">
+          <span>
+            {tab === "pending"
+              ? "原始媒体等待整理；歌词未找到也会继续。"
+              : tab === "audio"
+                ? "原唱、伴奏可用，等待补充视频画面。"
+                : tab === "standard"
+                  ? "画面、原唱、伴奏已准备，可随时点唱。"
+                  : "媒体仍保留，恢复后重新按资源能力分类。"}
+          </span>
+          <small>每 10 秒自动刷新</small>
         </div>
-      )}
-      <input
-        aria-label="筛选曲库"
-        placeholder="筛选歌名或歌手"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-      <p>
-        {tab === "pending"
-          ? "原始媒体等待整理。确认歌名和歌手后即可开始，自动查找歌词，找不到也会继续。"
-          : tab === "audio"
-            ? "原唱、伴奏已准备，可直接唱；等待补充匹配视频，歌词可选。"
-            : tab === "hidden"
-              ? "已隐藏歌曲保留媒体文件，恢复后重新按资源能力分类。"
-              : "画面、原唱、伴奏已准备，歌词可随时补充。"}
-      </p>
-      {reviews.map((row) =>
-        row.kind === "find-video" ? (
-          <VideoReview
-            key={"review" + row.id}
-            {...{ row, request, action, busy, notify }}
-            hidden={tab !== "pending" || !matches(row)}
-          />
-        ) : (
-          <ResourceRow
-            key={"review" + row.id}
-            {...{ row, request, action, busy, notify }}
-            review
-            hidden={tab !== "pending" || !matches(row)}
-          />
-        ),
-      )}
-      {songs
-        .filter((row) => row.tier !== "standard")
-        .map((row) => (
-          <ResourceRow
-            key={row.id}
-            {...{ row, request, action, busy, notify }}
-            hidden={row.tier !== tab || !matches(row)}
-            onEdit={onEdit ? () => onEdit(row) : undefined}
-          />
-        ))}
-      {[
-        ...new Set(
-          songs
-            .filter((row) => row.tier === "standard")
-            .map((row) => row.artist || "未知歌手"),
-        ),
-      ]
-        .sort((a, b) => a.localeCompare(b, "zh-CN"))
-        .map((artist) => (
-          <details
-            className="artist-library settings-card"
-            key={artist}
-            hidden={
-              tab !== "standard" ||
-              !songs.some(
-                (row) =>
-                  row.tier === "standard" &&
-                  (row.artist || "未知歌手") === artist &&
-                  matches(row),
-              )
-            }
-          >
-            <summary>
-              {artist} ·{" "}
-              {
-                songs.filter(
-                  (row) =>
-                    row.tier === "standard" &&
-                    (row.artist || "未知歌手") === artist &&
-                    matches(row),
-                ).length
-              }{" "}
-              首
-            </summary>
-            <div className="artist-song-list">
-              {songs
-                .filter(
-                  (row) =>
-                    row.tier === "standard" &&
-                    (row.artist || "未知歌手") === artist,
-                )
-                .sort((a, b) => a.title.localeCompare(b.title, "zh-CN"))
-                .map((row) => (
-                  <ResourceRow
-                    key={row.id}
-                    {...{ row, request, action, busy, notify }}
-                    hidden={!matches(row)}
-                    onEdit={onEdit ? () => onEdit(row) : undefined}
-                  />
-                ))}
-            </div>
-          </details>
-        ))}
-      {tab === "hidden" &&
-        hiddenSongs.filter(matches).map((song) => (
-          <article className="workbench-row" key={song.id}>
-            <strong>
-              {song.title} — {song.artist}
-            </strong>
-            <div className="actions">
+        <div className="collection-actions">
+          <div className="actions">
+            {tab !== "hidden" && (
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  aria-label="选择本页歌曲"
+                  checked={
+                    visible.length > 0 &&
+                    visible.every((e) => selected.has(e.key))
+                  }
+                  onChange={(e) =>
+                    setSelected((v) => {
+                      const next = new Set(v);
+                      visible.forEach((item) =>
+                        e.target.checked
+                          ? next.add(item.key)
+                          : next.delete(item.key),
+                      );
+                      return next;
+                    })
+                  }
+                />
+                本页
+              </label>
+            )}
+            <span>
+              {chosen.length
+                ? `已选 ${chosen.length} 首（可跨页）`
+                : `筛选结果 ${filtered.length} 首`}
+            </span>
+            {chosen.length > 0 && (
+              <button onClick={() => setSelected(new Set())}>取消选择</button>
+            )}
+          </div>
+          <div className="actions">
+            <button
+              disabled={!grouped || !visible.length}
+              onClick={() => expandAll(true)}
+            >
+              展开本页
+            </button>
+            <button onClick={() => expandAll(false)}>全部收起</button>
+          </div>
+        </div>
+        {tab !== "hidden" && (
+          <div className="batch-toolbar">
+            <span>
+              操作范围：{chosen.length ? "已选" : "当前筛选"}{" "}
+              {batchEntries.length} 首
+            </span>
+            {["pending", "audio"].includes(tab) && (
               <button
-                disabled={busy}
+                className="primary"
+                disabled={busy || !batchEntries.length}
                 onClick={() =>
-                  action(async () => {
-                    await request(
-                      "/admin/library/" + song.id + "/restore",
-                      {},
-                      "POST",
-                    );
-                    notify("歌曲已恢复");
-                  })
+                  batch(() =>
+                    organizeBatch(
+                      batchSongs,
+                      batchReviews,
+                      request,
+                      setResults,
+                    ),
+                  )
                 }
               >
-                恢复歌曲
+                {chosen.length
+                  ? "整理所选"
+                  : query
+                    ? "整理筛选结果"
+                    : "全部整理"}
               </button>
-            </div>
-          </article>
-        ))}
-      {!visibleCount && <p>这个分类暂时没有匹配歌曲。</p>}
-      {results.some((r) => ["success", "skipped"].includes(r.status)) && (
-        <details className="settings-card">
-          <summary>已完成批量提交结果</summary>
-          <BatchResults
-            results={results.filter((r) =>
-              ["success", "skipped"].includes(r.status),
             )}
-          />
-        </details>
-      )}
-      <SourceImport {...{ request, action, busy, notify }} />
+            <button
+              disabled={busy || !batchSongs.length}
+              onClick={() =>
+                batch(() =>
+                  refreshMetadataBatch(batchSongs, request, setResults),
+                )
+              }
+            >
+              重新识别歌名与歌手
+            </button>
+            <button
+              disabled={busy || !batchSongs.length}
+              onClick={() =>
+                batch(async () => {
+                  const result = [];
+                  for (let start = 0; start < batchSongs.length; start += 20) {
+                    const rows = batchSongs.slice(start, start + 20);
+                    const response = await request(
+                      "/admin/poster-batch",
+                      {
+                        items: rows.map((row) => ({
+                          id: row.id,
+                          expectedRevision: row.metadataRevision,
+                        })),
+                      },
+                      "POST",
+                    );
+                    result.push(
+                      ...response.results.map((item) => ({
+                        ...item,
+                        title:
+                          rows.find((row) => row.id === item.id)?.title ||
+                          "歌曲",
+                      })),
+                    );
+                    setResults([...result]);
+                  }
+                  return result;
+                })
+              }
+            >
+              补充歌曲封面
+            </button>
+            {tab === "standard" && (
+              <details className="library-tools">
+                <summary>曲库维护</summary>
+                <div>
+                  <p>
+                    每首只保留当前画面，保留音轨和歌词；播放中或已点入队列的歌曲会跳过。
+                  </p>
+                  <button
+                    disabled={busy || !batchSongs.length}
+                    onClick={() =>
+                      batch(() =>
+                        standardizeBatch(batchSongs, request, setResults),
+                      )
+                    }
+                  >
+                    老版本多视频合一
+                  </button>
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+        <div className="library-rows">
+          {entries
+            .filter((e) => visited.current.has(e.key))
+            .sort((a, b) => {
+              const ai = visible.findIndex((v) => v.key === a.key),
+                bi = visible.findIndex((v) => v.key === b.key);
+              return (ai < 0 ? Infinity : ai) - (bi < 0 ? Infinity : bi);
+            })
+            .map((entry) => {
+              const { key, row, review } = entry;
+              const artist = row.artist || "未知歌手";
+              const onPage = visibleKeys.has(key);
+              const first =
+                onPage &&
+                visible.find((e) => (e.row.artist || "未知歌手") === artist)
+                  ?.key === key;
+              const hidden = !onPage || (grouped && !groupOpen(artist));
+              return (
+                <React.Fragment key={key}>
+                  {first && grouped && (
+                    <button
+                      className="group-heading artist-library"
+                      aria-expanded={groupOpen(artist)}
+                      onClick={() =>
+                        setOpenGroups((v) => ({
+                          ...v,
+                          [`${tab}:${artist}`]: !groupOpen(artist),
+                        }))
+                      }
+                    >
+                      {groupOpen(artist) ? (
+                        <ChevronDown size={16} />
+                      ) : (
+                        <ChevronRight size={16} />
+                      )}
+                      <strong>{artist}</strong>
+                      <span>
+                        本页{" "}
+                        {
+                          visible.filter(
+                            (e) => (e.row.artist || "未知歌手") === artist,
+                          ).length
+                        }{" "}
+                        首
+                      </span>
+                      <small>{groupOpen(artist) ? "收起" : "展开"}</small>
+                    </button>
+                  )}
+                  {entry.tier === "hidden" ? (
+                    <article className="workbench-row" hidden={hidden}>
+                      <header>
+                        <div className="resource-identity">
+                          <strong>{row.title}</strong>
+                          <p>{row.artist}</p>
+                        </div>
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            action(async () => {
+                              await request(
+                                `/admin/library/${row.id}/restore`,
+                                {},
+                                "POST",
+                              );
+                              notify("歌曲已恢复");
+                            })
+                          }
+                        >
+                          恢复歌曲
+                        </button>
+                      </header>
+                    </article>
+                  ) : review && row.kind === "find-video" ? (
+                    <VideoReview
+                      {...{
+                        row,
+                        request,
+                        action,
+                        busy,
+                        notify,
+                        hidden,
+                        collapseKey,
+                      }}
+                      selected={selected.has(key)}
+                      onSelect={() => choose(key)}
+                    />
+                  ) : (
+                    <ResourceRow
+                      {...{
+                        row,
+                        request,
+                        action,
+                        busy,
+                        notify,
+                        hidden,
+                        collapseKey,
+                      }}
+                      review={review}
+                      selected={selected.has(key)}
+                      onSelect={() => choose(key)}
+                      onEdit={!review && onEdit ? () => onEdit(row) : undefined}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
+        </div>
+        {!filtered.length && (
+          <p className="list-empty">这个分类暂时没有匹配歌曲。</p>
+        )}
+        <Pagination
+          total={filtered.length}
+          page={currentPage}
+          onPage={(value) => {
+            setPage(value);
+            setCollapseKey((v) => v + 1);
+          }}
+        />
+      </div>
+      <BatchResults results={results} />
     </section>
   );
 }

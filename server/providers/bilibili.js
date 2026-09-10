@@ -68,6 +68,7 @@ export const bilibiliProvider = {
       title: page && pages.length > 1 ? page.part : body.data.title,
       videoTitle: body.data.title,
       uploader: body.data.owner?.name,
+      cover: String(body.data.pic || "").replace(/^http:/, "https:").replace(/^\/\//, "https://"),
       duration: page?.duration ?? body.data.duration,
     };
   },

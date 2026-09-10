@@ -123,13 +123,13 @@ try {
     await page.getByText("已整理旧歌曲", { exact: true }).isVisible(),
     false,
   );
-  await page.getByText("已完成记录 · 1 项", { exact: true }).click();
+  await page.getByRole("button", { name: /已完成记录.*1 项/ }).click();
   await page.getByText("已整理旧歌曲", { exact: true }).waitFor();
   await page.getByRole("button", { name: "刷新状态", exact: true }).click();
   await page.getByText("已整理旧歌曲", { exact: true }).waitFor();
-  await page.getByText("已完成记录 · 1 项", { exact: true }).click();
-  await page.getByText("待整理歌曲 · 测试歌手", { exact: true }).waitFor();
-  await page.getByText("查看日志", { exact: true }).click();
+  await page.getByRole("button", { name: /已完成记录.*1 项/ }).click();
+  await page.getByText("待整理歌曲", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /测试视频裁剪/ }).click();
   await page.getByText("正在裁剪所选区间", { exact: true }).waitFor();
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "导出诊断日志" }).click();
@@ -169,7 +169,7 @@ try {
     0,
   );
   await page.reload();
-  await page.getByRole("heading", { name: "NAS 整理队列" }).waitFor();
+  await page.getByRole("heading", { name: "整理任务中心" }).waitFor();
   await page.goto(base + "/admin");
   await page.getByRole("button", { name: "歌星管理", exact: true }).waitFor();
   assert.equal(

@@ -36,7 +36,8 @@ export function mediaApi({
       .prepare("SELECT * FROM songs WHERE id=?")
       .get(req.params.id);
     if (!song || song.status !== "ready") throw fail(404, "歌曲未就绪");
-    await migrateSongAssets(song.id, legacyCache, cache);
+    if (!store.readOnlyMedia)
+      await migrateSongAssets(song.id, legacyCache, cache);
     res.sendFile(
       path.join(
         cache,
@@ -54,6 +55,7 @@ export function mediaApi({
         ...roots,
         downloads,
         path.join(dir, "downloads"),
+        path.join(dir, "posters"),
       ]),
     );
   });

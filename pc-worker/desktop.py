@@ -74,7 +74,7 @@ def register(app, root, config, plan, device):
                     encoder=encoder, decoder=decoder, busiest=max((v for v in (compute, encoder, decoder) if v is not None), default=None))
             except (OSError, ValueError, subprocess.SubprocessError):
                 pass
-        return dict(version='0.3.8', lan=getattr(app.state, 'lan', {}), addresses=[f'http://{ip}:{config["port"]}' for ip in addresses()], name='好好唱资源 AI 整理器', device=device, gpu_name=plan.get('gpu_name'),
+        return dict(version='0.3.9', lan=getattr(app.state, 'lan', {}), addresses=[f'http://{ip}:{config["port"]}' for ip in addresses()], name='好好唱资源 AI 整理器', device=device, gpu_name=plan.get('gpu_name'),
                     model='htdemucs', segment=float(os.environ.get('SEPARATION_SEGMENT', 4)),
                     runtime=plan['runtime'], host=config.get('host', '127.0.0.1'), port=config['port'],
                     uptime=round(time.time()-started), cpu=psutil.cpu_percent(),

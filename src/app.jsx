@@ -1,3 +1,6 @@
+import { ArtistLibrary } from "./artist-library.jsx";
+import { SongArtwork } from "./song-artwork.jsx";
+import { version as buildVersion } from "../package.json";
 import {
   api,
   roomToken,
@@ -434,7 +437,9 @@ export function App() {
           </IconButton>
           <IconButton
             icon={Users}
-            className={tab === "artists" ? "selected" : ""}
+            className={
+              ["artists", "artist-library"].includes(tab) ? "selected" : ""
+            }
             onClick={() => {
               setTab("artists");
               setArtist("");
@@ -504,6 +509,18 @@ export function App() {
             </button>
           </div>
           <span className="fine">好好唱 · 把日子唱成歌</span>
+          {route === "admin" && (
+            <div className="app-version">
+              <span>v{admin?.version || buildVersion}</span>
+              <a
+                href="https://github.com/xudong7587/haohaochang"
+                target="_blank"
+                rel="noreferrer"
+              >
+                GitHub ↗
+              </a>
+            </div>
+          )}
         </div>
       </aside>
       <main>
@@ -544,6 +561,23 @@ export function App() {
           </div>
         </header>
         <div className="content">
+          {route === "admin" && admin?.readOnlyMedia && (
+            <p className="preview-mode-banner">
+              本地预览 · NAS 媒体只读，任务仅展示快照
+            </p>
+          )}
+          {route === "admin" && tab === "artist-library" && (
+            <ArtistLibrary
+              artist={artist}
+              request={(url, body, method) => api(url, body, method, true)}
+              token={adminToken}
+              notify={notify}
+              back={() => {
+                setArtist("");
+                setTab("artists");
+              }}
+            />
+          )}
           {route === "tv" && tab === "stage" && (
             <Stage
               current={current}
@@ -668,77 +702,40 @@ export function App() {
                   返回歌手
                 </button>
               )}
-              <div className="song-table">
-                <div className="table-head">
-                  <span>歌曲 / 歌手</span>
-                  <span>音频</span>
-                  <span>时长</span>
-                  <span>{route === "admin" ? "管理" : "点歌"}</span>
-                </div>
-                {songs.map((song, i) => (
-                  <div className="song-row" key={song.id}>
-                    <div className="song-info">
-                      <span className={`song-cover color-${i % 5}`}>
-                        {song.hasPoster ? (
-                          <img
-                            src={
-                              "/api/poster/" +
-                              song.id +
-                              "?token=" +
-                              encodeURIComponent(roomToken)
-                            }
-                            alt=""
-                          />
-                        ) : (
-                          <Music2 size={21} />
-                        )}
-                      </span>
-                      <div>
-                        <strong>{song.title}</strong>
-                        <small>
-                          {song.artist}
-                          {!!song.needs_review && <em> · 待核对</em>}
-                          {song.mode === "original" && <em> · 待分离</em>}
-                          {!!song.needs_video && <em> · 待补视频</em>}
-                          {song.status !== "ready" && (
-                            <em> · {statusNames[song.status]}</em>
-                          )}
-                        </small>
+              <div className="song-poster-grid song-search-grid">
+                {songs.map((song) => {
+                  const added = state.queue.some((q) => q.song_id === song.id);
+                  return (
+                    <article className="song-poster-card" key={song.id}>
+                      <div className="song-poster-image">
+                        <SongArtwork song={song} token={roomToken} size={52} />
+                        <span className="poster-duration">
+                          {duration(song.duration)}
+                        </span>
                       </div>
-                    </div>
-                    <span className="audio-label">{modeNames[song.mode]}</span>
-                    <span className="time">{duration(song.duration)}</span>
-                    {route === "admin" ? (
-                      <button
-                        onClick={() => setEditing(song)}
-                        aria-label={`编辑 ${song.title}`}
-                      >
-                        <SlidersHorizontal size={16} />
-                        <span>编辑</span>
-                      </button>
-                    ) : (
-                      <button
-                        className={
-                          state.queue.some((q) => q.song_id === song.id)
-                            ? "added"
-                            : "add-song"
-                        }
-                        disabled={
-                          song.status === "preparing" ||
-                          state.queue.some((q) => q.song_id === song.id)
-                        }
-                        onClick={() => add(song)}
-                        aria-label={`点歌 ${song.title}`}
-                      >
-                        {state.queue.some((q) => q.song_id === song.id) ? (
-                          <Check size={19} />
-                        ) : (
-                          <Plus size={19} />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                ))}
+                      <div className="poster-song-info">
+                        <strong>{song.title}</strong>
+                        <small>{song.artist}</small>
+                      </div>
+                      <div className="poster-song-actions">
+                        <small>
+                          {song.status !== "ready"
+                            ? statusNames[song.status]
+                            : modeNames[song.mode]}
+                        </small>
+                        <button
+                          className={added ? "added" : "add-song"}
+                          disabled={song.status === "preparing" || added}
+                          onClick={() => add(song)}
+                          aria-label={`点歌 ${song.title}`}
+                        >
+                          {added ? <Check size={18} /> : <Plus size={18} />}
+                          <span>{added ? "已点" : "点歌"}</span>
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
               {!songs.length && (
                 <Empty
@@ -790,7 +787,7 @@ export function App() {
                     onClick={() => {
                       setArtist(a.artist);
                       setQuery("");
-                      setTab("songs");
+                      setTab(route === "admin" ? "artist-library" : "songs");
                     }}
                   >
                     <div className={`artist-avatar color-${i % 5}`}>
@@ -954,6 +951,8 @@ export function App() {
       </main>
       {route === "tv" && (
         <Player
+          playerType={isWebRoom ? "web" : "tv"}
+          activePlayer={state.player}
           keyboardLyrics={tab === "stage"}
           current={current}
           playback={playback}

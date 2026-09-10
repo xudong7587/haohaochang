@@ -1,3 +1,4 @@
+import { scrapePoster } from "./song-poster.js";
 import { migrateSongAssets } from "./assets.js";
 import { organize } from "./job-handlers/organize.js";
 import { acquire } from "./job-handlers/acquire.js";
@@ -16,6 +17,7 @@ import { compatibleVideo } from "./job-handlers/compatible-video.js";
 import { cleanImportedDownloads } from "./download-cleanup.js";
 
 const handlers = {
+  poster: (_job, payload, context) => scrapePoster(context.store, payload.id, context.cache, { sourceRoots: [...context.roots, context.downloads], ...context.posterOptions, force: payload.force === true, report: context.report }),
   "compatible-video": compatibleVideo,
   "upgrade-hd": upgradeHd,
   standardize,

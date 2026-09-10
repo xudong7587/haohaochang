@@ -22,7 +22,13 @@ jobs:
         timeout-minutes: 3
       - run: node tests/feedback.browser.mjs
         timeout-minutes: 3
+      - run: node tests/pc-worker-ui.browser.mjs
+        timeout-minutes: 3
+      - run: node tests/poster.browser.mjs
+        timeout-minutes: 3
       - run: node tests/pc-dashboard.browser.mjs
+        timeout-minutes: 3
+      - run: node tests/player-lease.browser.mjs
         timeout-minutes: 3
       - run: node scripts/player-check.mjs
         timeout-minutes: 3

@@ -1,3 +1,5 @@
+import { libraryPreviewApi } from "./library-preview.js";
+import { posterApi } from "./poster-api.js";
 import { requestLimits } from "./request-limits.js";
 import { tvPairingApi } from "./tv-pairing.js";
 import { liveEvents } from "./live-events.js";
@@ -38,6 +40,7 @@ export function createApp(options = {}) {
   [downloads, cache].forEach((p) => mkdirSync(p, { recursive: true }));
   const store = openStore(dir),
     { db, get, set } = store;
+  store.readOnlyMedia = !!options.readOnlyMedia;
   const adminToken =
     options.adminToken || process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN;
   if (!adminToken || adminToken.length < 12)
@@ -63,6 +66,21 @@ export function createApp(options = {}) {
     res.set("X-Content-Type-Options", "nosniff");
     next();
   });
+  if (store.readOnlyMedia)
+    app.use("/api", (req, res, next) => {
+      const writable =
+        /^\/(login|tv-pairing|queue|playback|control|player|room|reactions)(\/|$)/.test(
+          req.path,
+        );
+      if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && !writable)
+        return res
+          .status(403)
+          .json({
+            error:
+              "本地预览使用 NAS 媒体只读副本；请在正式管理端执行整理和资源修改。",
+          });
+      next();
+    });
   const token = (req) =>
     req.get("authorization")?.replace(/^Bearer /, "") || req.query.token;
   const admin = (req, res, next) =>
@@ -101,12 +119,16 @@ export function createApp(options = {}) {
       downloads,
       cache,
       legacyCache,
+      posterOptions: options.posterOptions,
       emit,
       enqueue,
       isPlaying: (id) => snapshot().ambient?.song_id === id,
       fail,
     },
-    { enabled: options.worker !== false, onIdle: () => db.close() },
+    {
+      enabled: options.worker !== false && !store.readOnlyMedia,
+      onIdle: () => db.close(),
+    },
   );
   const { addJob, work } = scheduler;
   const discovery = startDiscovery({
@@ -114,9 +136,10 @@ export function createApp(options = {}) {
     work,
     emit,
     enabled:
-      options.discovery ??
-      (process.env.KTV_DISCOVERY_ENABLED === "1" &&
-        process.env.KTV_LOCAL_ONLY !== "1"),
+      !store.readOnlyMedia &&
+      (options.discovery ??
+        (process.env.KTV_DISCOVERY_ENABLED === "1" &&
+          process.env.KTV_LOCAL_ONLY !== "1")),
   });
   const routeContext = {
     discovery,
@@ -143,6 +166,8 @@ export function createApp(options = {}) {
   tvPairingApi(routeContext);
   libraryApi({ ...routeContext, resolveReview });
   libraryDeleteApi(routeContext);
+  posterApi(routeContext);
+  libraryPreviewApi(routeContext);
   backgroundApi(routeContext);
   app.get("/api/health", (req, res) => res.json({ ok: true }));
   app.post("/api/login", admin, (req, res) =>
@@ -190,7 +215,7 @@ export function createApp(options = {}) {
     downloads,
     cache,
     addJob,
-    enabled: options.worker !== false,
+    enabled: options.worker !== false && !store.readOnlyMedia,
   });
   const heartbeat = setInterval(() => {
     for (const client of clients) client.write(": heartbeat\n\n");
@@ -207,7 +232,7 @@ export function createApp(options = {}) {
       discovery.stop();
       backgroundTasks.stop();
       clients.forEach((c) => c.end());
-      scheduler.stop();
+      return scheduler.stop();
     },
   };
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useReducer, useState } from "react";
+import { WorkbenchDialog } from "../workbench-dialog.jsx";
 import { createDraft, draftReducer, isRevisionConflict } from "./draft.js";
 import { VideoConfirmation, validOffset } from "./video-confirmation.jsx";
 
@@ -17,9 +18,17 @@ export function ResourceRow({
   notify,
   onEdit,
   hidden,
+  collapseKey,
+  selected,
+  onSelect,
 }) {
   const [open, setOpen] = useState(false),
     [draft, dispatch] = useReducer(draftReducer, row, createDraft);
+  const [pane, setPane] = useState("metadata");
+  useEffect(() => {
+    setOpen(false);
+    setDeletion(null);
+  }, [collapseKey, hidden]);
   const [deletion, setDeletion] = useState(null);
   busy = busy || row.processing;
   const deleteSongId = review ? row.songId : row.id;
@@ -143,6 +152,7 @@ export function ResourceRow({
     });
   }
   async function findLyrics() {
+    setPane("lyrics");
     setOpen(true);
     await run(async () => {
       const result = await request(
@@ -166,6 +176,7 @@ export function ResourceRow({
     });
   }
   async function refreshMetadata() {
+    setPane("metadata");
     setOpen(true);
     await run(async () => {
       const result = await request(
@@ -187,7 +198,16 @@ export function ResourceRow({
   return (
     <article className="workbench-row" hidden={hidden} data-song-id={row.id}>
       <header>
-        <div>
+        {onSelect && (
+          <input
+            className="row-select"
+            type="checkbox"
+            aria-label={`选择 ${row.title || "未识别歌名"}`}
+            checked={selected}
+            onChange={onSelect}
+          />
+        )}
+        <div className="resource-identity">
           <strong>{row.title || "未识别歌名"}</strong>
           <p>
             {row.artist || "未识别歌手"} ·{" "}
@@ -208,416 +228,527 @@ export function ResourceRow({
               : ""}
           </p>
         </div>
-        <div className="actions">
-          {row.canUpgradeHd && !review && (
-            <button
-              disabled={busy || draft.dirty}
-              onClick={() =>
-                run(async () => {
-                  await request(
-                    "/admin/library/" + row.id + "/upgrade-hd",
-                    { expectedRevision: row.metadataRevision },
-                    "POST",
-                  );
-                  notify(
-                    "已排队升级高清画面：沿用原裁剪区间，保留原唱、伴奏和歌词",
-                  );
-                })
-              }
-            >
-              升级高清画面
-            </button>
-          )}
-          {row.tier !== "standard" && (
-            <>
-              <button
-                className="primary"
-                disabled={busy || draft.conflict}
-                onClick={organize}
-              >
-                {row.tier === "audio" ? "整理 / 查找 MV" : "开始整理"}
-              </button>
-              <button
-                disabled={busy || draft.conflict}
-                onClick={refreshMetadata}
-              >
-                刷新歌名 / 歌手
-              </button>
-            </>
-          )}
-          {!review && row.tier === "standard" && (
-            <details>
-              <summary>设备兼容</summary>
-              <p>
-                默认保留原画面。仅当播放设备不支持原编码时转换为
-                H.264，音轨和歌词保留。
-              </p>
-              <button
-                disabled={busy}
-                onClick={() =>
-                  run(async () => {
-                    await request(
-                      `/admin/library/${row.id}/compatible-video`,
-                      { expectedRevision: row.metadataRevision },
-                      "POST",
-                    );
-                    notify("已提交兼容画面转换，原唱和伴奏保持不变");
-                  })
-                }
-              >
-                转换兼容画面
-              </button>
-            </details>
-          )}
-          <button disabled={busy} onClick={() => setOpen(true)}>
-            {row.tier === "audio" ? "补充 MV" : "替换视频"}
-          </button>
+        <div className="actions row-primary-actions">
           {row.tier !== "standard" && (
             <button
-              disabled={busy || draft.conflict || !form.title || !form.artist}
-              onClick={findLyrics}
+              className="primary"
+              disabled={busy || draft.conflict}
+              onClick={organize}
             >
-              自动找歌词
+              {row.tier === "audio" ? "整理 / 查找 MV" : "开始整理"}
             </button>
           )}
-          <button onClick={() => setOpen(!open)}>
-            {open ? "收起" : "编辑歌曲"}
+          <button
+            aria-expanded={open}
+            onClick={() => {
+              setPane("metadata");
+              setOpen(true);
+            }}
+          >
+            编辑歌曲
           </button>
-          {(!review || row.songId || row.inbox || row.kind === "import") && (
-            <button
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  setDeletion(
-                    await request(
-                      deleteBase + "/delete-preview",
-                      deleteSongId ? undefined : deletePayload,
-                      deleteSongId ? "GET" : "POST",
-                    ),
-                  );
-                })
-              }
-            >
-              删除
-            </button>
-          )}
+          <button
+            onClick={() => {
+              setPane("actions");
+              setOpen(true);
+            }}
+          >
+            更多操作
+          </button>
         </div>
       </header>
-      {deletion && (
-        <div role="dialog" aria-label="确认删除媒体" className="settings-card">
-          <strong>永久删除《{deletion.title}》及以下媒体，无法恢复</strong>
-          <ul>
-            {deletion.targets.map((target) => (
-              <li key={target.path}>
-                <code>{target.path}</code>
-                {target.directory ? "（整个目录）" : ""}
-              </li>
-            ))}
-          </ul>
-          <div className="actions">
-            <button disabled={busy} onClick={() => setDeletion(null)}>
-              取消
-            </button>
-            <button
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  await request(
-                    deleteBase + "/delete-files",
-                    { ...deletePayload, token: deletion.token },
-                    "POST",
-                  );
-                  setDeletion(null);
-                  notify("歌曲及对应媒体已删除");
-                })
-              }
-            >
-              确认永久删除
-            </button>
-          </div>
-        </div>
-      )}
-      {row.note && <p>{row.note}</p>}
       {row.missing?.length > 0 && (
-        <p className="muted">
-          {row.status === "ready" ? "可补充资源：" : "整理后将生成："}
-          {row.missing.map((name) => resourceNames[name] || name).join("、")}
-        </p>
+        <small className="resource-coverage">
+          {row.status === "ready" ? "可补充：" : "待准备："}
+          {row.missing.map((name) => resourceNames[name] || name).join(" · ")}
+        </small>
       )}
-      {row.folder && (
-        <details>
-          <summary>文件位置</summary>
-          <code>{row.folder}</code>
-        </details>
-      )}
-      {draft.conflict && (
-        <div role="alert" className="settings-card">
-          <strong>资料已更新，草稿已保留</strong>
-          <p>
-            请比较最新资料后决定如何继续。当前草稿基于修订 {draft.revision}
-            ，最新修订 {draft.latest.revision}。
-          </p>
-          <p>
-            最新歌名：{draft.latest.values.title}；最新歌手：
-            {draft.latest.values.artist}
-          </p>
-          <details>
-            <summary>查看最新歌词</summary>
-            <pre style={{ whiteSpace: "pre-wrap" }}>
-              {draft.latest.values.lyrics || "没有歌词"}
-            </pre>
-          </details>
-          {!conflictLoaded && <p>正在刷新最新资料，加载完成后再处理冲突。</p>}
+      <WorkbenchDialog
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          setDeletion(null);
+        }}
+        title={`${row.title || "未识别歌名"} · ${row.artist || "未识别歌手"}`}
+      >
+        <nav className="detail-tabs" aria-label="歌曲详情分类">
+          {[
+            ["metadata", "歌曲资料"],
+            ["video", "视频画面"],
+            ["lyrics", "同步歌词"],
+            ["actions", "维护操作"],
+          ].map(([id, name]) => (
+            <button
+              key={id}
+              aria-pressed={pane === id}
+              onClick={() => setPane(id)}
+            >
+              {name}
+            </button>
+          ))}
+        </nav>
+        <div hidden={pane !== "actions"} className="resource-maintenance">
           <div className="actions">
-            <button
-              disabled={busy || !conflictLoaded}
-              onClick={() => dispatch({ type: "adopt" })}
-            >
-              采用最新资料，放弃草稿
-            </button>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={checkedConflict}
-                onChange={(event) => setCheckedConflict(event.target.checked)}
-              />
-              我已比较最新资料，确认要保存现有草稿
-            </label>
-            <button
-              disabled={busy || !conflictLoaded || !checkedConflict}
-              onClick={() => {
-                dispatch({ type: "rebase" });
-                setCheckedConflict(false);
-              }}
-            >
-              保留草稿，按最新修订继续编辑
-            </button>
-          </div>
-        </div>
-      )}
-      {open && (
-        <>
-          <div className="organize-fields">
-            <label>
-              歌手
-              <input
-                disabled={busy}
-                value={form.artist}
-                onChange={(event) => edit({ artist: event.target.value })}
-              />
-            </label>
-            <label>
-              歌名
-              <input
-                disabled={busy}
-                value={form.title}
-                onChange={(event) => edit({ title: event.target.value })}
-              />
-            </label>
-          </div>
-          <p>
-            {hasDualAudio
-              ? "补充或替换画面会保留现有原唱、伴奏和歌词。请核对同一录音版本与起始偏移。"
-              : "尚未具备完整双音轨。更换视频来源后需要重新匹配歌词和准备音轨。"}
-          </p>
-          <label>
-            视频链接（B站支持 ?p= 分集）
-            <input
-              disabled={busy}
-              value={form.url}
-              onChange={(event) => edit({ url: event.target.value })}
-              placeholder="https://www.bilibili.com/video/BV…"
-            />
-          </label>
-          <div className="actions">
-            <button
-              disabled={busy || draft.conflict || !form.url}
-              onClick={() =>
-                run(async () => {
-                  const info = await request(
-                    "/admin/source-info",
-                    { url: form.url },
-                    "POST",
-                  );
-                  setParsed(info);
-                  edit({
-                    title: info.title || form.title,
-                    artist: info.artist || form.artist,
-                  });
-                  notify(
-                    info.needs_review
-                      ? "已提取标题，请核对歌手、歌名与录音版本"
-                      : "识别资料已放入草稿",
-                  );
-                })
-              }
-            >
-              解析 MV 信息
-            </button>
-            <button
-              disabled={busy || draft.conflict || !form.title || !form.artist}
-              onClick={findLyrics}
-            >
-              自动找歌词
-            </button>
-            <label>
-              导入 LRC
-              <input
-                disabled={busy || draft.conflict}
-                type="file"
-                accept=".lrc,.txt"
-                onChange={async (event) => {
-                  try {
-                    const file = event.target.files[0];
-                    if (!file) return;
-                    if (file.size > 25000)
-                      throw new Error("歌词文件不能超过 25 KB");
-                    edit({
-                      lyrics: await file.text(),
-                      lyricsSource: {
-                        source: "本地导入",
-                        provider: "manual",
-                        sourceId: file.name,
-                        offsetUnit: "milliseconds",
-                      },
-                    });
-                  } catch (error) {
-                    notify(error.message);
-                  }
-                }}
-              />
-            </label>
-          </div>
-          {(parsed?.candidate?.canonicalUrl || form.url) && (
-            <p>
-              <a
-                href={parsed?.candidate?.canonicalUrl || form.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                打开视频试听
-              </a>
-              {parsed?.candidate?.externalTitle
-                ? ` · ${parsed.candidate.externalTitle}`
-                : ""}
-            </p>
-          )}
-          {!review && form.url && (
-            <VideoConfirmation
-              {...{ confirmed, setConfirmed, offset, setOffset, busy }}
-            />
-          )}
-          <p className="muted">
-            歌词来源：
-            {form.lyricsSource?.source ||
-              form.lyricsSource?.provider ||
-              (form.lyrics ? "原有歌词，来源未记录" : "尚未选择")}
-            。歌名、歌手和时长匹配只代表候选，请试听核对录音版本与字幕节奏。
-          </p>
-          <label>
-            歌词
-            <textarea
-              disabled={busy}
-              value={form.lyrics}
-              onChange={(event) =>
-                edit({
-                  lyrics: event.target.value,
-                  lyricsSource: {
-                    source: "手动编辑",
-                    provider: "manual",
-                    offsetUnit: "milliseconds",
-                  },
-                })
-              }
-              placeholder="[00:12.00]带时间戳的歌词"
-            />
-          </label>
-          {row.lyricsAlignment && !review && (
-            <p>
-              已按人声起点自动校准{" "}
-              {(row.lyricsAlignment.shiftMs / 1000).toFixed(1)} 秒。
+            {row.canUpgradeHd && !review && (
               <button
                 disabled={busy || draft.dirty}
                 onClick={() =>
                   run(async () => {
                     await request(
-                      "/admin/library/" + row.id + "/lyrics-alignment/reset",
+                      "/admin/library/" + row.id + "/upgrade-hd",
                       { expectedRevision: row.metadataRevision },
                       "POST",
                     );
-                    notify("已恢复自动校准前的歌词");
+                    notify(
+                      "已排队升级高清画面：沿用原裁剪区间，保留原唱、伴奏和歌词",
+                    );
                   })
                 }
               >
-                恢复校准前歌词
+                升级高清画面
               </button>
-            </p>
-          )}
-          <div className="actions">
-            <button
-              className="primary"
-              disabled={
-                busy ||
-                draft.conflict ||
-                (!review && changedUrl && (!confirmed || !validOffset(offset)))
-              }
-              onClick={() => run(() => save(true))}
-            >
-              保存并继续整理
-            </button>
-            {!review && (
+            )}
+            {row.tier !== "standard" && (
               <>
                 <button
+                  className="primary"
                   disabled={busy || draft.conflict}
-                  onClick={() => run(() => save(false))}
+                  onClick={organize}
                 >
-                  仅保存信息
+                  {row.tier === "audio" ? "整理 / 查找 MV" : "开始整理"}
                 </button>
                 <button
-                  disabled={
-                    busy ||
-                    draft.conflict ||
-                    !form.url ||
-                    !confirmed ||
-                    !validOffset(offset)
-                  }
-                  onClick={() =>
-                    run(async () => {
-                      checkDraft();
-                      await request(
-                        "/admin/library/" + row.id + "/source",
-                        replacementPayload(),
-                        "POST",
-                      );
-                      notify("已提交视频关联，完成后生效");
-                    })
-                  }
+                  disabled={busy || draft.conflict}
+                  onClick={refreshMetadata}
                 >
-                  {row.tier === "audio"
-                    ? "下载并补充 MV"
-                    : "下载并替换当前视频"}
+                  刷新歌名 / 歌手
                 </button>
-                {onEdit && (
-                  <button disabled={busy} onClick={onEdit}>
-                    音轨高级设置
-                  </button>
-                )}
+              </>
+            )}
+            {!review && row.tier === "standard" && (
+              <details>
+                <summary>设备兼容</summary>
+                <p>
+                  默认保留原画面。仅当播放设备不支持原编码时转换为
+                  H.264，音轨和歌词保留。
+                </p>
                 <button
                   disabled={busy}
                   onClick={() =>
                     run(async () => {
-                      await request("/admin/library/" + row.id, {}, "DELETE");
-                      notify("已隐藏歌曲，可在已隐藏页恢复");
+                      await request(
+                        `/admin/library/${row.id}/compatible-video`,
+                        { expectedRevision: row.metadataRevision },
+                        "POST",
+                      );
+                      notify("已提交兼容画面转换，原唱和伴奏保持不变");
                     })
                   }
                 >
-                  移出曲库
+                  转换兼容画面
                 </button>
-              </>
+              </details>
             )}
+            <button
+              disabled={busy}
+              onClick={() => {
+                setPane("video");
+                setOpen(true);
+              }}
+            >
+              {row.tier === "audio" ? "补充 MV" : "替换视频"}
+            </button>
+            {row.tier !== "standard" && (
+              <button
+                disabled={busy || draft.conflict || !form.title || !form.artist}
+                onClick={findLyrics}
+              >
+                自动找歌词
+              </button>
+            )}
+            {(!review || row.songId || row.inbox || row.kind === "import") && (
+              <button
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    setDeletion(
+                      await request(
+                        deleteBase + "/delete-preview",
+                        deleteSongId ? undefined : deletePayload,
+                        deleteSongId ? "GET" : "POST",
+                      ),
+                    );
+                  })
+                }
+              >
+                删除
+              </button>
+            )}
+          </div>{" "}
+        </div>
+        {deletion && (
+          <div
+            role="dialog"
+            aria-label="确认删除媒体"
+            className="settings-card"
+          >
+            <strong>永久删除《{deletion.title}》及以下媒体，无法恢复</strong>
+            <ul>
+              {deletion.targets.map((target) => (
+                <li key={target.path}>
+                  <code>{target.path}</code>
+                  {target.directory ? "（整个目录）" : ""}
+                </li>
+              ))}
+            </ul>
+            <div className="actions">
+              <button disabled={busy} onClick={() => setDeletion(null)}>
+                取消
+              </button>
+              <button
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await request(
+                      deleteBase + "/delete-files",
+                      { ...deletePayload, token: deletion.token },
+                      "POST",
+                    );
+                    setDeletion(null);
+                    notify("歌曲及对应媒体已删除");
+                  })
+                }
+              >
+                确认永久删除
+              </button>
+            </div>
           </div>
-        </>
-      )}
+        )}
+        {pane === "metadata" && (
+          <div className="poster-maintenance">
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await request(
+                    `/admin/library/${row.id}/poster`,
+                    { expectedRevision: row.metadataRevision, force: true },
+                    "POST",
+                  );
+                  notify("已加入封面获取任务");
+                })
+              }
+            >
+              {row.hasPoster ? "重新获取封面" : "获取歌曲封面"}
+            </button>
+            <p>
+              {row.posterSource?.source ||
+                "B站歌曲使用视频封面，其他歌曲按歌名和歌手查找专辑封面。"}
+              {row.posterAttempt?.status === "failed"
+                ? ` · ${row.posterAttempt.error}`
+                : ""}
+            </p>
+          </div>
+        )}
+        {row.note && <p>{row.note}</p>}
+        {row.missing?.length > 0 && (
+          <p className="muted">
+            {row.status === "ready" ? "可补充资源：" : "整理后将生成："}
+            {row.missing.map((name) => resourceNames[name] || name).join("、")}
+          </p>
+        )}
+        {row.folder && (
+          <details>
+            <summary>文件位置</summary>
+            <code>{row.folder}</code>
+          </details>
+        )}
+        {draft.conflict && (
+          <div role="alert" className="settings-card">
+            <strong>资料已更新，草稿已保留</strong>
+            <p>
+              请比较最新资料后决定如何继续。当前草稿基于修订 {draft.revision}
+              ，最新修订 {draft.latest.revision}。
+            </p>
+            <p>
+              最新歌名：{draft.latest.values.title}；最新歌手：
+              {draft.latest.values.artist}
+            </p>
+            <details>
+              <summary>查看最新歌词</summary>
+              <pre style={{ whiteSpace: "pre-wrap" }}>
+                {draft.latest.values.lyrics || "没有歌词"}
+              </pre>
+            </details>
+            {!conflictLoaded && <p>正在刷新最新资料，加载完成后再处理冲突。</p>}
+            <div className="actions">
+              <button
+                disabled={busy || !conflictLoaded}
+                onClick={() => dispatch({ type: "adopt" })}
+              >
+                采用最新资料，放弃草稿
+              </button>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={checkedConflict}
+                  onChange={(event) => setCheckedConflict(event.target.checked)}
+                />
+                我已比较最新资料，确认要保存现有草稿
+              </label>
+              <button
+                disabled={busy || !conflictLoaded || !checkedConflict}
+                onClick={() => {
+                  dispatch({ type: "rebase" });
+                  setCheckedConflict(false);
+                }}
+              >
+                保留草稿，按最新修订继续编辑
+              </button>
+            </div>
+          </div>
+        )}
+        {open && (
+          <>
+            <div hidden={pane !== "metadata"}>
+              <div className="organize-fields">
+                <label>
+                  歌手
+                  <input
+                    disabled={busy}
+                    value={form.artist}
+                    onChange={(event) => edit({ artist: event.target.value })}
+                  />
+                </label>
+                <label>
+                  歌名
+                  <input
+                    disabled={busy}
+                    value={form.title}
+                    onChange={(event) => edit({ title: event.target.value })}
+                  />
+                </label>
+              </div>
+            </div>
+            <div hidden={pane !== "video"}>
+              <p>
+                {hasDualAudio
+                  ? "补充或替换画面会保留现有原唱、伴奏和歌词。请核对同一录音版本与起始偏移。"
+                  : "尚未具备完整双音轨。更换视频来源后需要重新匹配歌词和准备音轨。"}
+              </p>
+              <label>
+                视频链接（B站支持 ?p= 分集）
+                <input
+                  disabled={busy}
+                  value={form.url}
+                  onChange={(event) => edit({ url: event.target.value })}
+                  placeholder="https://www.bilibili.com/video/BV…"
+                />
+              </label>
+              <div className="actions">
+                <button
+                  disabled={busy || draft.conflict || !form.url}
+                  onClick={() =>
+                    run(async () => {
+                      const info = await request(
+                        "/admin/source-info",
+                        { url: form.url },
+                        "POST",
+                      );
+                      setParsed(info);
+                      edit({
+                        title: info.title || form.title,
+                        artist: info.artist || form.artist,
+                      });
+                      notify(
+                        info.needs_review
+                          ? "已提取标题，请核对歌手、歌名与录音版本"
+                          : "识别资料已放入草稿",
+                      );
+                    })
+                  }
+                >
+                  解析 MV 信息
+                </button>
+              </div>
+              {(parsed?.candidate?.canonicalUrl || form.url) && (
+                <p>
+                  <a
+                    href={parsed?.candidate?.canonicalUrl || form.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    打开视频试听
+                  </a>
+                  {parsed?.candidate?.externalTitle
+                    ? ` · ${parsed.candidate.externalTitle}`
+                    : ""}
+                </p>
+              )}
+              {!review && form.url && (
+                <VideoConfirmation
+                  {...{ confirmed, setConfirmed, offset, setOffset, busy }}
+                />
+              )}
+            </div>
+            <div hidden={pane !== "lyrics"}>
+              <div className="actions">
+                {" "}
+                <button
+                  disabled={
+                    busy || draft.conflict || !form.title || !form.artist
+                  }
+                  onClick={findLyrics}
+                >
+                  自动找歌词
+                </button>
+                <label>
+                  导入 LRC
+                  <input
+                    disabled={busy || draft.conflict}
+                    type="file"
+                    accept=".lrc,.txt"
+                    onChange={async (event) => {
+                      try {
+                        const file = event.target.files[0];
+                        if (!file) return;
+                        if (file.size > 25000)
+                          throw new Error("歌词文件不能超过 25 KB");
+                        edit({
+                          lyrics: await file.text(),
+                          lyricsSource: {
+                            source: "本地导入",
+                            provider: "manual",
+                            sourceId: file.name,
+                            offsetUnit: "milliseconds",
+                          },
+                        });
+                      } catch (error) {
+                        notify(error.message);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="muted">
+                歌词来源：
+                {form.lyricsSource?.source ||
+                  form.lyricsSource?.provider ||
+                  (form.lyrics ? "原有歌词，来源未记录" : "尚未选择")}
+                。歌名、歌手和时长匹配只代表候选，请试听核对录音版本与字幕节奏。
+              </p>
+              <label>
+                歌词
+                <textarea
+                  disabled={busy}
+                  value={form.lyrics}
+                  onChange={(event) =>
+                    edit({
+                      lyrics: event.target.value,
+                      lyricsSource: {
+                        source: "手动编辑",
+                        provider: "manual",
+                        offsetUnit: "milliseconds",
+                      },
+                    })
+                  }
+                  placeholder="[00:12.00]带时间戳的歌词"
+                />
+              </label>
+              {row.lyricsAlignment && !review && (
+                <p>
+                  已按人声起点自动校准{" "}
+                  {(row.lyricsAlignment.shiftMs / 1000).toFixed(1)} 秒。
+                  <button
+                    disabled={busy || draft.dirty}
+                    onClick={() =>
+                      run(async () => {
+                        await request(
+                          "/admin/library/" +
+                            row.id +
+                            "/lyrics-alignment/reset",
+                          { expectedRevision: row.metadataRevision },
+                          "POST",
+                        );
+                        notify("已恢复自动校准前的歌词");
+                      })
+                    }
+                  >
+                    恢复校准前歌词
+                  </button>
+                </p>
+              )}
+            </div>
+            <div className="actions detail-save-actions">
+              <button
+                className="primary"
+                disabled={
+                  busy ||
+                  draft.conflict ||
+                  (!review &&
+                    changedUrl &&
+                    (!confirmed || !validOffset(offset)))
+                }
+                onClick={() => run(() => save(true))}
+              >
+                保存并继续整理
+              </button>
+              {!review && (
+                <>
+                  <button
+                    disabled={busy || draft.conflict}
+                    onClick={() => run(() => save(false))}
+                  >
+                    仅保存信息
+                  </button>
+                  <button
+                    hidden={pane !== "video"}
+                    disabled={
+                      busy ||
+                      draft.conflict ||
+                      !form.url ||
+                      !confirmed ||
+                      !validOffset(offset)
+                    }
+                    onClick={() =>
+                      run(async () => {
+                        checkDraft();
+                        await request(
+                          "/admin/library/" + row.id + "/source",
+                          replacementPayload(),
+                          "POST",
+                        );
+                        notify("已提交视频关联，完成后生效");
+                      })
+                    }
+                  >
+                    {row.tier === "audio"
+                      ? "下载并补充 MV"
+                      : "下载并替换当前视频"}
+                  </button>
+                  {onEdit && pane === "actions" && (
+                    <button disabled={busy} onClick={onEdit}>
+                      音轨高级设置
+                    </button>
+                  )}
+                  <button
+                    hidden={pane !== "actions"}
+                    disabled={busy}
+                    onClick={() =>
+                      run(async () => {
+                        await request("/admin/library/" + row.id, {}, "DELETE");
+                        notify("已隐藏歌曲，可在已隐藏页恢复");
+                      })
+                    }
+                  >
+                    移出曲库
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </WorkbenchDialog>
     </article>
   );
 }

@@ -17,6 +17,8 @@ export function Player({
   token,
   background,
   keyboardLyrics = false,
+  playerType = "web",
+  activePlayer,
 }) {
   const video = useRef(),
     container = useRef(),
@@ -28,7 +30,12 @@ export function Player({
     position = useRef(0),
     previousEntry = useRef(null);
   latest.current = current;
-  const { playerId, lease, leaseError } = usePlayerLease({ request, token });
+  const { playerId, lease, leaseError } = usePlayerLease({
+    request,
+    token,
+    type: playerType,
+    activePlayer,
+  });
   const playState = useRef({});
   playState.current = { lease, paused: playback.paused, entryId: current?.id };
   const [lyricsVisible, setLyricsVisible] = useState(() => {
@@ -398,7 +405,7 @@ export function Player({
           <div className="video-overlay">
             <p>{leaseError || error || "点击播放，开启今晚的第一首"}</p>
             {leaseError ? (
-              <p>请检查 NAS 连接；另一台设备退出歌房后会自动连接。</p>
+              <p>TV 优先播放；同级新页面可以接管。被接管后可继续点歌。</p>
             ) : (
               <button disabled={!lease || playback.paused} onClick={retry}>
                 <Play size={17} />

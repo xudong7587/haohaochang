@@ -233,7 +233,7 @@ try {
   await page.screenshot({ path: "test-results/ui/admin.png", fullPage: true });
   await page.getByRole("button", { name: "曲库管理", exact: true }).click();
   await page.getByRole("button", { name: /^标准曲库/ }).click();
-  await page.locator(".artist-library summary").first().click();
+  await page.locator(".artist-library").first().click();
   const row = page.locator('[data-song-id="' + String(2).repeat(24) + '"]');
   await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
   await row.getByLabel("歌名", { exact: true }).fill("保留中的草稿");
@@ -247,7 +247,10 @@ try {
       searchText("后台更新的标题", "测试歌手"),
       String(2).repeat(24),
     );
+  await row.getByRole("button", {name:"关闭歌曲详情",exact:true}).click();
   await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await row.locator("header strong").filter({hasText:"后台更新的标题"}).waitFor();
+  await row.getByRole("button", {name:"编辑歌曲",exact:true}).click();
   await row
     .getByRole("alert")
     .filter({ hasText: "资料已更新，草稿已保留" })

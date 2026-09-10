@@ -1,3 +1,4 @@
+import { appVersion, githubUrl } from "../version.js";
 import { taskStatus } from "../task-status.js";
 import { biliLoginApi } from "../bili-login.js";
 import { enrichmentConfig, enrichSong } from "../enrichment.js";
@@ -31,6 +32,9 @@ export function settingsApi({
   app.get("/api/admin/tasks", admin, (req, res) => res.json(taskStatus(store)));
   app.get("/api/admin", admin, (req, res) =>
     res.json({
+      version: appVersion,
+      githubUrl,
+      readOnlyMedia: !!store.readOnlyMedia,
       roots,
       downloads,
       cache,

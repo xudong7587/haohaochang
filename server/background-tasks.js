@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import { queueMissingPosters } from "./poster-backfill.js";
 import { filesUnder, importKey } from "./library.js";
 import { inside } from "./media-utils.js";
 export function startBackgroundTasks({
@@ -11,6 +12,13 @@ export function startBackgroundTasks({
 }) {
   const { db, get } = store;
   let stopped = false;
+  const schedulePosters = () => {
+    if (stopped || !enabled) return;
+    queueMissingPosters({ store, addJob });
+  };
+  setImmediate(schedulePosters);
+  const posterTimer = setInterval(schedulePosters, 60000);
+  posterTimer.unref();
   const scheduleCleanup = () => {
     if (stopped || !enabled) return;
     if (
@@ -74,6 +82,7 @@ export function startBackgroundTasks({
       clearInterval(importer);
       clearInterval(favoritesTimer);
       clearInterval(cleanupTimer);
+      clearInterval(posterTimer);
     },
   };
 }

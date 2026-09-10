@@ -114,9 +114,8 @@ export async function scanLibrary(store, roots) {
                   required: false,
                   idle: false,
                 });
-              store.db
-                .prepare("UPDATE songs SET poster=? WHERE id=?")
-                .run(poster, id);
+              if (poster && !song.poster)
+                store.db.prepare("UPDATE songs SET poster=? WHERE id=?").run(poster, id);
               if (
                 /\.(mp3|flac|wav|m4a|ogg|aac)$/i.test(entry.name) &&
                 !store.get("video-source:" + id)?.keepAudio

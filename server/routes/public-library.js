@@ -35,7 +35,8 @@ export function publicLibraryApi({
           clean(req.query.tag),
           clean(req.query.tag),
         )
-        .filter((s) => !get("hidden:" + s.id)),
+        .filter((s) => !get("hidden:" + s.id))
+        .map(s => ({ ...s, posterVersion: get("poster-source:" + s.id)?.hash || "" })),
     );
   });
   app.get("/api/artists", member, (req, res) => {

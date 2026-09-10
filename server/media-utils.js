@@ -1,5 +1,17 @@
 import path from "node:path";
-import { realpath } from "node:fs/promises";
+import { realpath as nativeRealpath } from "node:fs/promises";
+import { realpath as callbackRealpath } from "node:fs";
+import { promisify } from "node:util";
+const portableRealpath = promisify(callbackRealpath);
+async function realpath(file) {
+  try { return await nativeRealpath(file); }
+  catch (error) {
+    // Windows mapped SMB drives can reject the native final-path lookup.
+    // The JS resolver still follows links before the same containment check.
+    if (process.platform === "win32" && error.code === "UNKNOWN") return portableRealpath(file);
+    throw error;
+  }
+}
 import { pinyin } from "pinyin-pro";
 import { run } from "./process.js";
 export function searchText(title, artist) {

@@ -1,6 +1,6 @@
 {
   "name": "living-room-ktv",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,8 @@
     "build": "vite build",
     "start": "node server/index.js",
     "preview:local": "node scripts/preview.mjs",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "preview:nas": "node scripts/preview-nas.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

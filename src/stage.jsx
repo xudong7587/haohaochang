@@ -1,3 +1,4 @@
+import { SongArtwork } from "./song-artwork.jsx";
 import React from "react";
 import { Mic2, QrCode, Disc3, ArrowUpRight } from "lucide-react";
 export function Stage({ current, songs, add, choose, qr, token }) {
@@ -41,19 +42,7 @@ export function Stage({ current, songs, add, choose, qr, token }) {
               className={"stage-card color-" + (i % 5)}
             >
               <div>
-                {song.hasPoster ? (
-                  <img
-                    src={
-                      "/api/poster/" +
-                      song.id +
-                      "?token=" +
-                      encodeURIComponent(token)
-                    }
-                    alt=""
-                  />
-                ) : (
-                  <Disc3 size={42} />
-                )}
+                <SongArtwork song={song} token={token} size={42} />
               </div>
               <strong>{song.title}</strong>
               <span>{song.artist}</span>

@@ -1,3 +1,4 @@
+import { needsPoster } from "./song-poster.js";
 import { randomUUID, createHash } from "node:crypto";
 import { runJob } from "./jobs.js";
 import { cleanImportedDownloads } from "./download-cleanup.js";
@@ -11,6 +12,14 @@ export function createScheduler(
   const { db, get, set, store, cache, emit, enqueue } = dependencies;
   let running = 0,
     stopped = false;
+  let resolveStop;
+  const stoppedPromise = new Promise((resolve) => {
+    resolveStop = resolve;
+  });
+  function finishStop() {
+    onIdle();
+    resolveStop();
+  }
   function addJob(kind, payload) {
     if (kind === "acquire") {
       const existing = db
@@ -130,7 +139,7 @@ export function createScheduler(
     );
     const job = db
       .prepare(
-        "SELECT * FROM jobs WHERE status='queued' ORDER BY CASE WHEN kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online' THEN 0 WHEN kind='resource-cleanup' THEN 1 ELSE 2 END, created",
+        "SELECT * FROM jobs WHERE status='queued' ORDER BY CASE WHEN kind IN ('acquire','download') OR json_extract(payload,'$.priority')='online' THEN 0 WHEN kind='resource-cleanup' THEN 1 WHEN kind='poster' THEN 3 ELSE 2 END, created",
       )
       .all()
       .find(
@@ -185,6 +194,22 @@ export function createScheduler(
         db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id).payload,
       );
       if (finishedPayload.id) {
+        if (
+          [
+            "import",
+            "organize",
+            "prepare",
+            "standardize",
+            "attach-video",
+            "find-video",
+            "upgrade-hd",
+          ].includes(job.kind)
+        ) {
+          const song = db
+            .prepare("SELECT * FROM songs WHERE id=?")
+            .get(finishedPayload.id);
+          if (needsPoster(store, song)) addJob("poster", { id: song.id });
+        }
         try {
           await cleanSongVersions(store, finishedPayload.id, cache, {
             legacyCache: dependencies.legacyCache,
@@ -234,7 +259,7 @@ export function createScheduler(
       running--;
       emit("library", {});
       emit();
-      if (stopped && !running) onIdle();
+      if (stopped && !running) finishStop();
       else setImmediate(work);
     }
   }
@@ -242,8 +267,10 @@ export function createScheduler(
     addJob,
     work,
     stop() {
+      if (stopped) return stoppedPromise;
       stopped = true;
-      if (!running) onIdle();
+      if (!running) finishStop();
+      return stoppedPromise;
     },
   };
 }

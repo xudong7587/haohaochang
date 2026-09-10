@@ -1,3 +1,19 @@
+# v0.3.9 本地验收：工作台、封面与播放接管（2026-09-10）
+
+- 分支 `codex/task-workbench-redesign`，以 v0.3.8 为基线；发布记录见 Release 和 Actions。
+- `npm test`：117 / 117 通过（包含真实 FFmpeg）；`npm run build` 通过。
+- `scripts/ui-check.mjs`、`scripts/player-check.mjs`、`tests/library-ui.browser.mjs`、`tests/feedback.browser.mjs`、`tests/pc-dashboard.browser.mjs`、`tests/online-player.browser.mjs`、`tests/tv-pairing.browser.mjs` 均通过。
+- `tests/player-lease.test.js` 与 `tests/player-lease.browser.mjs` 覆盖新页面接管、TV 优先、独立标识、被接管后音轨暂停、旧结束事件拒绝、离线回退、成功响应延迟；已纳入 CI。
+- 自动封面补齐验证批量上限、在途歌曲和隐藏歌曲跳过、24 小时重试间隔。
+- `tests/poster.test.js` 覆盖正确歌手／繁简匹配、B站封面优先、重定向边界、图像格式校验、真实 JPEG 转换、失败保留旧封面与可唱状态、预览禁写与禁后台调度。
+- `tests/poster.browser.mjs` 覆盖歌手墙 24 首分页、原唱独立播放、视频时钟、暂停／关闭释放音轨、不改变队列、目录入口、play／TV 图片、390px 手机双列无溢出、带正确修订号的封面任务和无需登录读取图标。
+- `tests/pc-worker-ui.browser.mjs` 使用隔离 localhost 状态，156 项任务初始仅显示 1 项运行、每页 10 条排队记录、翻页与手机宽度通过。
+- 真实 NAS 媒体使用 junction 和独立 241 首数据库进行只读预览；本机 Chrome 的 3840×2160 HEVC 歌曲视频与原唱均能播放。自动填充封面写入本地 `data/local-nas-preview/posters`。未写入生产 NAS 或曲库样例。
+- Windows 映射盘 native realpath 返回 UNKNOWN 时使用跟随链接的兼容解析，仍检查真实目录边界；服务关闭等待自动封面任务释放数据库。修复后的全套 Node 测试通过。
+- 真实手机、家庭电视、家庭 PC 新界面与 NAS 部署仍待用户确认后验收。
+
+---
+
 # 验证记录
 
 2026-09-07，Windows 开发机，Node.js 24.18.0。

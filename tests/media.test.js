@@ -203,6 +203,7 @@ test(
       downloads: dir,
       roots: [library],
       adminToken: "test-password-123",
+      posterOptions: { find: async () => { throw new Error("No album fixture"); } },
     });
     service.store.set("autoImport", false);
     service.store.set("ai", store.get("ai"));
@@ -251,7 +252,7 @@ test(
       );
       assert.equal(requests, 4);
     } finally {
-      service.close();
+      await service.close();
     }
   },
 );

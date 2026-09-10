@@ -1,22 +1,6 @@
 import { TaskList } from "./task-list.jsx";
 import React, { useEffect, useState } from "react";
-import { statusNames } from "./view-constants.js";
 import { PCSettings } from "./settings.jsx";
-const stageNames = {
-  clipping: "裁剪片段",
-  downloading: "下载视频",
-  decoding: "提取音频",
-  separating: "去除人声",
-  preparing: "准备播放资源",
-  "preparing-video": "NAS 准备画面与校验",
-  "preparing-video-pc": "PC 转换画面",
-  "preparing-audio": "NAS 准备音轨与校验",
-  "resource-cleanup": "回收过期资源版本",
-  validating: "校验分离音轨",
-  running: "处理中",
-  done: "已完成",
-  "waiting-worker": "等待 PC 上线",
-};
 export function PcDashboard({ embedded = false }) {
   const [token, setToken] = useState(
       sessionStorage.getItem("adminToken") || "",
@@ -116,112 +100,27 @@ export function PcDashboard({ embedded = false }) {
         {!embedded && <a href="/admin">返回管理页面</a>}
       </div>
       {error && <p role="alert">{error}</p>}
-      {worker && (
-        <>
-          <section className="settings-card">
-            <h2>PC 当前任务</h2>
-            <p>同时处理上限：{worker.concurrency || 1} 首</p>
-            <p>
-              下方耗时仅指该 PC 任务（包含排队），完整入库还包括 NAS
-              上传、资源生成与校验。
-            </p>
-            {worker.jobs.length ? (
-              <TaskList jobs={worker.jobs} activeOnly>
-                {(j) => (
-                  <article className="pc-job" key={j.id}>
-                    <strong>{j.title || "歌曲整理"}</strong>
-                    <p>
-                      {stageNames[j.stage] || statusNames[j.status] || "处理中"}{" "}
-                      · PC 任务耗时 {Math.floor((j.elapsed_seconds || 0) / 60)}{" "}
-                      分 {(j.elapsed_seconds || 0) % 60} 秒
-                    </p>
-                    {j.media_progress && (
-                      <div>
-                        <progress max="100" value={j.media_progress.percent} />
-                        <span>
-                          {j.media_progress.label} {j.media_progress.percent}%
-                        </span>
-                      </div>
-                    )}
-                    {Number.isFinite(j.model_progress) && (
-                      <div>
-                        <progress max="100" value={j.model_progress} />
-                        <span>模型当前步骤 {j.model_progress}%</span>
-                      </div>
-                    )}
-                    {j.error && <p className="error">{j.error}</p>}
-                    {j.log && (
-                      <details>
-                        <summary>查看日志</summary>
-                        <pre>{j.log}</pre>
-                      </details>
-                    )}
-                  </article>
-                )}
-              </TaskList>
-            ) : (
-              <p>还没有 PC 任务，在线选好视频后会自动开始。</p>
-            )}
-          </section>
-        </>
-      )}
       <section className="settings-card">
-        <h2>NAS 整理队列</h2>
-        {data?.tasks?.length ? (
-          <TaskList jobs={data.tasks} activeOnly>
-            {(j) => (
-              <article className="pc-job" key={j.id}>
-                <strong>
-                  {j.title || "后台任务"}
-                  {j.artist ? " · " + j.artist : ""}
-                </strong>
-                <p>
-                  {statusNames[j.status] || j.status}
-                  {j.status === "running" && stageNames[j.stage]
-                    ? " · " + stageNames[j.stage]
-                    : ""}
-                  {j.started
-                    ? ` · ${j.finished ? "处理耗时" : "已处理"} ${Math.max(0, Math.round(((j.finished || Date.now()) - j.started) / 1000))} 秒`
-                    : ""}
-                </p>
-                {j.media_progress && (
-                  <div>
-                    <progress max="100" value={j.media_progress.percent} />
-                    <span>
-                      {j.media_progress.label} {j.media_progress.percent}%
-                    </span>
-                  </div>
-                )}
-                {Number.isFinite(j.model_progress) && (
-                  <div>
-                    <progress max="100" value={j.model_progress} />
-                    <span>模型当前步骤 {j.model_progress}%</span>
-                  </div>
-                )}
-                {j.error && <p className="error">{j.error}</p>}
-              </article>
-            )}
-          </TaskList>
-        ) : (
-          <p>还没有整理任务。</p>
-        )}
-      </section>
-      <section className="settings-card">
+        <h2>整理任务中心</h2>
+        <p>
+          NAS 负责完整入库，PC 显示本机执行步骤。PC 同时处理上限：
+          {worker?.concurrency || 1} 首。
+        </p>
         <TaskList
+          label="整理任务"
           jobs={[
-            ...(worker?.jobs || []).map((j) => ({ ...j, id: "pc-" + j.id })),
-            ...(data?.tasks || []),
+            ...(data?.tasks || []).map((j) => ({
+              ...j,
+              id: "nas-" + j.id,
+              origin: "NAS",
+            })),
+            ...(worker?.jobs || []).map((j) => ({
+              ...j,
+              id: "pc-" + j.id,
+              origin: "PC",
+            })),
           ]}
-          historyOnly
-        >
-          {(j) => (
-            <article className="pc-job" key={j.id}>
-              <strong>{j.title || "后台任务"}</strong>
-              <p>{statusNames[j.status] || j.status}</p>
-              {j.log && <pre>{j.log}</pre>}
-            </article>
-          )}
-        </TaskList>
+        />
       </section>
       {worker && (
         <>

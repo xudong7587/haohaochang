@@ -60,6 +60,7 @@ export async function savePackageInfo(store, song, cache) {
         downloadedVideo: store.get("download-quality:" + song.id),
         splitVideoSource: store.get("split-video:" + song.id),
         lyricsSource: store.get("lyrics-match:" + song.id),
+        poster: song.poster ? { ...store.get("poster-source:" + song.id, {}), file: path.relative(dir, song.poster) } : null,
         files: {
           video: "画面.mp4",
           original: "原唱.m4a",

@@ -59,7 +59,11 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/admin`);
   await page.getByRole("button", { name: "设置与任务", exact: true }).click();
   await page.locator(".task-song").filter({ hasText: "晴天" }).waitFor();
-  assert.equal(await page.locator(".job").count(), 50);
+  assert.equal(await page.locator(".task-item").count(), 1, "queued work starts collapsed");
+  await page.getByRole("button", {name:/排队等待.*49 项/}).click();
+  assert.equal(await page.locator(".task-item").count(), 11, "only one page of queued tasks renders");
+  await page.getByRole("button", {name:"排队等待下一页",exact:true}).click();
+  await page.getByText("待整理歌曲 10", {exact:true}).waitFor();
   assert.equal(
     await page.locator("progress").first().getAttribute("value"),
     "42",
