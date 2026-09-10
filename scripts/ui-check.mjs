@@ -94,7 +94,7 @@ try {
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base + "/tv");
-  await page.getByText("使用管理密码登录", { exact: true }).click();
+  await page.getByText("改用密码登录", { exact: true }).click();
   await page.getByLabel("管理密码").fill("ui-test-password");
   await page.getByRole("button", { name: "进入好好唱" }).click();
   await page.locator(".stage-card").first().waitFor();
@@ -247,10 +247,13 @@ try {
       searchText("后台更新的标题", "测试歌手"),
       String(2).repeat(24),
     );
-  await row.getByRole("button", {name:"关闭歌曲详情",exact:true}).click();
+  await row.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
   await page.getByRole("button", { name: "刷新列表", exact: true }).click();
-  await row.locator("header strong").filter({hasText:"后台更新的标题"}).waitFor();
-  await row.getByRole("button", {name:"编辑歌曲",exact:true}).click();
+  await row
+    .locator("header strong")
+    .filter({ hasText: "后台更新的标题" })
+    .waitFor();
+  await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
   await row
     .getByRole("alert")
     .filter({ hasText: "资料已更新，草稿已保留" })
