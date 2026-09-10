@@ -3,6 +3,8 @@ package home.haohaochang.tv;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.SystemClock;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
@@ -26,9 +28,15 @@ public final class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback fullCallback;
     private SharedPreferences preferences;
     private String server;
+    private long exitPressedAt;
+    private boolean backPending;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         preferences = getSharedPreferences("connection", MODE_PRIVATE);
@@ -71,7 +79,7 @@ public final class MainActivity extends Activity {
         EditText input = new EditText(this);
         input.setSingleLine(true); input.setText(server == null ? "" : server); input.setHint("https://ktv.example.com");
         input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("连接家庭 NAS").setMessage("输入 http://NAS-IP:3210 或 HTTPS 反代域名，可在外地连接。不要附加 /admin 或 /tv。连接后用管理密码登录，菜单键可修改地址。").setView(input).setPositiveButton("连接", null).setNegativeButton("取消", (d,w) -> { if(server == null || server.isEmpty()) finish(); }).create();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("连接家庭 NAS").setMessage("输入 http://NAS-IP:3210 或 HTTPS 反代域名。连接后手机扫码即可登录电视并点歌，菜单键可修改地址。").setView(input).setPositiveButton("连接", null).setNegativeButton("取消", (d,w) -> { if(server == null || server.isEmpty()) finish(); }).create();
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String value = input.getText().toString().trim().replaceAll("/+$", "");
             Uri uri = Uri.parse(value);
@@ -87,8 +95,21 @@ public final class MainActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
     @Override public void onBackPressed() {
-        if(fullVideo != null) { exitFull(); return; }
-        web.evaluateJavascript("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))",null);
+        handleBack();
+    }
+    private void handleBack() {
+        if(fullVideo != null) { exitFull(); exitPressedAt = 0; return; }
+        if(backPending) return;
+        backPending = true;
+        web.evaluateJavascript("typeof window.haohaochangBack === 'function' && window.haohaochangBack()", result -> {
+            backPending = false;
+            if (isFinishing() || isDestroyed()) return;
+            if ("true".equals(result)) { exitPressedAt = 0; return; }
+            long now = SystemClock.elapsedRealtime();
+            if (exitPressedAt != 0 && now - exitPressedAt < 2500) { finish(); return; }
+            exitPressedAt = now;
+            Toast.makeText(this, "再按一次返回退出好好唱", Toast.LENGTH_SHORT).show();
+        });
     }
     @Override protected void onPause() { super.onPause(); web.onPause(); }
     @Override protected void onResume() { super.onResume(); if(web != null)web.onResume(); }

@@ -1,4 +1,5 @@
 import { taskStatus } from "../task-status.js";
+import { biliLoginApi } from "../bili-login.js";
 import { enrichmentConfig, enrichSong } from "../enrichment.js";
 import { favoriteConfig } from "../favorites.js";
 import { providerConfig, testProvider } from "../separation.js";
@@ -26,6 +27,7 @@ export function settingsApi({
   snapshot,
   allowedOrigin,
 }) {
+  biliLoginApi({ app, admin, store });
   app.get("/api/admin", admin, (req, res) =>
     res.json({
       roots,

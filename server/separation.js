@@ -10,6 +10,7 @@ import {
   hasProviderCheckpoint,
 } from "./separation/protocol.js";
 import { validateResult } from "./separation/validation.js";
+import { autoAlignLyrics } from "./lyrics-alignment.js";
 export { providerConfig } from "./separation/config.js";
 export { testProvider } from "./separation/protocol.js";
 
@@ -91,6 +92,11 @@ export async function separateSong(store, song, cache) {
             "UPDATE songs SET mode='separated',status='ready',error='' WHERE id=?",
           )
           .run(song.id);
+        try {
+          await autoAlignLyrics(store, song.id, cache, result.vocalActivity);
+        } catch {
+          /* A valid accompaniment remains available if optional alignment fails. */
+        }
         store.set(result.checkpointKey, null);
         return true;
       } finally {

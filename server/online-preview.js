@@ -100,7 +100,10 @@ export async function resolvePreview(url, cookie, dir, quality = "highest") {
     audio: audio ? stream(audio) : null,
   };
 }
-export function previewSessions({ resolve = resolvePreview } = {}) {
+export function previewSessions({
+  resolve = resolvePreview,
+  fetcher = fetch,
+} = {}) {
   const sessions = new Map();
   const resolving = new Map();
   let pending = 0,
@@ -182,14 +185,19 @@ export function previewSessions({ resolve = resolvePreview } = {}) {
         throw new Error("视频请求区间无效");
       const controller = new AbortController(),
         timer = setTimeout(() => controller.abort(), 300000);
-      const closed = () => controller.abort();
+      let clientClosed = false,
+        upstreamFailed = false;
+      const closed = () => {
+        clientClosed = true;
+        controller.abort();
+      };
       res.on("close", closed);
       streaming++;
       try {
         let url = media.url,
           response;
         for (let count = 0; count < 4; count++) {
-          response = await fetch(biliStreamUrl(url), {
+          response = await fetcher(biliStreamUrl(url), {
             headers: {
               ...media.headers,
               "Accept-Encoding": "identity",
@@ -214,8 +222,25 @@ export function previewSessions({ resolve = resolvePreview } = {}) {
           if (response.headers.has(name))
             res.set(name, response.headers.get(name));
         res.type(req.params.track === "video" ? "video/mp4" : "audio/mp4");
-        if (response.body) await pipeline(Readable.fromWeb(response.body), res);
-        else res.end();
+        if (response.body) {
+          const upstream = Readable.fromWeb(response.body);
+          upstream.on("error", () => {
+            if (!clientClosed) upstreamFailed = true;
+          });
+          await pipeline(upstream, res);
+        } else res.end();
+      } catch (error) {
+        if (
+          upstreamFailed ||
+          (!(
+            clientClosed &&
+            ["ERR_STREAM_PREMATURE_CLOSE", "ABORT_ERR", "ECONNRESET"].includes(
+              error.code,
+            )
+          ) &&
+            !(clientClosed && error.name === "AbortError"))
+        )
+          throw error;
       } finally {
         clearTimeout(timer);
         res.off("close", closed);

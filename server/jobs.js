@@ -11,8 +11,10 @@ import { prepare } from "./job-handlers/prepare.js";
 import { download } from "./job-handlers/download.js";
 import { cleanResourceVersions } from "./resource-cleanup.js";
 import { standardize } from "./job-handlers/standardize.js";
+import { upgradeHd } from "./job-handlers/upgrade-hd.js";
 
 const handlers = {
+  "upgrade-hd": upgradeHd,
   standardize,
   "resource-cleanup": (_job, _payload, context) =>
     cleanResourceVersions(context.store, context.cache, {

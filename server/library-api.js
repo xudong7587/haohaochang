@@ -27,6 +27,7 @@ import { findLyrics } from "./lyrics-source.js";
 import { searchText, safeMedia } from "./media-utils.js";
 import { filesUnder, importKey, metadata } from "./library.js";
 import { enrichSong } from "./enrichment.js";
+import { hdUpgradeSource } from "./split-video.js";
 export function libraryApi({
   app,
   admin,
@@ -71,6 +72,64 @@ export function libraryApi({
     });
   };
   app.post("/api/admin/library/:id/organize", admin, organize);
+  app.post("/api/admin/refresh-metadata-batch", admin, async (req, res) => {
+    const items = req.body.items;
+    if (!Array.isArray(items) || !items.length || items.length > 20)
+      throw new Error("每批需包含 1 至 20 首歌曲");
+    const results = [];
+    for (const item of items) {
+      try {
+        const song = currentSong(store, item.id);
+        assertIdle(song.id);
+        checkRevision(song, item.expectedRevision);
+        let parsed = identifyTitle(song.title + " - " + song.artist);
+        if (parsed.needs_review && get("enrichment", {}).enabled)
+          parsed = await enrichSong(get("enrichment"), {
+            title: song.title,
+            artist: song.artist,
+            sourceUrl: "",
+          });
+        if (parsed.needs_review)
+          results.push({
+            id: song.id,
+            status: "review",
+            message: "无法可靠确认，请手动核对歌名和歌手",
+          });
+        else {
+          await saveSongMetadata(
+            store,
+            song.id,
+            {
+              title: parsed.title,
+              artist: parsed.artist,
+              expectedRevision: item.expectedRevision,
+              metadata_source: "自动识别",
+              needs_review: 0,
+            },
+            cache,
+          );
+          results.push({
+            id: song.id,
+            status: "success",
+            message: "歌名与歌手已更新",
+          });
+        }
+      } catch (error) {
+        results.push({
+          id: item?.id,
+          status:
+            error.code === "REVISION_CONFLICT"
+              ? "conflict"
+              : error.code === "SONG_BUSY"
+                ? "skipped"
+                : "failed",
+          message: error.message,
+        });
+      }
+    }
+    emit("library", {});
+    res.json({ results });
+  });
   app.post("/api/admin/refresh-metadata", admin, async (req, res) => {
     const song = req.body.id
       ? db.prepare("SELECT * FROM songs WHERE id=?").get(req.body.id)
@@ -119,10 +178,17 @@ export function libraryApi({
           manifest,
           missing: manifest.missing,
           lyricsSource: get("lyrics-match:" + s.id, null),
+          canUpgradeHd:
+            manifest.vocal && manifest.backing && !!hdUpgradeSource(store, s),
+          lyricsAlignment:
+            get("lyrics-auto:" + s.id)?.lyrics === s.lyrics
+              ? { shiftMs: get("lyrics-auto:" + s.id).shiftMs }
+              : null,
           sourceUrl:
             get("video-source:" + s.id)?.url ||
             get("source:" + s.id)?.canonicalUrl ||
             get("source:" + s.id)?.url ||
+            get("download-quality:" + s.id)?.sourceUrl ||
             "",
           folder: get("package:" + s.id, "尚未生成新格式"),
         };
@@ -427,6 +493,28 @@ export function libraryApi({
     });
     res.json({ results });
   });
+  app.post(
+    "/api/admin/library/:id/lyrics-alignment/reset",
+    admin,
+    async (req, res) => {
+      const song = currentSong(store, req.params.id),
+        record = get("lyrics-auto:" + song.id);
+      if (!record || record.lyrics !== song.lyrics)
+        throw new Error("歌词已手动更新，无法覆盖为旧稿");
+      await saveSongMetadata(
+        store,
+        song.id,
+        {
+          lyrics: record.original,
+          expectedRevision: req.body.expectedRevision,
+        },
+        cache,
+      );
+      set("lyrics-auto:" + song.id, { ...record, restored: true });
+      emit("library", {});
+      res.json({ ok: true });
+    },
+  );
   app.post("/api/admin/find-lyrics", admin, async (req, res) =>
     res.json(
       await findLyrics(
@@ -543,6 +631,26 @@ export function libraryApi({
         url,
         confirmed: req.body.confirmed === true,
         offset: Number(req.body.offset) || 0,
+      }),
+    });
+  });
+  app.post("/api/admin/library/:id/upgrade-hd", admin, (req, res) => {
+    const song = currentSong(store, req.params.id);
+    assertIdle(song.id);
+    checkRevision(song, req.body.expectedRevision);
+    const manifest = resourceManifest(store, song, cache);
+    if (!manifest.vocal || !manifest.backing || !hdUpgradeSource(store, song))
+      throw new Error("仅支持有原视频裁剪记录的双音轨歌曲升级高清画面");
+    if (
+      snapshot?.().ambient?.song_id === song.id ||
+      db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
+    )
+      throw new Error("请先将歌曲移出播放队列");
+    res.json({
+      id: addJob("upgrade-hd", {
+        id: song.id,
+        expectedRevision: song.metadataRevision,
+        priority: "online",
       }),
     });
   });

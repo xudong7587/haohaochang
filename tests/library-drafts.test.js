@@ -68,41 +68,57 @@ test("late refresh and saving an earlier snapshot cannot overwrite newer edits",
   const unchanged = draftReducer(draft, { type: "refresh", row: song });
   assert.equal(unchanged, draft);
 });
-test("batch metadata refresh preserves original revisions, records each result, and continues after conflict/failure", async () => {
-  const songs = ["success", "review", "conflict", "failed", "last"].map(
-    (id, index) => ({ ...song, id, metadataRevision: index + 2 }),
-  );
+test("batch metadata refresh submits at most 20 items, preserves revisions and handles per-item outcomes", async () => {
+  const songs = Array.from({ length: 45 }, (_, i) => ({
+    ...song,
+    id: String(i),
+    metadataRevision: i,
+  }));
   const calls = [],
     progress = [];
   const request = async (url, body) => {
     calls.push({ url, body });
-    const id = body.id || url.split("/")[3];
-    if (url === "/admin/refresh-metadata") {
-      if (id === "failed") throw new Error("提供者不可用");
-      if (id === "success") songs[4].metadataRevision = 999;
-      return { title: "新标题", artist: "歌手", needs_review: id === "review" };
-    }
-    if (id === "conflict")
-      throw Object.assign(new Error("资料已更新"), {
-        code: "REVISION_CONFLICT",
-      });
-    return { ok: true };
+    songs[44].metadataRevision = 999;
+    return {
+      results: body.items.map((item) => ({
+        id: item.id,
+        status:
+          item.id === "2" ? "conflict" : item.id === "3" ? "review" : "success",
+      })),
+    };
   };
   const results = await refreshMetadataBatch(songs, request, (value) =>
     progress.push(value),
   );
-  assert.deepEqual(
-    results.map((result) => result.status),
-    ["success", "review", "conflict", "failed", "success"],
+  assert.equal(calls.length, 3);
+  assert.ok(
+    calls.every(
+      (c) =>
+        c.url === "/admin/refresh-metadata-batch" && c.body.items.length <= 20,
+    ),
   );
-  assert.equal(progress.length, 5);
-  assert.equal(
-    calls.find((call) => call.url === "/admin/library/last/save").body
-      .expectedRevision,
-    6,
+  assert.equal(calls[2].body.items.at(-1).expectedRevision, 44);
+  assert.equal(results[2].status, "conflict");
+  assert.equal(results[3].status, "review");
+  assert.equal(results[44].status, "success");
+  assert.equal(progress.length, 4);
+});
+test("metadata batch respects Retry-After on 429 without retrying revision conflicts", async () => {
+  let attempts = 0;
+  const waits = [];
+  const results = await refreshMetadataBatch(
+    [song],
+    async () => {
+      if (++attempts === 1)
+        throw Object.assign(new Error("限流"), { status: 429, retryAfter: 12 });
+      return {
+        results: [{ id: song.id, status: "conflict", message: "保留当前资料" }],
+      };
+    },
+    () => {},
+    { wait: async (ms) => waits.push(ms) },
   );
-  assert.equal(
-    calls.filter((call) => call.url.endsWith("/review/save")).length,
-    0,
-  );
+  assert.deepEqual(waits, [12000]);
+  assert.equal(attempts, 2);
+  assert.equal(results[0].status, "conflict");
 });

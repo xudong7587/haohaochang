@@ -5,11 +5,13 @@ import { findLyrics } from "../lyrics-source.js";
 import { sourceMetadata, withBiliCookie } from "../sources.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { stat } from "node:fs/promises";
+import { stat, copyFile } from "node:fs/promises";
+import { safeMedia } from "../media-utils.js";
 import { enrichSong } from "../enrichment.js";
 import { metadata, importMedia, importKey } from "../library.js";
 import { downloadVideo, prepareSong } from "../media.js";
 import { separateSong } from "../separation.js";
+import { upgradeSplitVideo } from "../split-video.js";
 
 export async function importJob(job, payload, context) {
   const {
@@ -161,7 +163,28 @@ export async function importJob(job, payload, context) {
           job.id,
         );
         const existing = db.prepare("SELECT * FROM songs WHERE id=?").get(id);
+        if (existing.status === "ready" && payload.videoFile)
+          await upgradeSplitVideo(
+            store,
+            existing,
+            await safeMedia(payload.videoFile, [downloads]),
+            payload.sourceUrl,
+            cache,
+          );
         if (existing.status !== "ready") {
+          if (payload.videoFile) {
+            const source = await safeMedia(payload.videoFile, [downloads]);
+            const retained = path.join(
+              path.dirname(existing.path),
+              "来源画面.mp4",
+            );
+            await copyFile(source, retained);
+            set("split-video:" + id, retained);
+            set("download-quality:" + id, {
+              height: payload.downloadedHeight,
+              sourceUrl: payload.sourceUrl,
+            });
+          }
           if (payload.candidate) set("source:" + id, payload.candidate);
           if (meta.lyricsSource) set("lyrics-match:" + id, meta.lyricsSource);
           db.prepare("UPDATE songs SET evidence=?,lyrics=? WHERE id=?").run(

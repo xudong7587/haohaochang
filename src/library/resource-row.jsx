@@ -203,9 +203,31 @@ export function ResourceRow({
               "waiting-worker": "等待 PC 上线",
             }[row.status || row.kind] || "待处理"}
             {draft.dirty ? " · 草稿未保存" : ""}
+            {row.manifest?.resources?.video?.height
+              ? ` · ${row.manifest.resources.video.height}p`
+              : ""}
           </p>
         </div>
         <div className="actions">
+          {row.canUpgradeHd && !review && (
+            <button
+              disabled={busy || draft.dirty}
+              onClick={() =>
+                run(async () => {
+                  await request(
+                    "/admin/library/" + row.id + "/upgrade-hd",
+                    { expectedRevision: row.metadataRevision },
+                    "POST",
+                  );
+                  notify(
+                    "已排队升级高清画面：沿用原裁剪区间，保留原唱、伴奏和歌词",
+                  );
+                })
+              }
+            >
+              升级高清画面
+            </button>
+          )}
           {row.tier !== "standard" && (
             <>
               <button
@@ -486,6 +508,27 @@ export function ResourceRow({
               placeholder="[00:12.00]带时间戳的歌词"
             />
           </label>
+          {row.lyricsAlignment && !review && (
+            <p>
+              已按人声起点自动校准{" "}
+              {(row.lyricsAlignment.shiftMs / 1000).toFixed(1)} 秒。
+              <button
+                disabled={busy || draft.dirty}
+                onClick={() =>
+                  run(async () => {
+                    await request(
+                      "/admin/library/" + row.id + "/lyrics-alignment/reset",
+                      { expectedRevision: row.metadataRevision },
+                      "POST",
+                    );
+                    notify("已恢复自动校准前的歌词");
+                  })
+                }
+              >
+                恢复校准前歌词
+              </button>
+            </p>
+          )}
           <div className="actions">
             <button
               className="primary"

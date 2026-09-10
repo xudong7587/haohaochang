@@ -200,5 +200,5 @@ export async function runProviderJob(
     if (error.terminal) store.set(checkpointKey, null);
     throw error;
   }
-  return { file, checkpointKey };
+  return { file, checkpointKey, vocalActivity: result.vocal_activity };
 }

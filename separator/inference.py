@@ -3,6 +3,45 @@ import os
 import subprocess
 import sys
 import wave
+import math
+from array import array
+
+
+def vocal_activity(file):
+    """Energy onsets from the separated stem, not speech/lyric recognition."""
+    levels = []
+    with wave.open(str(file), 'rb') as audio:
+        if audio.getsampwidth() != 2 or audio.getnchannels() != 1:
+            raise ValueError('Expected mono PCM16 vocal analysis')
+        rate = audio.getframerate()
+        step = max(1, round(rate * 0.05))
+        duration = audio.getnframes() / rate
+        while raw := audio.readframes(step):
+            samples = array('h', raw)
+            if sys.byteorder != 'little':
+                samples.byteswap()
+            levels.append(math.sqrt(sum(float(v) * v for v in samples) / len(samples)) / 32768)
+    positive = sorted(v for v in levels if v > 0.0001)
+    if not positive:
+        return dict(version=1, duration=duration, onsets=[])
+    reference = positive[int((len(positive) - 1) * 0.9)]
+    threshold = max(0.004, reference * 0.12)
+    starts, start, quiet = [], None, 0
+    # Require 0.5 seconds of sustained vocal energy; merge gaps below 0.3s.
+    for index, value in enumerate(levels + [0] * 6):
+        if value >= threshold:
+            if start is None:
+                start = index
+            quiet = 0
+        else:
+            quiet += 1
+            if start is not None and quiet >= 6:
+                end = index - quiet + 1
+                active = sum(v >= threshold for v in levels[start:end])
+                if active >= 10:
+                    starts.append(round(start * step / rate, 3))
+                start = None
+    return dict(version=1, duration=duration, onsets=starts[:1000])
 
 
 def wave_duration(file):
@@ -42,7 +81,19 @@ def separate(store, job, model):
                 str(folder / 'validated.wav')], check=True, timeout=300, stdout=log, stderr=log, **flags)
         validate_waves(folder / 'input.wav', folder / 'validated.wav')
         (folder / 'validated.wav').replace(folder / 'instrumental.wav')
-        store.write(job, dict(status='done', instrumental_url=f'/artifacts/{job}'))
+        activity = None
+        try:
+            analysis = folder / 'vocal-analysis.wav'
+            subprocess.run([os.getenv('FFMPEG', 'ffmpeg'), '-y', '-v', 'error', '-i',
+                str(folder / 'out' / model / 'input' / 'vocals.wav'), '-ac', '1', '-ar', '16000',
+                '-c:a', 'pcm_s16le', str(analysis)], check=True, timeout=300,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **flags)
+            activity = vocal_activity(analysis)
+        except Exception:
+            pass  # Optional alignment must never discard a valid accompaniment.
+        finally:
+            (folder / 'vocal-analysis.wav').unlink(missing_ok=True)
+        store.write(job, dict(status='done', instrumental_url=f'/artifacts/{job}', vocal_activity=activity))
     except Exception:
         store.write(job, dict(status='failed', retryable=True,
             error='Demucs separation or output validation failed; check model availability and service logs'))

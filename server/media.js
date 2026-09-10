@@ -169,6 +169,13 @@ export async function prepareSong(store, id, roots, cache) {
         }
       }
       const info = await probe(file);
+      const splitVideo = store.get("split-video:" + id);
+      if (splitVideo) {
+        const video = await probe(await safeMedia(splitVideo, roots));
+        if (!video.hasVideo || Math.abs(video.duration - info.duration) > 1)
+          throw new Error("独立画面与音频时长不匹配");
+        info.hasVideo = true;
+      }
       if (store.get("video-source:" + id)?.keepAudio) {
         try {
           await stat(path.join(store.get("package:" + id), "画面.mp4"));

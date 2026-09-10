@@ -18,6 +18,8 @@ jobs:
         timeout-minutes: 3
       - run: node tests/online-player.browser.mjs
         timeout-minutes: 3
+      - run: node tests/tv-pairing.browser.mjs
+        timeout-minutes: 3
       - run: node tests/feedback.browser.mjs
         timeout-minutes: 3
       - run: node tests/pc-dashboard.browser.mjs

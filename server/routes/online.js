@@ -6,6 +6,8 @@ import { fail, clean } from "../http-utils.js";
 import { searchSongs } from "../online-search.js";
 import { previewSessions } from "../online-preview.js";
 import { clipRange } from "../clipping.js";
+import { biliLoginStatus } from "../bili-login.js";
+import { requireDownloadHeight } from "../bili-download.js";
 
 export function onlineApi({
   app,
@@ -28,6 +30,24 @@ export function onlineApi({
   allowedOrigin,
 }) {
   const previews = previewSessions();
+  let loginCache;
+  app.get("/api/online/bilibili/status", member, async (req, res) => {
+    const cookie = get("favorites", {}).cookie || "";
+    if (
+      !loginCache ||
+      loginCache.cookie !== cookie ||
+      loginCache.expires < Date.now()
+    )
+      loginCache = {
+        cookie,
+        expires: Date.now() + 60000,
+        value: await biliLoginStatus(cookie),
+      };
+    res.json({
+      loggedIn: loginCache.value.loggedIn,
+      vip: loginCache.value.vip,
+    });
+  });
   app.get("/api/online/songs", member, async (req, res) => {
     if (!get("onlineEnabled", true))
       throw fail(
@@ -116,7 +136,7 @@ export function onlineApi({
       ),
     );
   });
-  app.post("/api/online", member, (req, res) => {
+  app.post("/api/online", member, async (req, res) => {
     if (!get("onlineEnabled", true))
       throw fail(
         403,
@@ -147,6 +167,18 @@ export function onlineApi({
       payload.onlineSelection = true;
       payload.isBacking = false;
       payload.enqueue = false;
+      if (req.body.previewId) {
+        const selected = previews.lookup(req.body.previewId);
+        if (
+          selected.url !== payload.url ||
+          selected.quality !== payload.quality
+        )
+          throw fail(400, "清晰度预览已变化，请重新预览");
+        payload.expectedHeight =
+          selected.downloadHeight || selected.previewHeight || 0;
+        if (payload.expectedHeight)
+          requireDownloadHeight(payload.expectedHeight, payload.quality);
+      }
       if (req.body.clip) {
         const preview = previews.lookup(req.body.previewId);
         if (preview.url !== payload.url)

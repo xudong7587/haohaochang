@@ -44,6 +44,8 @@ export async function prepareVideoOnPc(store, song, file, staging) {
     output.videoCodec !== "h264" ||
     !["yuv420p", "yuvj420p"].includes(output.pixelFormat) ||
     output.audio.length ||
+    output.height < info.height ||
+    output.width < info.width ||
     Math.abs(output.duration - info.duration) > 0.5
   ) {
     store.set(result.checkpointKey, null);

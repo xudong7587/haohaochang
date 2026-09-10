@@ -94,6 +94,7 @@ try {
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base + "/tv");
+  await page.getByText("使用管理密码登录", { exact: true }).click();
   await page.getByLabel("管理密码").fill("ui-test-password");
   await page.getByRole("button", { name: "进入好好唱" }).click();
   await page.locator(".stage-card").first().waitFor();

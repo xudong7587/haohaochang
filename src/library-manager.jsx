@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ResourceRow } from "./library/resource-row.jsx";
 import { VideoReview } from "./library/video-review.jsx";
-import { CatalogImport } from "./library/catalog-import.jsx";
 import { SourceImport } from "./library/source-import.jsx";
 import { BatchResults } from "./library/batch-results.jsx";
 import {
@@ -84,13 +83,17 @@ export function LibraryManager({ request, notify, onEdit }) {
               })
             }
           >
-            刷新曲库元数据
+            重新识别歌名与歌手
           </button>
           <button disabled={busy} onClick={() => action(async () => {})}>
             刷新列表
           </button>
         </div>
       </div>
+      <p className="note">
+        “重新识别歌名与歌手”会批量更新歌曲名称；“刷新列表”只读取最新任务和曲库状态。列表也会每
+        10 秒自动刷新。
+      </p>
       <BatchResults results={results} />
       <SourceImport {...{ request, action, busy, notify }} />
       <div className="library-tabs">
@@ -284,7 +287,6 @@ export function LibraryManager({ request, notify, onEdit }) {
           </article>
         ))}
       {!visibleCount && <p>这个分类暂时没有匹配歌曲。</p>}
-      <CatalogImport {...{ request, notify }} />
     </section>
   );
 }

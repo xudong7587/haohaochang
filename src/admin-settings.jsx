@@ -197,6 +197,7 @@ export function Settings({ admin, attempt, refresh }) {
                     {
                       {
                         "attach-video": "补充视频",
+                        "upgrade-hd": "升级高清画面",
                         acquire: "自动找歌",
                         "find-video": "补充 MTV",
                         "favorite-sync": "检查收藏夹",

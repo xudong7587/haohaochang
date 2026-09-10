@@ -1,4 +1,5 @@
 import { requestLimits } from "./request-limits.js";
+import { tvPairingApi } from "./tv-pairing.js";
 import { liveEvents } from "./live-events.js";
 import { startDiscovery } from "./discovery.js";
 import { pcApi } from "./routes/pc.js";
@@ -139,6 +140,7 @@ export function createApp(options = {}) {
     allowedOrigin,
   };
   const resolveReview = reviewsApi(routeContext);
+  tvPairingApi(routeContext);
   libraryApi({ ...routeContext, resolveReview });
   libraryDeleteApi(routeContext);
   backgroundApi(routeContext);

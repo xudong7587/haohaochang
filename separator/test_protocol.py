@@ -8,11 +8,25 @@ import unittest
 from unittest.mock import patch
 import wave
 from job_store import JobStore
-from inference import validate_waves
+from inference import validate_waves, vocal_activity
+import math
+import struct
 from upload_guard import UploadGuard
 
 
 class StoreTests(unittest.TestCase):
+    def test_vocal_onsets_require_sustained_energy_and_ignore_short_noise(self):
+        with tempfile.TemporaryDirectory(prefix='ktv-vocal-onset-') as folder:
+            file = Path(folder) / 'voice.wav'
+            rate = 16000
+            with wave.open(str(file), 'wb') as audio:
+                audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(rate)
+                for second in range(12):
+                    samples = [int(10000 * math.sin(2 * math.pi * 220 * i / rate)) if second in (3, 6, 9) or (second == 1 and i < 800) else 0 for i in range(rate)]
+                    audio.writeframes(struct.pack('<' + 'h' * rate, *samples))
+            result = vocal_activity(file)
+            self.assertEqual(result['onsets'], [3.0, 6.0, 9.0])
+            self.assertEqual(result['duration'], 12)
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='ktv-worker-')
         self.addCleanup(self.temp.cleanup)

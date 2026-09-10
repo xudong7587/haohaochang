@@ -35,6 +35,14 @@ export async function probe(file) {
     ]),
   );
   return {
+    width:
+      data.streams.find(
+        (s) => s.codec_type === "video" && !s.disposition?.attached_pic,
+      )?.width || 0,
+    height:
+      data.streams.find(
+        (s) => s.codec_type === "video" && !s.disposition?.attached_pic,
+      )?.height || 0,
     hasVideo: !!data.streams?.some(
       (s) => s.codec_type === "video" && !s.disposition?.attached_pic,
     ),

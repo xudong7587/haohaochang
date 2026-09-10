@@ -78,6 +78,9 @@ export async function inspectPackage(store, song, directory) {
           mtimeMs: info.mtimeMs,
           available: true,
           duration: media.duration,
+          ...(kind === "video"
+            ? { width: media.width, height: media.height }
+            : {}),
         };
       });
     } catch (e) {

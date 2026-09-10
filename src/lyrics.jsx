@@ -115,14 +115,12 @@ export function Lyrics({ song, time, token, resource, offsetMs = 0 }) {
           </strong>
           <span>{next?.text}</span>
         </div>
-      ) : (
+      ) : text?.trim() ? (
         <div className="lyric-lines">
-          <strong>{text || "歌词待补充"}</strong>
-          <span>
-            {text ? "纯文本歌词 · 暂无时间轴" : "请在后台自动查找或导入 LRC"}
-          </span>
+          <strong>{text}</strong>
+          <span>纯文本歌词 · 暂无时间轴</span>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -57,6 +57,8 @@ export async function savePackageInfo(store, song, cache) {
         duration: song.duration,
         audioSource: song.path,
         videoSource: store.get("video-source:" + song.id),
+        downloadedVideo: store.get("download-quality:" + song.id),
+        splitVideoSource: store.get("split-video:" + song.id),
         lyricsSource: store.get("lyrics-match:" + song.id),
         files: {
           video: "画面.mp4",
@@ -177,6 +179,7 @@ export async function encodePackageResource(
       mtimeMs: info.mtimeMs,
       available: true,
       duration: media.duration,
+      ...(kind === "video" ? { width: media.width, height: media.height } : {}),
     },
   });
 }
@@ -283,7 +286,14 @@ export async function encodePackage(store, song, info, cache) {
     !store.get("video-source:" + song.id)?.keepAudio &&
     (!same || !health.video?.available)
   ) {
-    await encodePicture(store, song, song.path, dir, { info });
+    const splitVideo = store.get("split-video:" + song.id);
+    await encodePicture(
+      store,
+      song,
+      splitVideo || song.path,
+      dir,
+      splitVideo ? {} : { info },
+    );
   }
   if (!info.hasVideo && !store.get("video-source:" + song.id)?.keepAudio)
     await rm(path.join(dir, "画面.mp4"), { force: true });

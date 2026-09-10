@@ -77,3 +77,14 @@ B站预览优先使用播放器提供的 AVC/AAC DASH 流，yt-dlp 为后备；�
 新增 `node --test tests/feedback.test.js`、`node tests/feedback.browser.mjs`、`python -m unittest discover -s separator -p test_concurrency.py`。Windows 预处理回归为 `powershell -NoProfile -ExecutionPolicy Bypass -File tools/bili-preprocess/test.ps1`。均已纳入 CI 配置，实际本地结果与发布范围见 VALIDATION.md。
 
 在线搜索首次升级启用后记录 `onlineDefaultMigrated`，后续明确关闭不会在重启时重置。设置接口支持独立提交 `onlineEnabled` 或 `publicUrl`，不会覆盖未提交的另一项。后台任务列表保留全部在途任务及有限最近历史；进度为模型当前步骤，无法报告百分比的阶段只显示名称。
+
+
+## v0.3.6 在线高清链路
+
+`server/bili-login.js` 管理二维码临时会话与共享登录，`providers/bili-wbi.js` 实现签名，`bili-download.js` 按当前账号选择独立DASH并验证真实媒体。设计参考 [bili-sync取流代码](https://github.com/amtoaer/bili-sync/blob/master/crates/bili_sync/src/bilibili/video.rs) 与 [扫码实现](https://github.com/amtoaer/bili-sync/blob/master/crates/bili_sync/src/bilibili/credential.rs)。未直接依赖或调用bili-sync进程；其他遗留下载用途仍使用yt-dlp。
+
+在线缓存位于 `.ktv-online/dash`，分辨率与凭证隔离；原始音频成为歌曲来源，独立画面通过 `split-video:<id>` 保留。版本回收保护这类来源引用。`upgrade-hd`只接受已记录的在线来源与裁剪区间，不自动覆盖已有音轨。PC裁剪仍使用已有 `video_only` 协议，新增可选 `vocal_activity` 字段不改变旧分离适配器兼容性。
+
+新增契约测试：`bili-hd.test.js`、`pc-flow.test.js`、`metadata-batch.test.js`、`preview-cancel.test.js`、`lyrics-alignment.test.js`。外部平台均用受控传输fixture，真实用户验证只在隔离本机目录进行，不能把其Cookie、登录二维码或原始媒体加入Git。
+
+TV配对由 `/api/tv-pairing` 创建三分钟内存会话，二维码只携带手机确认凭据；手机通过member认证后确认，电视用另一随机凭据轮询并一次性领取roomToken。Android13+使用OnBackInvokedCallback，旧设备用onBackPressed。网页`haohaochangBack()`返回是否消费操作，根页面交由APK双返回退出。`node tests/tv-pairing.browser.mjs`在隔离localhost上验证首次/重复扫码、登录持久化及返回层级，并已纳入CI；原生遥控器退出仍需实机验收。

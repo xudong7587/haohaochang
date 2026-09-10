@@ -5,7 +5,11 @@ import {
   setAdminToken,
   acceptLogin,
   logout,
+  pendingTvPair,
+  tvPairFromHash,
 } from "./api.js";
+import { TvLoginQr, PhonePairing } from "./tv-pairing.jsx";
+import { handleTvBack } from "./tv-back.js";
 import { modeNames, statusNames } from "./view-constants.js";
 import { SearchBox, Empty, Modal } from "./components.jsx";
 import { Settings } from "./admin-settings.jsx";
@@ -72,6 +76,15 @@ function IconButton({ icon: Icon, children, ...props }) {
 }
 
 export function App() {
+  const [phonePair, setPhonePair] = useState(
+    route === "mobile" ? pendingTvPair : "",
+  );
+  useEffect(() => {
+    if (route !== "mobile") return;
+    const scan = () => setPhonePair(tvPairFromHash(location.hash.slice(1)));
+    window.addEventListener("hashchange", scan);
+    return () => window.removeEventListener("hashchange", scan);
+  }, []);
   const [authenticated, setAuthenticated] = useState(
     route === "admin" ? !!adminToken : !!roomToken,
   );
@@ -83,7 +96,13 @@ export function App() {
     }),
     [songs, setSongs] = useState([]),
     [artists, setArtists] = useState([]);
-  const [tab, setTab] = useState(route === "tv" ? "stage" : "songs"),
+  const [tab, setTab] = useState(
+      route === "admin" && location.hash === "#online"
+        ? "online"
+        : route === "tv"
+          ? "stage"
+          : "songs",
+    ),
     [query, setQuery] = useState(""),
     [artist, setArtist] = useState("");
   const [tag, setTag] = useState("");
@@ -154,7 +173,10 @@ export function App() {
     events.onerror = () => setConnected(false);
     api("/join?origin=" + encodeURIComponent(location.origin))
       .then(setJoin)
-      .catch((e) => notify(e.message));
+      .catch((e) => {
+        if (e.status === 401 && route !== "admin") setAuthenticated(false);
+        else notify(e.message);
+      });
     return () => events.close();
   }, [authenticated]);
   useEffect(() => {
@@ -198,15 +220,24 @@ export function App() {
   }, [authenticated, refresh, taskRefresh]);
   useEffect(() => {
     if (route !== "tv") return;
+    window.haohaochangBack = handleTvBack;
     function key(e) {
       if (e.defaultPrevented) return;
       document.body.classList.add("keyboard");
       if (e.key === "Escape" || e.key === "BrowserBack") {
+        if (!authenticated) return;
+        if (document.querySelector("dialog[open]")) return;
+        if (!showQR && !artist && !query && !tag && tab === "stage") return;
         e.preventDefault();
         if (showQR) setShowQR(false);
         else if (artist) setArtist("");
-        else if (tab !== "songs") setTab("songs");
-        else document.querySelector("nav button")?.focus();
+        else if (query || tag) {
+          setQuery("");
+          setTag("");
+        } else {
+          setTab("stage");
+          document.querySelector("nav button")?.focus();
+        }
         return;
       }
       if (
@@ -223,7 +254,7 @@ export function App() {
         document;
       const items = [
         ...focusRoot.querySelectorAll(
-          "button:not(:disabled),input,a[href],select,textarea,[tabindex]",
+          "button:not(:disabled),input,a[href],select,textarea,summary,[tabindex]",
         ),
       ].filter(
         (el) =>
@@ -273,10 +304,11 @@ export function App() {
     const pointer = () => document.body.classList.remove("keyboard");
     document.addEventListener("pointerdown", pointer);
     return () => {
+      delete window.haohaochangBack;
       document.removeEventListener("keydown", key);
       document.removeEventListener("pointerdown", pointer);
     };
-  }, [tab, artist, showQR]);
+  }, [tab, artist, showQR, authenticated, query, tag]);
   async function control(action) {
     await attempt(() =>
       api("/control", { action, entryId: current?.id }, "POST"),
@@ -295,7 +327,7 @@ export function App() {
   }
   if (!authenticated)
     return (
-      <div className="login">
+      <div className={`login ${route === "tv" ? "tv-login" : ""}`}>
         <div className="login-card">
           <div className="brandmark">
             <Mic2 />
@@ -305,28 +337,38 @@ export function App() {
             好好唱<span>在家，就是主场。</span>
           </h1>
           <p className="muted">
-            {route === "mobile"
-              ? "扫描电视上的二维码，即可加入客厅。也可以输入管理密码连接。"
-              : "输入 NAS 管理密码，连接你的家庭歌房。"}
+            {phonePair
+              ? "登录当前歌房后，确认连接电视。"
+              : route === "mobile"
+                ? "扫描电视上的二维码，即可加入客厅。也可以输入管理密码连接。"
+                : "输入 NAS 管理密码，连接你的家庭歌房。"}
           </p>
-          <form onSubmit={login}>
-            <label>
-              管理密码
-              <input
-                autoFocus
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="部署时设置的 ADMIN_PASSWORD"
-                required
-              />
-            </label>
-            <button className="primary" disabled={loginBusy}>
-              {loginBusy ? "正在连接…" : "进入好好唱"}
-              <ArrowUpRight size={18} />
-            </button>
-          </form>
+          <div className="login-methods">
+            {route === "tv" && (
+              <TvLoginQr onLogin={() => setAuthenticated(true)} />
+            )}
+            <details open={route !== "tv"}>
+              <summary>使用管理密码登录</summary>
+              <form onSubmit={login}>
+                <label>
+                  管理密码
+                  <input
+                    autoFocus={route !== "tv"}
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="部署时设置的 ADMIN_PASSWORD"
+                    required
+                  />
+                </label>
+                <button className="primary" disabled={loginBusy}>
+                  {loginBusy ? "正在连接…" : "进入好好唱"}
+                  <ArrowUpRight size={18} />
+                </button>
+              </form>
+            </details>
+          </div>
           <p className="fine">音乐留在 NAS，快乐留在客厅。</p>
           {message && (
             <p role="alert" className="error">
@@ -337,6 +379,17 @@ export function App() {
       </div>
     );
 
+  if (phonePair)
+    return (
+      <PhonePairing
+        pair={phonePair}
+        onAuthRequired={() => setAuthenticated(false)}
+        done={() => {
+          history.replaceState(null, "", location.pathname);
+          setPhonePair("");
+        }}
+      />
+    );
   return (
     <div className={`app ${route} ${tab === "stage" ? "stage-home" : ""}`}>
       <aside className="sidebar">
@@ -838,7 +891,11 @@ export function App() {
             </>
           )}
           {tab === "online" && (
-            <OnlineSongs initialTitle={query} notify={notify} />
+            <OnlineSongs
+              initialTitle={query}
+              notify={notify}
+              canLogin={route === "admin"}
+            />
           )}
           {tab === "settings" && admin && (
             <>

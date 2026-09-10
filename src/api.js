@@ -1,5 +1,13 @@
 const fromHash = location.hash.slice(1);
-if (fromHash && ["/mobile", "/control"].includes(location.pathname)) {
+export function tvPairFromHash(hash) {
+  return /^pair=[a-f0-9]{48}\.[a-f0-9]{48}$/.test(hash) ? hash.slice(5) : "";
+}
+export const pendingTvPair = tvPairFromHash(fromHash);
+if (
+  fromHash &&
+  !fromHash.startsWith("pair=") &&
+  ["/mobile", "/control"].includes(location.pathname)
+) {
   localStorage.setItem("roomToken", fromHash);
   history.replaceState(null, "", location.pathname);
 }
@@ -18,6 +26,7 @@ export async function api(url, body, method = "GET", isAdmin = false) {
   if (!response.ok)
     throw Object.assign(new Error(result.error || "连接失败"), result, {
       status: response.status,
+      retryAfter: Number(response.headers.get("Retry-After")) || 60,
     });
   return result;
 }

@@ -2,51 +2,62 @@ export async function refreshMetadataBatch(
   songs,
   request,
   onProgress = () => {},
+  { wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {},
 ) {
-  const results = [];
-  // Capture revisions before asynchronous work, including items later in the batch.
   const snapshots = songs.map((song) => ({ ...song }));
-  for (const song of snapshots) {
-    let result = {
-      id: song.id,
-      title: song.title,
-      artist: song.artist,
-      expectedRevision: song.metadataRevision,
-    };
+  const results = snapshots.map((song) => ({
+    id: song.id,
+    title: song.title,
+    artist: song.artist,
+    status: "pending",
+    message: "等待识别",
+  }));
+  onProgress([...results]);
+  for (let start = 0; start < snapshots.length; start += 20) {
+    const batch = snapshots.slice(start, start + 20);
     try {
-      const parsed = await request(
-        "/admin/refresh-metadata",
-        { id: song.id, expectedRevision: song.metadataRevision },
-        "POST",
-      );
-      if (parsed.needs_review)
-        result = {
-          ...result,
-          status: "review",
-          message: parsed.note || "请手动核对歌名、歌手与录音版本",
-        };
-      else {
-        await request(
-          "/admin/library/" + song.id + "/save",
-          {
-            title: parsed.title,
-            artist: parsed.artist,
-            lyrics: song.lyrics || "",
-            lyricsSource: song.lyricsSource,
-            expectedRevision: song.metadataRevision,
-          },
-          "POST",
-        );
-        result = { ...result, status: "success", message: "资料已更新" };
+      let response;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await request(
+            "/admin/refresh-metadata-batch",
+            {
+              items: batch.map((song) => ({
+                id: song.id,
+                expectedRevision: song.metadataRevision,
+              })),
+            },
+            "POST",
+          );
+          break;
+        } catch (error) {
+          if (error.status !== 429 || attempt === 2) throw error;
+          batch.forEach((song, index) => {
+            results[start + index] = {
+              ...results[start + index],
+              message: "等待限流解除后继续",
+            };
+          });
+          onProgress([...results]);
+          await wait(Math.max(1, Math.min(120, error.retryAfter || 60)) * 1000);
+        }
       }
+      batch.forEach((song, index) => {
+        const result = response.results.find((row) => row.id === song.id);
+        results[start + index] = {
+          ...results[start + index],
+          ...(result || { status: "failed", message: "未收到该歌曲处理结果" }),
+        };
+      });
     } catch (error) {
-      result = {
-        ...result,
-        status: error.code === "REVISION_CONFLICT" ? "conflict" : "failed",
-        message: error.message,
-      };
+      batch.forEach((song, index) => {
+        results[start + index] = {
+          ...results[start + index],
+          status: "failed",
+          message: error.message,
+        };
+      });
     }
-    results.push(result);
     onProgress([...results]);
   }
   return results;
@@ -132,12 +143,10 @@ export async function standardizeBatch(songs, request, onProgress = () => {}) {
       const response = await request(
         "/admin/standardize-batch",
         {
-          items: rows
-            .slice(start, start + 20)
-            .map((song) => ({
-              id: song.id,
-              expectedRevision: song.metadataRevision,
-            })),
+          items: rows.slice(start, start + 20).map((song) => ({
+            id: song.id,
+            expectedRevision: song.metadataRevision,
+          })),
         },
         "POST",
       );

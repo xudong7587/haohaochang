@@ -7,7 +7,7 @@ import { resourceManifest } from "./resource-manifest.js";
 export const resourceGraceMs = 10 * 60 * 1000;
 const versionName = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const resourceFile =
-  /^(?:画面\.mp4|原唱\.m4a|伴奏\.m4a|歌词\.lrc|歌曲信息\.json|来源\.[a-z0-9]+)$/i;
+  /^(?:画面\.mp4|原唱\.m4a|伴奏\.m4a|歌词\.lrc|歌曲信息\.json|来源画面\.mp4|来源\.[a-z0-9]+)$/i;
 
 // Only retire our own version directories. Sources and current resources are
 // references, never candidates. In-flight jobs and queued playback pin a song.
@@ -78,7 +78,7 @@ export async function cleanSongVersions(
       .map((s) => s.path);
     for (const row of store.db
       .prepare(
-        "SELECT key,value FROM settings WHERE key LIKE 'package:%' OR key LIKE 'video-source:%'",
+        "SELECT key,value FROM settings WHERE key LIKE 'package:%' OR key LIKE 'video-source:%' OR key LIKE 'split-video:%'",
       )
       .all()) {
       const value = JSON.parse(row.value);
@@ -86,6 +86,8 @@ export async function cleanSongVersions(
         references.push(value);
       if (row.key.startsWith("video-source:") && value?.path)
         references.push(value.path);
+      if (row.key.startsWith("split-video:") && typeof value === "string")
+        references.push(value);
     }
     for (const entry of await readdir(versions, { withFileTypes: true })) {
       if (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { BiliLogin } from "./bili-login.jsx";
 export function Automation({ request, notify, section }) {
   const [ai, setAI] = useState(null),
     [favorite, setFavorite] = useState(null),
@@ -33,6 +34,17 @@ export function Automation({ request, notify, section }) {
   }
   return (
     <>
+      {(!section || section === "online") && (
+        <BiliLogin
+          request={request}
+          notify={notify}
+          onLogin={() =>
+            request("/admin/favorites")
+              .then(setFavorite)
+              .catch((e) => notify(e.message))
+          }
+        />
+      )}
       {favorite && (!section || section === "online") && (
         <form
           className="settings-card"

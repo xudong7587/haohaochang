@@ -54,6 +54,9 @@ export function resourceManifest(store, song, cache) {
             ? `/api/assets/${song.id}/${kind}?r=${revision}`
             : `/api/media/${song.id}/${kind === "video" ? "vocal" : kind}`,
           duration: health[kind]?.duration || song.duration || 0,
+          ...(kind === "video"
+            ? { width: health.video?.width, height: health.video?.height }
+            : {}),
           offset: kind === "video" ? Number(videoSource.offset) || 0 : 0,
         },
       ];

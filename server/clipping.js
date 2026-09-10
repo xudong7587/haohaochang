@@ -27,7 +27,14 @@ export function clipRange(input, duration) {
     throw new Error("裁剪区间无效，请检查开始与结束时间");
   return { start, end: Math.min(end, duration) };
 }
-export async function clipOnPc(store, job, payload, file, downloads) {
+export async function clipOnPc(
+  store,
+  job,
+  payload,
+  file,
+  downloads,
+  videoOnly = false,
+) {
   if (!payload.clip) return file;
   const source = await probe(file);
   const clip = clipRange(payload.clip, source.duration);
@@ -36,7 +43,7 @@ export async function clipOnPc(store, job, payload, file, downloads) {
   const config = {
     endpoint: ai.pcEndpoint,
     apiKey: ai.pcApiKey,
-    model: `clip:${clip.start}:${clip.end}`,
+    model: `${videoOnly ? "video" : "clip"}:${clip.start}:${clip.end}`,
   };
   let health;
   try {
@@ -51,7 +58,8 @@ export async function clipOnPc(store, job, payload, file, downloads) {
   const target = path.join(staging, "clip.mp4");
   const valid = (info) =>
     info.hasVideo &&
-    info.audio.length &&
+    (videoOnly ? !info.audio.length : info.audio.length) &&
+    (!source.height || info.height >= source.height) &&
     Math.abs(info.duration - (clip.end - clip.start)) < 0.5;
   try {
     if (valid(await probe(target))) return target;
@@ -64,7 +72,7 @@ export async function clipOnPc(store, job, payload, file, downloads) {
       file,
       staging,
       config,
-      { clip },
+      { clip, videoOnly },
     );
   } catch (error) {
     if (

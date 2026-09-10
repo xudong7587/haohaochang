@@ -2,19 +2,20 @@ import React, { useEffect, useRef, useState } from "react";
 import { api, roomToken } from "./api.js";
 import { Modal } from "./components.jsx";
 import { rankVideos } from "../shared/video-ranking.js";
+import { BiliLogin } from "./bili-login.jsx";
 
 const time = (n) =>
   `${Math.floor((n || 0) / 60)}:${((n || 0) % 60).toFixed(1).padStart(4, "0")}`;
 const mediaUrl = (url) =>
   url ? `${url}?token=${encodeURIComponent(roomToken)}` : undefined;
 
-function VideoPreview({ selection, close, notify }) {
+function VideoPreview({ selection, close, notify, canLogin = false }) {
   const video = useRef(null),
     audio = useRef(null);
   const resumeAt = useRef(0);
   const [quality, setQuality] = useState("highest"),
     [qualities, setQualities] = useState([
-      { value: "highest", label: "最高可用" },
+      { value: "highest", label: "最高画质（至少 720p）" },
     ]);
   const [reload, setReload] = useState(0),
     [preview, setPreview] = useState(null),
@@ -140,6 +141,21 @@ function VideoPreview({ selection, close, notify }) {
           会员高清需要在“在线资源”保存该会员账号最新的 B站
           Cookie；仅在网页登录不会同步到 NAS。
         </p>
+        {(error ||
+          (preview &&
+            (preview.downloadHeight || preview.previewHeight) < 720)) && (
+          <BiliLogin
+            compact
+            canLogin={canLogin}
+            request={(url, body, method) => api(url, body, method, canLogin)}
+            notify={notify}
+            onLogin={() => {
+              resumeAt.current = video.current?.currentTime || position;
+              pause();
+              setReload((v) => v + 1);
+            }}
+          />
+        )}
         {preview ? (
           <>
             <video
@@ -264,7 +280,7 @@ function VideoPreview({ selection, close, notify }) {
   );
 }
 
-export function OnlineSongs({ initialTitle = "", notify }) {
+export function OnlineSongs({ initialTitle = "", notify, canLogin = false }) {
   const [title, setTitle] = useState(initialTitle),
     [artist, setArtist] = useState(""),
     [data, setData] = useState(null),
@@ -315,6 +331,12 @@ export function OnlineSongs({ initialTitle = "", notify }) {
   }
   return (
     <section className="online-songs">
+      <BiliLogin
+        compact
+        canLogin={canLogin}
+        request={(url, body, method) => api(url, body, method, canLogin)}
+        notify={notify}
+      />
       <div className="section-heading">
         <div>
           <h1>找到想唱的那一版。</h1>
@@ -413,6 +435,7 @@ export function OnlineSongs({ initialTitle = "", notify }) {
           selection={selection}
           close={() => setSelection(null)}
           notify={notify}
+          canLogin={canLogin}
         />
       )}
     </section>
