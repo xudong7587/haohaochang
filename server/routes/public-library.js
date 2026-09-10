@@ -1,4 +1,5 @@
 import { clean } from "../http-utils.js";
+import { readArtistProfile } from "../artist-profile.js";
 
 export function publicLibraryApi({
   app,
@@ -36,7 +37,10 @@ export function publicLibraryApi({
           clean(req.query.tag),
         )
         .filter((s) => !get("hidden:" + s.id))
-        .map(s => ({ ...s, posterVersion: get("poster-source:" + s.id)?.hash || "" })),
+        .map((s) => ({
+          ...s,
+          posterVersion: get("poster-source:" + s.id)?.hash || "",
+        })),
     );
   });
   app.get("/api/artists", member, (req, res) => {
@@ -46,7 +50,10 @@ export function publicLibraryApi({
         counts.set(s.artist, (counts.get(s.artist) || 0) + 1);
     res.json(
       [...counts]
-        .map(([artist, count]) => ({ artist, count }))
+        .map(([artist, count]) => ({
+          ...readArtistProfile(store, artist),
+          count,
+        }))
         .sort((a, b) => a.artist.localeCompare(b.artist)),
     );
   });

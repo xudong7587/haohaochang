@@ -5,6 +5,7 @@ RUN npm ci --ignore-scripts
 COPY index.html vite.config.js ./
 COPY src ./src
 COPY shared ./shared
+COPY public ./public
 RUN npm run build && npm prune --omit=dev
 
 FROM node:24-bookworm-slim

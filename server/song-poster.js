@@ -9,7 +9,7 @@ import {
 } from "./poster-source.js";
 import { withSongWrite, currentSong } from "./song-writes.js";
 import { safeMedia, inside } from "./media-utils.js";
-import { run } from "./process.js";
+import { savePosterImage } from "./poster-image.js";
 
 export const posterName = "封面.jpg";
 export const posterSearchVersion = 2;
@@ -125,26 +125,7 @@ export async function scrapePoster(
           await writeFile(input, bytes, { flag: "wx" });
         }
         report("poster-save");
-        await run(
-          process.env.FFMPEG || "ffmpeg",
-          [
-            "-y",
-            "-v",
-            "error",
-            "-max_pixels",
-            "40000000",
-            "-i",
-            input,
-            "-frames:v",
-            "1",
-            "-vf",
-            "scale=w='min(1200,iw)':h='min(1200,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,format=rgba,split[fg][bg];[bg]drawbox=c=white:t=fill:replace=1[base];[base][fg]overlay=shortest=1:format=auto,format=yuvj444p",
-            "-q:v",
-            "2",
-            output,
-          ],
-          30000,
-        );
+        await savePosterImage(input, output);
         const bytes = await readFile(output);
         if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8)
           throw new Error("封面转换失败");

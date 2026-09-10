@@ -1,9 +1,11 @@
 import { libraryPreviewApi } from "./library-preview.js";
 import { posterApi } from "./poster-api.js";
+import { artistApi } from "./artist-api.js";
 import { requestLimits } from "./request-limits.js";
 import { tvPairingApi } from "./tv-pairing.js";
 import { liveEvents } from "./live-events.js";
 import { startDiscovery } from "./discovery.js";
+import { serverIdentity } from "./tv-discovery.js";
 import { pcApi } from "./routes/pc.js";
 import { startBackgroundTasks } from "./background-tasks.js";
 import { backgroundApi } from "./background-api.js";
@@ -170,10 +172,20 @@ export function createApp(options = {}) {
   tvPairingApi(routeContext);
   libraryApi({ ...routeContext, resolveReview });
   libraryDeleteApi(routeContext);
-  posterApi({ ...routeContext, posterOptions: options.posterOptions });
+  const posterCatalog = posterApi({
+    ...routeContext,
+    posterOptions: options.posterOptions,
+  });
+  const artistProfiles = artistApi({
+    ...routeContext,
+    posterCatalog,
+    artistOptions: options.artistOptions,
+    enabled: options.worker !== false && !store.readOnlyMedia,
+  });
   libraryPreviewApi(routeContext);
   backgroundApi(routeContext);
   app.get("/api/health", (req, res) => res.json({ ok: true }));
+  app.get("/api/server-info", (req, res) => res.json(serverIdentity));
   app.post("/api/login", admin, (req, res) =>
     res.json({ token: get("roomToken") }),
   );
@@ -230,12 +242,13 @@ export function createApp(options = {}) {
     app,
     store,
     addJob,
-    close: () => {
+    close: async () => {
       clearInterval(heartbeat);
       events.close();
       discovery.stop();
       backgroundTasks.stop();
       clients.forEach((c) => c.end());
+      await artistProfiles.stop();
       return scheduler.stop();
     },
   };

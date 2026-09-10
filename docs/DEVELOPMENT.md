@@ -29,7 +29,7 @@ APK 使用 Java 21、Gradle 9.4.1、Android SDK 36 构建：
 gradle -p android testDebugUnitTest assembleDebug
 ```
 
-最低 Android 6；WebView 需支持现代 JavaScript，建议 Chromium/WebView 90 及以上。APK 是原生连接外壳加 WebView 终端，播放调用系统媒体解码；没有在 TV 端嵌入 FFmpeg 或 AI。v0.3.10 起正式分发使用持久 PKCS12 签名，CI 从 `TV_KEYSTORE_BASE64` 与 `TV_KEYSTORE_PASSWORD` Secrets 构建固定名称 `haohaochang-tv.apk`；密钥不进入 Git。独立构建 release 时设置 `TV_KEYSTORE_FILE`、`TV_KEYSTORE_PASSWORD` 并运行 `gradle -p android assembleRelease`。PR 只构建 debug 包。旧 CI debug 签名可能不同，迁移说明见用户手册。
+最低 Android 6；前端使用 Vite legacy 兼容构建（Chrome 53 目标）与 AbortController 补丁，仍建议更新 WebView；编译目标不等同于解码器实测。APK 是原生连接外壳加 WebView 终端，播放调用系统媒体解码；没有在 TV 端嵌入 FFmpeg 或 AI。v0.3.10 起正式分发使用持久 PKCS12 签名，CI 从 `TV_KEYSTORE_BASE64` 与 `TV_KEYSTORE_PASSWORD` Secrets 构建固定名称 `haohaochang-tv.apk`；密钥不进入 Git。独立构建 release 时设置 `TV_KEYSTORE_FILE`、`TV_KEYSTORE_PASSWORD` 并运行 `gradle -p android assembleRelease`。PR 只构建 debug 包。旧 CI debug 签名可能不同，迁移说明见用户手册。
 
 APK 直接分发给家庭电视，保留现有 `targetSdk 28` 行为。正式构建仅豁免面向 Google Play 的 `ExpiredTargetSdkVersion` 检查，其余 release lint 保留；未来提交应用商店前需要单独迁移 target SDK 并验证平台行为。
 
@@ -104,3 +104,7 @@ TV配对由 `/api/tv-pairing` 创建三分钟内存会话，二维码只携带�
 `server/song-storage.js` 在歌曲写锁内将受管来源视频的全部音轨无损保存为 MKA，更新来源指针与指纹后清除重复画面；`resource-cleanup.js` 回收无引用版本，`download-cleanup.js` 根据成功导入记录和文件签名删除下载输入。生产文件只由正式部署后的任务执行清理，测试使用临时目录。当前播放／队列／在途任务均保护歌曲；未知文件和外部来源不参与删除。
 
 `tests/resource-storage.test.js` 包含多视频合一与后续准备回归，`tests/download-cleanup.test.js` 覆盖失败、改动和共享输入保护，`tests/preview-fallback.test.js` 覆盖签名后备及 CDN Range 保留。默认视频只封装并遍历数据包，显式编码由 PC 完整解码并返回 SHA-256；这两种校验级别必须在文档和状态中区别表述。
+
+电视发现由 `server/index.js` 在 HTTP 启动后开启：`KTV_TV_DISCOVERY_ENABLED=1` 或现有 `KTV_DISCOVERY_ENABLED=1`，`KTV_LOCAL_ONLY=1` 禁用。UDP 43212 只响应私网 IPv4、受大小／频率限制且不含凭证；`KTV_TV_HTTP_PORT` 可声明外部 HTTP 端口，默认 `PORT`。LAN Compose 使用 host 网络接收广播；桥接环境不保证广播可达。
+
+新增 `tests/adaptive-player.browser.mjs` 检查歌星编辑、公共点歌、深色队列、闲置按钮、手机横竖屏、真实 legacy bundle 与启动恢复。`scripts/check-poster-runtime.mjs` 在实际 Docker FFmpeg 上执行 API 保存 PNG／JPEG、方形尺寸／白底和音轨不变检查，并检查启动脚本与图标；CI 和发布晋升 latest 前均执行。歌星资料存储于 `artist-profile:<hash>` KV 和 `/data/artists`，按歌手串行写入与修订检查；自动补图不覆盖已有照片。

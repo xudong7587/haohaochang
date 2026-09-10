@@ -1,0 +1,382 @@
+.tv-welcome.login {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 26px 5vw 18px;
+  background:
+    radial-gradient(ellipse at 20% 15%, #30203f 0, transparent 58%), #100e19;
+  color: #f5f1ff;
+  box-sizing: border-box;
+}
+.tv-welcome .tv-welcome-brand {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 34px;
+  padding: 0;
+  background: none;
+  border: 0;
+  backdrop-filter: none;
+  color: #d6bfff;
+}
+.tv-welcome-brand > strong {
+  font-size: 22px;
+  margin: 0 16px 0 10px;
+  color: #f5f1ff;
+}
+.tv-welcome-brand > span {
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  color: #b1a1c6;
+}
+.tv-welcome-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  width: 100%;
+  max-width: 1320px;
+  margin: 18px auto;
+}
+.tv-welcome-copy {
+  flex: 1;
+  padding-right: 6vw;
+  min-width: 0;
+}
+.tv-welcome-copy h1 {
+  font-size: 48px;
+  font-size: clamp(34px, 4.1vw, 64px);
+  line-height: 1.2;
+  letter-spacing: -2px;
+  margin: 22px 0;
+  color: #f5f1ff;
+}
+.tv-welcome-description {
+  color: #bcb0cc;
+  font-size: 18px;
+  line-height: 1.8;
+  margin: 0 0 26px;
+}
+.tv-server-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #bfe1cf;
+}
+.tv-server-state svg {
+  margin-right: 7px;
+}
+.tv-server-state > span {
+  display: block;
+  width: 100%;
+  color: #a89cb9;
+  margin: 8px 0 0 23px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.tv-welcome-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tv-welcome-steps li {
+  display: flex;
+  align-items: center;
+  margin-top: 20px;
+}
+.tv-welcome-steps li > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #796187;
+  border-radius: 50%;
+  color: #ddc4f4;
+  font-size: 13px;
+  margin-right: 15px;
+}
+.tv-welcome-steps strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 500;
+}
+.tv-welcome-steps small {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #a99bb9;
+}
+.tv-change-server {
+  display: inline-flex;
+  align-items: center;
+  color: #d6bfff;
+  font-size: 14px;
+  margin-top: 28px;
+  text-decoration: none;
+  padding: 8px 0;
+}
+.tv-change-server svg {
+  margin-left: 8px;
+}
+.tv-welcome .tv-pair-card {
+  width: 390px;
+  max-width: 45%;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 26px 30px;
+  text-align: center;
+  background: #241d30;
+  border: 1px solid #493951;
+  border-radius: 26px;
+  box-shadow: 0 24px 70px #0003;
+  box-sizing: border-box;
+}
+.tv-pair-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  color: #dbc5f7;
+}
+.tv-welcome .tv-pair-card-title h2 {
+  font-size: 18px;
+  color: #f5f1ff;
+  margin: 0 0 0 9px;
+  font-weight: 500;
+}
+.tv-qr-frame {
+  width: 280px;
+  height: 280px;
+  max-width: 100%;
+  background: white;
+  border-radius: 16px;
+  padding: 12px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.tv-welcome .tv-qr-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: contain;
+}
+.tv-qr-status {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #625472;
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 16px;
+}
+.tv-qr-status svg {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+.tv-pair-code {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 18px;
+}
+.tv-pair-code > span {
+  font-size: 12px;
+  color: #b8a9c9;
+  margin-right: 14px;
+}
+.tv-welcome .tv-pair-code strong {
+  font-size: 29px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  color: #f4eaff;
+  font-variant-numeric: tabular-nums;
+}
+.tv-welcome .tv-pair-hint {
+  color: #ae9dbf;
+  font-size: 12px;
+  margin: 8px 0 18px;
+}
+.tv-welcome button.tv-refresh-qr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 9px 18px;
+  background: #342840;
+  border-color: #635074;
+  color: #e4d4f7;
+  font-size: 13px;
+}
+.tv-refresh-qr svg {
+  margin-right: 8px;
+}
+.tv-password-fallback {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #493951;
+  color: #b9a8cb;
+  font-size: 13px;
+}
+.tv-password-fallback summary {
+  cursor: pointer;
+  padding: 6px;
+}
+.tv-password-fallback form {
+  text-align: left;
+  padding-top: 15px;
+}
+.tv-password-fallback input {
+  width: 100%;
+  background: #191320;
+  color: #f5f1ff;
+  border-color: #635074;
+  margin: 8px 0 12px;
+}
+.tv-password-fallback button {
+  background: #d0b9ff;
+  color: #211330;
+}
+.tv-password-fallback .error {
+  color: #ffb7b7;
+}
+.tv-welcome-footer {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  width: 100%;
+  font-size: 11px;
+  color: #9e8cac;
+  line-height: 1.8;
+}
+.tv-welcome :focus {
+  outline: 3px solid #e5cbff;
+  outline-offset: 5px;
+}
+.tv-welcome input:focus {
+  outline-offset: 2px;
+}
+.tv-pair-card.handheld-login {
+  display: flex;
+  flex-direction: column;
+}
+.handheld-login .tv-password-fallback {
+  order: -1;
+  border-top: 0;
+  border-bottom: 1px solid #493951;
+  padding: 0 0 24px;
+  margin: 0 0 24px;
+}
+.handheld-login .tv-password-fallback summary {
+  font-size: 20px;
+  color: #f5f1ff;
+}
+.handheld-login .tv-password-fallback button {
+  width: 100%;
+  justify-content: space-between;
+}
+@media (min-width: 1500px) {
+  .tv-welcome .tv-pair-card {
+    width: 440px;
+    padding: 36px;
+  }
+  .tv-qr-frame {
+    width: 320px;
+    height: 320px;
+  }
+  .tv-welcome .tv-pair-card-title h2 {
+    font-size: 21px;
+  }
+  .tv-welcome-steps strong {
+    font-size: 19px;
+  }
+  .tv-welcome-steps small {
+    font-size: 14px;
+  }
+}
+@media (max-height: 650px) and (min-width: 701px) {
+  .tv-welcome.login {
+    padding-top: 18px;
+    padding-bottom: 16px;
+  }
+  .tv-welcome-body {
+    margin: 14px auto;
+  }
+  .tv-welcome-copy h1 {
+    font-size: 36px;
+    margin: 16px 0;
+  }
+  .tv-welcome-description {
+    font-size: 15px;
+    margin-bottom: 18px;
+  }
+  .tv-welcome-steps li {
+    margin-top: 14px;
+  }
+  .tv-welcome .tv-pair-card {
+    padding: 18px 24px;
+    width: 340px;
+  }
+  .tv-qr-frame {
+    width: 216px;
+    height: 216px;
+  }
+  .tv-welcome .tv-pair-card-title h2 {
+    font-size: 16px;
+  }
+  .tv-pair-card-title {
+    margin-bottom: 12px;
+  }
+  .tv-pair-code {
+    margin-top: 12px;
+  }
+  .tv-password-fallback {
+    margin-top: 10px;
+    padding-top: 8px;
+  }
+  .tv-welcome .tv-pair-hint {
+    margin-bottom: 10px;
+  }
+}
+@media (max-width: 700px) {
+  .tv-welcome.login {
+    padding: 22px;
+  }
+  .tv-welcome-body {
+    flex-direction: column;
+    align-items: stretch;
+    margin: 24px auto;
+  }
+  .tv-welcome-copy {
+    padding: 0;
+  }
+  .tv-welcome-copy h1 {
+    font-size: 38px;
+    letter-spacing: -1px;
+  }
+  .tv-welcome-description {
+    font-size: 15px;
+  }
+  .tv-welcome-steps {
+    display: none;
+  }
+  .tv-welcome .tv-pair-card {
+    width: 100%;
+    max-width: 440px;
+    align-self: center;
+    margin-top: 26px;
+    padding: 24px;
+  }
+  .tv-welcome-footer > span {
+    width: 100%;
+  }
+  .tv-welcome-footer > span + span {
+    margin-top: 4px;
+  }
+}

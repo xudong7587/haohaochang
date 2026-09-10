@@ -60,6 +60,10 @@ jobs:
             docker exec verify node -e "const c=JSON.parse(require('fs').readFileSync('/data/settings.json'));if(c.version!==1)process.exit(1);console.log('settings.json initialized')"
             docker exec verify ffmpeg -version
             docker exec verify /opt/ytdlp/bin/yt-dlp --version
+            docker cp scripts/check-poster-runtime.mjs verify:/app/check-poster-runtime.mjs
+            docker exec verify mkdir -p /app/scripts
+            docker exec verify mv /app/check-poster-runtime.mjs /app/scripts/check-poster-runtime.mjs
+            docker exec verify node scripts/check-poster-runtime.mjs
           else
             docker run -d --name verify -p 8000:8000 "$IMAGE"
             for n in $(seq 1 20); do

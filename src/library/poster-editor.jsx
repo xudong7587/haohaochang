@@ -12,7 +12,13 @@ export function PosterEditor({
   request,
   run,
   notify,
+  photoEndpoint,
+  currentImage,
+  autoFind,
+  onSaved,
 }) {
+  const endpoint =
+    photoEndpoint || ((action) => `/admin/library/${row.id}/poster/${action}`);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState(null);
@@ -69,25 +75,30 @@ export function PosterEditor({
   }
   async function save() {
     await run(async () => {
+      let result;
       if (file)
-        await request(
-          `/admin/library/${row.id}/poster/upload?expectedRevision=${row.metadataRevision}`,
+        result = await request(
+          `${endpoint("upload")}${endpoint("upload").includes("?") ? "&" : "?"}expectedRevision=${row.metadataRevision}`,
           file,
           "POST",
         );
       else
-        await request(
-          `/admin/library/${row.id}/poster/select`,
+        result = await request(
+          endpoint("select"),
           { candidateId: selected.id, expectedRevision: row.metadataRevision },
           "POST",
         );
       setFile(null);
       setSelected(null);
+      onSaved?.(result);
       notify("封面已保存");
     });
   }
   return (
-    <section className="poster-editor" aria-label="歌曲封面">
+    <section
+      className="poster-editor"
+      aria-label={photoEndpoint ? "歌星照片" : "歌曲封面"}
+    >
       <div className="poster-editor-overview">
         <div
           className="poster-editor-preview"
@@ -98,6 +109,8 @@ export function PosterEditor({
               src={file ? localUrl || undefined : imageUrl(selected)}
               alt="待保存封面"
             />
+          ) : currentImage ? (
+            <img src={currentImage} alt="当前歌星照片" />
           ) : (
             <SongArtwork song={row} token={adminToken} size={56} />
           )}
@@ -117,6 +130,13 @@ export function PosterEditor({
               disabled={busy || review}
               onClick={() =>
                 run(async () => {
+                  if (autoFind) {
+                    const candidate = await autoFind();
+                    setFile(null);
+                    setSelected(candidate);
+                    notify("照片已找到，请预览后保存");
+                    return;
+                  }
                   await request(
                     `/admin/library/${row.id}/poster`,
                     { expectedRevision: row.metadataRevision, force: true },
@@ -127,7 +147,11 @@ export function PosterEditor({
               }
             >
               <ImagePlus size={16} />
-              {row.hasPoster ? "重新获取封面" : "获取歌曲封面"}
+              {photoEndpoint
+                ? "获取歌手照片"
+                : row.hasPoster
+                  ? "重新获取封面"
+                  : "获取歌曲封面"}
             </button>
             <button
               disabled={busy || searching}

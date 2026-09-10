@@ -8,6 +8,7 @@ services:
       ADMIN_PASSWORD: "change-this-password-123"
       PORT: "43210"
       KTV_DISCOVERY_ENABLED: "1"
+      KTV_TV_DISCOVERY_ENABLED: "1" # 电视通过 UDP 43212 自动发现，HTTP 沿用 PORT
     volumes:
       - ./data:/data
       - /volume3/V3 Media/Haohaochang/media:/media

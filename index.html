@@ -1,2 +1,78 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#f6f7f9"/><link rel="icon" href="/favicon.ico" sizes="any"/><link rel="icon" type="image/png" sizes="300x300" href="/favicon.png"/><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"/><link rel="manifest" href="/site.webmanifest"/><meta property="og:image" content="/favicon.png"/><title>好好唱 · 家庭 KTV</title></head><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6f7f9" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="300x300" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta property="og:image" content="/favicon.png" />
+    <title>好好唱 · 家庭 KTV</title>
+    <style>
+      #boot-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+        background: #f6f7f9;
+        color: #222;
+        font: 18px/1.7 sans-serif;
+        text-align: center;
+      }
+      .boot-tv {
+        background: #100e19;
+      }
+      .boot-tv #boot-screen {
+        background: #100e19;
+        color: #f4efff;
+      }
+      #boot-screen h1 {
+        font-size: 40px;
+        margin: 0 0 12px;
+      }
+      #boot-message {
+        max-width: 640px;
+      }
+      #boot-actions {
+        display: none;
+        margin-top: 20px;
+      }
+      #boot-actions button,
+      #boot-actions a {
+        display: inline-block;
+        font: inherit;
+        padding: 12px 24px;
+        margin: 8px;
+        border: 1px solid #a994d5;
+        border-radius: 12px;
+        background: #d2bdff;
+        color: #221334;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      #boot-actions :focus {
+        outline: 3px solid #fff;
+        outline-offset: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot-screen" role="status">
+      <h1>好好唱</h1>
+      <p id="boot-message">正在打开你的家庭歌房…</p>
+      <div id="boot-actions">
+        <button id="boot-retry">重新加载</button
+        ><a id="boot-address" href="haohaochang://connection">连接设置</a>
+      </div>
+    </div>
+    <script src="/boot.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

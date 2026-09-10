@@ -1,0 +1,431 @@
+/* Shared dark playback surfaces. */
+.tv .queue-list {
+  background: #211b2b;
+  border-color: #493b55;
+  border-radius: 16px;
+}
+.tv .queue-row {
+  background: #211b2b;
+  border-color: #493b55;
+  color: #f5efff;
+}
+.tv .queue-row:first-child {
+  background: #30223e;
+}
+.tv .queue-row small {
+  color: #bdb0cd;
+}
+.tv .queue-number {
+  color: #dbc0fb;
+}
+.tv .queue-row .pill,
+.tv .section-heading > .pill {
+  background: #42314f;
+  color: #ead5ff;
+  border: 1px solid #624775;
+}
+.tv .queue-row button {
+  background: #352940;
+  color: #efe1ff;
+  border-color: #614b72;
+}
+.tv .settings-card {
+  background: #211b2b;
+  border-color: #493b55;
+  color: #efe7fa;
+}
+
+/* An explicit ratio also works on older WebViews without aspect-ratio/:is(). */
+.tv-player .video-stage {
+  height: 0;
+  padding-top: 56.25%;
+  aspect-ratio: auto;
+}
+.tv-player .video-stage > video {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.tv-player.is-full {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none !important;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  z-index: 1000 !important;
+}
+.tv-player.is-full .video-stage {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  aspect-ratio: auto;
+}
+.tv-player .lyrics-scene {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+.tv-player.auto-hide-controls .video-caption,
+.tv-player.is-full .video-caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  background: #171020ed;
+  color: #e6d7f5;
+  max-height: 45%;
+  overflow: auto;
+  transition:
+    opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    visibility 180ms;
+}
+.tv-player.controls-hidden .video-caption {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.tv-player.is-full.controls-hidden {
+  cursor: none;
+}
+.tv-player.is-full .video-caption button {
+  background: #352840;
+  color: #f4eaff;
+  border-color: #655072;
+}
+.tv-player.is-full .lyric-lines {
+  font-size: clamp(24px, 3vw, 46px);
+}
+.tv-player.is-full .lyric-lines > span {
+  font-size: clamp(16px, 2vw, 26px);
+}
+.tv .now-playing[role="button"] {
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-player .video-caption {
+    transition: none;
+  }
+}
+
+/* A phone runs the same local player, with its own playback lease. */
+@media (max-width: 700px), (max-width: 950px) and (max-height: 500px) {
+  .app.tv {
+    display: block;
+    padding-bottom: 148px;
+    min-height: 100vh;
+  }
+  .app.tv .sidebar {
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 68px;
+    padding: 5px 6px;
+    background: #1d1727;
+    border-top: 1px solid #493b55;
+    z-index: 25;
+  }
+  .tv .sidebar > *:not(nav) {
+    display: none;
+  }
+  .tv .sidebar nav {
+    display: flex;
+    justify-content: space-around;
+    margin: 0;
+    height: 100%;
+  }
+  .tv .sidebar nav button {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 50px;
+    padding: 6px 3px;
+    font-size: 10px;
+    gap: 4px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .tv .sidebar nav button:nth-child(n + 5) {
+    display: none;
+  }
+  .tv .sidebar .nav-count {
+    display: none;
+  }
+  .tv main {
+    width: 100%;
+    min-width: 0;
+  }
+  .tv main > header {
+    height: 56px;
+    padding: 0 16px;
+  }
+  .tv .breadcrumb {
+    font-size: 11px;
+  }
+  .tv .header-actions {
+    gap: 8px;
+  }
+  .tv .header-actions .connection {
+    display: none;
+  }
+  .tv .content,
+  .tv.stage-home .content {
+    padding: 18px 16px;
+  }
+  .tv .section-heading h1 {
+    font-size: 26px;
+  }
+  .tv .section-heading p {
+    font-size: 13px;
+  }
+  .tv .section-heading {
+    gap: 12px;
+  }
+  .tv .player-bar {
+    left: 0;
+    right: 0;
+    bottom: 68px;
+    height: 80px;
+    padding: 10px 14px;
+    gap: 8px;
+    background: #201929;
+  }
+  .tv .player-bar .mini-record,
+  .tv .player-bar .queue-link,
+  .tv .play-controls button span {
+    display: none;
+  }
+  .tv .now-playing {
+    flex: 1;
+    min-width: 0;
+  }
+  .tv .now-playing > div {
+    min-width: 0;
+  }
+  .tv .now-playing strong,
+  .tv .now-playing small {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 40vw;
+  }
+  .tv .now-playing strong {
+    font-size: 13px;
+  }
+  .tv .now-playing small {
+    font-size: 10px;
+  }
+  .tv .play-controls {
+    flex: 0;
+    gap: 5px;
+  }
+  .tv .play-controls button {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 6px;
+  }
+  .tv .play-controls .play-toggle {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+  .tv.stage-home {
+    display: flex;
+    flex-direction: column;
+  }
+  .tv.stage-home main,
+  .tv.stage-home main > .content {
+    display: contents;
+  }
+  .tv.stage-home main > header {
+    order: 0;
+  }
+  .tv.stage-home .stage-welcome {
+    order: 1;
+    min-height: 0;
+    width: auto;
+    margin: 18px 16px;
+    padding: 0;
+  }
+  .tv.stage-home .stage-welcome h1 {
+    font-size: 26px;
+    margin: 0 0 6px;
+  }
+  .tv.stage-home .stage-welcome h1 br {
+    display: none;
+  }
+  .tv.stage-home .stage-welcome .eyebrow {
+    display: none;
+  }
+  .tv.stage-home .stage-welcome > p {
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  .tv.stage-home .stage-welcome > button {
+    display: inline-flex;
+    margin: 6px 8px 0 0;
+    min-height: 40px;
+    font-size: 13px;
+  }
+  .tv.stage-home > .tv-player:not(.is-full) {
+    order: 2;
+    position: relative !important;
+    top: auto !important;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: calc(100% - 32px);
+    max-width: none;
+    margin: 0 16px;
+    border-radius: 16px;
+  }
+  .tv.stage-home .stage-picks {
+    order: 3;
+    margin: 20px 16px 0;
+  }
+  .tv.stage-home .stage-picks .section-heading h2 {
+    font-size: 18px;
+  }
+  .tv.stage-home .stage-picks .section-heading button {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  .tv .stage-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .tv .stage-card:nth-child(n) {
+    display: flex;
+  }
+  .tv .stage-card > div {
+    height: auto;
+    aspect-ratio: 1;
+  }
+  .tv .stage-card img {
+    aspect-ratio: 1;
+  }
+  .tv:not(.stage-home) > .tv-player:not(.is-full) {
+    display: none;
+  }
+  .tv .video-caption-heading {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tv .video-caption-heading > span {
+    width: 100%;
+    font-size: 11px;
+  }
+  .tv .video-caption-heading button {
+    font-size: 11px;
+    min-height: 32px;
+    padding: 6px 10px;
+  }
+  .tv .lyric-adjust button {
+    font-size: 11px;
+    min-height: 30px;
+    padding: 5px;
+  }
+  .tv .lyric-adjust output {
+    font-size: 10px;
+    min-width: 80px;
+  }
+  .tv .queue-row {
+    padding: 16px 12px;
+    gap: 10px;
+  }
+  .tv .queue-row strong {
+    font-size: 16px;
+  }
+  .tv .queue-row small {
+    font-size: 12px;
+  }
+  .tv .queue-row .pill {
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .tv .song-row {
+    grid-template-columns: minmax(0, 1fr) 40px;
+    gap: 10px;
+  }
+  .tv .song-row .audio-label,
+  .tv .song-row .time,
+  .tv .table-head {
+    display: none;
+  }
+  .tv .toast {
+    bottom: 162px;
+  }
+  .tv .song-info strong {
+    font-size: 15px;
+  }
+}
+
+.tv .list-pagination {
+  background: #211b2b;
+  color: #c4b1d0;
+  border-color: #493653;
+}
+.tv .list-pagination button {
+  background: #352940;
+  color: #efe1ff;
+  border-color: #614b72;
+}
+
+@media (max-width: 950px) and (max-height: 500px) {
+  .app.tv {
+    padding-bottom: 104px;
+  }
+  .app.tv .sidebar {
+    height: 48px;
+    padding: 2px 6px;
+  }
+  .tv .sidebar nav button {
+    min-height: 42px;
+    flex-direction: row;
+    gap: 7px;
+  }
+  .tv .player-bar {
+    bottom: 48px;
+    height: 56px;
+    padding: 6px 16px;
+  }
+  .tv.stage-home main > header,
+  .tv.stage-home .stage-welcome,
+  .tv.stage-home .stage-picks {
+    display: none;
+  }
+  .tv.stage-home > .tv-player:not(.is-full) {
+    width: calc((100vh - 128px) * 16 / 9);
+    max-width: calc(100% - 24px);
+    margin: 12px auto;
+  }
+  .tv.stage-home .video-caption {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 60%;
+    overflow: auto;
+    background: #171020ed;
+  }
+}

@@ -1,4 +1,5 @@
 import { ArtistLibrary } from "./artist-library.jsx";
+import { ArtistArtwork } from "./artist-artwork.jsx";
 import { SongArtwork } from "./song-artwork.jsx";
 import { FeedbackToast } from "./feedback-toast.jsx";
 import { version as buildVersion } from "../package.json";
@@ -234,8 +235,10 @@ export function App() {
         if (!showQR && !artist && !query && !tag && tab === "stage") return;
         e.preventDefault();
         if (showQR) setShowQR(false);
-        else if (artist) setArtist("");
-        else if (query || tag) {
+        else if (artist) {
+          setArtist("");
+          setTab("artists");
+        } else if (query || tag) {
           setQuery("");
           setTag("");
         } else {
@@ -329,6 +332,32 @@ export function App() {
           : "已加入点歌队列",
       );
   }
+  if (!authenticated && route === "tv")
+    return (
+      <TvLoginQr onLogin={() => setAuthenticated(true)}>
+        <form onSubmit={login}>
+          <label>
+            管理密码
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
+          <button className="primary" disabled={loginBusy}>
+            {loginBusy ? "正在连接…" : "进入好好唱"}
+            <ArrowUpRight size={18} />
+          </button>
+        </form>
+        {message && (
+          <p role="alert" className="error">
+            {message}
+          </p>
+        )}
+      </TvLoginQr>
+    );
   if (!authenticated)
     return (
       <div className={`login ${route === "tv" ? "tv-login" : ""}`}>
@@ -567,12 +596,18 @@ export function App() {
               本地预览 · NAS 媒体只读，任务仅展示快照
             </p>
           )}
-          {route === "admin" && tab === "artist-library" && (
+          {tab === "artist-library" && artist && (
             <ArtistLibrary
+              key={artist}
               artist={artist}
-              request={(url, body, method) => api(url, body, method, true)}
-              token={adminToken}
+              manage={route === "admin"}
+              add={add}
+              request={(url, body, method) =>
+                api(url, body, method, route === "admin")
+              }
+              token={route === "admin" ? adminToken : roomToken}
               notify={notify}
+              refreshProfile={() => setRefresh((n) => n + 1)}
               back={() => {
                 setArtist("");
                 setTab("artists");
@@ -774,28 +809,33 @@ export function App() {
                   </h1>
                   <p>
                     {route === "admin"
-                      ? "查看曲库中的歌手与歌曲数量。"
+                      ? "收藏喜欢的歌星，编辑照片、介绍与歌曲。"
                       : "按歌手找到你熟悉的旋律。"}
                   </p>
                 </div>
                 <Users size={30} />
               </div>
               <div className="artist-grid">
-                {artists.map((a, i) => (
+                {artists.map((a) => (
                   <button
-                    className="artist-card"
+                    className="artist-card artist-photo-card"
                     key={a.artist}
                     onClick={() => {
                       setArtist(a.artist);
                       setQuery("");
-                      setTab(route === "admin" ? "artist-library" : "songs");
+                      setTab("artist-library");
                     }}
                   >
-                    <div className={`artist-avatar color-${i % 5}`}>
-                      {a.artist.slice(0, 1)}
-                    </div>
-                    <strong>{a.artist}</strong>
-                    <span>{a.count} 首歌曲</span>
+                    <span className="artist-card-photo">
+                      <ArtistArtwork
+                        profile={a}
+                        token={route === "admin" ? adminToken : roomToken}
+                      />
+                    </span>
+                    <span className="artist-card-caption">
+                      <strong>{a.artist}</strong>
+                      <small>{a.count} 首歌曲</small>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -968,7 +1008,21 @@ export function App() {
         />
       )}
       <footer className="player-bar">
-        <div className="now-playing">
+        <div
+          className="now-playing"
+          role={route === "tv" ? "button" : undefined}
+          tabIndex={route === "tv" ? 0 : undefined}
+          aria-label={route === "tv" ? "返回播放画面" : undefined}
+          onClick={() => {
+            if (route === "tv") setTab("stage");
+          }}
+          onKeyDown={(event) => {
+            if (route === "tv" && ["Enter", " "].includes(event.key)) {
+              event.preventDefault();
+              setTab("stage");
+            }
+          }}
+        >
           <div className="mini-record">
             <Music2 size={18} />
           </div>

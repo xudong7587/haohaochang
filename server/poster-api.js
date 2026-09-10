@@ -202,4 +202,26 @@ export function posterApi({
     emit("library", {});
     res.json({ results });
   });
+  return {
+    candidate,
+    download,
+    register(source) {
+      const id = randomUUID();
+      const item = {
+        ...source,
+        id,
+        imageUrl: allowedPosterUrl(source.imageUrl).href,
+        expires: Date.now() + 15 * 60000,
+      };
+      candidates.set(id, item);
+      while (candidates.size > 400)
+        candidates.delete(candidates.keys().next().value);
+      return {
+        id,
+        title: item.title || item.artist || "歌手照片",
+        uploader: item.source,
+        sourceUrl: item.sourceUrl,
+      };
+    },
+  };
 }

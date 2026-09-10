@@ -42,7 +42,7 @@ await writeFile(
 await build({
   stdin: {
     contents: `
-import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {Player} from './src/playback/player.jsx';import './src/style.css';
+import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {Player} from './src/playback/player.jsx';import './src/style.css';import './src/player-adaptive.css';
 function Fixture(){const [paused,setPaused]=useState(false),[vocal,setVocal]=useState(false),[id,setId]=useState('entry-1'),[song,setSong]=useState(new URLSearchParams(location.search).get('song')||'audio');window.setPaused=setPaused;window.setVocal=setVocal;window.setEntry=setId;window.setSong=setSong;
 async function request(url,body){if(url==='/player/heartbeat'&&window.leaseFailure)throw new Error('测试：另一台设备持有播放会话');if(url==='/player/ended')window.endedCalls=(window.endedCalls||0)+1;return {ok:true};}
 return <div className="app tv stage-home"><Player current={{id,song_id:song,title:'本地合成测试',artist:'测试歌手',needs_video:song==='audio'?1:0,duration:30,lyrics:'[00:00]第一句 · 准备开唱\\n[00:03]第二句 · 音乐和字幕同步'}} playback={{paused,vocal}} token="fixture" request={request} notify={()=>{}}/></div>}

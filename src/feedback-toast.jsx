@@ -4,10 +4,10 @@ import { createPortal } from "react-dom";
 export function FeedbackToast({ message }) {
   const [target, setTarget] = useState(document.body);
   useEffect(() => {
-    const sync = () =>
-      setTarget(
-        [...document.querySelectorAll("dialog[open]")].at(-1) || document.body,
-      );
+    const sync = () => {
+      const dialogs = document.querySelectorAll("dialog[open]");
+      setTarget(dialogs[dialogs.length - 1] || document.body);
+    };
     sync();
     const observer = new MutationObserver(sync);
     observer.observe(document.body, {

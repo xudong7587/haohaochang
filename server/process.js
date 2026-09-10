@@ -60,11 +60,14 @@ export function run(
         ),
       );
     });
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       clearTimeout(timer);
       code === 0 && !failure
         ? resolve(out)
-        : reject(failure || new Error(err || `${binary} 处理失败 (${code})`));
+        : reject(
+            failure ||
+              new Error(err || `${binary} 处理失败 (${signal || code})`),
+          );
     });
   });
 }

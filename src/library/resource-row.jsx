@@ -24,8 +24,10 @@ export function ResourceRow({
   collapseKey,
   selected,
   onSelect,
+  dialogOnly = false,
+  onClose,
 }) {
-  const [open, setOpen] = useState(false),
+  const [open, setOpen] = useState(dialogOnly),
     [draft, dispatch] = useReducer(draftReducer, row, createDraft);
   const [pane, setPane] = useState("metadata");
   const [feedback, setFeedback] = useState(null);
@@ -36,9 +38,9 @@ export function ResourceRow({
     if (!open) notifyPage(message);
   }
   useEffect(() => {
-    setOpen(false);
+    setOpen(dialogOnly && !hidden);
     setDeletion(null);
-  }, [collapseKey, hidden]);
+  }, [collapseKey, hidden, dialogOnly]);
   const [deletion, setDeletion] = useState(null);
   busy = busy || row.processing;
   const deleteSongId = review ? row.songId : row.id;
@@ -228,7 +230,11 @@ export function ResourceRow({
     });
   }
   return (
-    <article className="workbench-row" hidden={hidden} data-song-id={row.id}>
+    <article
+      className={`workbench-row ${dialogOnly ? "dialog-only" : ""}`}
+      hidden={hidden}
+      data-song-id={row.id}
+    >
       <header>
         {onSelect && (
           <input
@@ -295,6 +301,7 @@ export function ResourceRow({
         onClose={() => {
           setOpen(false);
           setDeletion(null);
+          onClose?.();
         }}
         title={`${row.title || "未识别歌名"} · ${row.artist || "未识别歌手"}`}
       >

@@ -5,6 +5,7 @@ import { Spectrum } from "../spectrum.jsx";
 import { Lyrics } from "../lyrics.jsx";
 import { Background } from "./background.jsx";
 import { usePlayerLease } from "./use-player-lease.js";
+import { useIdleControls } from "./use-idle-controls.js";
 
 export function Player({
   current,
@@ -69,6 +70,19 @@ export function Player({
     [warning, setWarning] = useState(""),
     [pictureError, setPictureError] = useState(false),
     [reload, setReload] = useState(0);
+  const autoHideControls =
+    !!current &&
+    !playback.paused &&
+    !blocked &&
+    !error &&
+    !leaseError &&
+    (full || keyboardLyrics);
+  const controlsVisible = useIdleControls({
+    container,
+    enabled: autoHideControls,
+    immersive: full,
+    resetKey: current?.id,
+  });
   function adjustLyrics(deltaMs, reset = false) {
     if (!current) return;
     request(
@@ -331,7 +345,8 @@ export function Player({
     <section
       ref={container}
       data-system-lyrics={lyricsVisible ? "visible" : "hidden"}
-      className={`tv-player ${full ? "is-full" : ""}`}
+      className={`tv-player ${full ? "is-full" : ""} ${autoHideControls ? "auto-hide-controls" : ""} ${controlsVisible ? "" : "controls-hidden"}`}
+      data-controls={controlsVisible ? "visible" : "hidden"}
     >
       <div
         className="video-stage"
@@ -471,7 +486,7 @@ export function Player({
           ))}
         </div>
       </div>
-      <div className="video-caption">
+      <div className="video-caption" aria-hidden={!controlsVisible}>
         <div className="video-caption-heading">
           <span data-audio-variant={actualVariant || variant}>
             <span className={`dot ${lease ? "" : "offline"}`} />
