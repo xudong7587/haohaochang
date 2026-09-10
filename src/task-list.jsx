@@ -4,6 +4,7 @@ import { Pagination } from "./workbench-controls.jsx";
 export const completedTask = (job) =>
   ["done", "cancelled"].includes(job.status);
 export const taskKindNames = {
+  lyrics: "补充歌词",
   poster: "刮削歌曲封面",
   "attach-video": "补充视频",
   "upgrade-hd": "升级高清画面",
@@ -22,6 +23,8 @@ export const taskKindNames = {
   download: "下载资源",
 };
 const stages = {
+  "lyrics-search": "查找匹配歌词",
+  "lyrics-save": "保存歌词",
   "poster-search": "查找歌曲封面",
   "poster-save": "保存封面",
   downloading: "下载视频",

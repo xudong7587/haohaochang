@@ -19,6 +19,7 @@ window.request=async(url,body,method)=>{
  if(url==='/admin/library?hidden=true')return structuredClone(window.hiddenSongs);
  if(url==='/admin/reviews')return [structuredClone(window.videoReview)];
  if(url==='/admin/inbox')return [];
+ if(url==='/admin/lyrics-batch')return {results:(body.all?window.songs.filter(row=>!row.lyrics):body.items.map(item=>window.songs.find(row=>row.id===item.id))).map(row=>({id:row.id,title:row.title,status:'success',message:'已加入歌词补充任务'}))};
  if(url==='/admin/organize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已加入整理队列'}))};
  if(url==='/admin/standardize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已排队检查格式并回收旧版本'}))};
  if(url.endsWith('/delete-preview'))return {title:'初始歌名',token:'preview-token',targets:[{path:'/isolated/song-folder',directory:true}]};
@@ -235,11 +236,9 @@ try {
   assert.equal(source.expectedRevision, 6);
   await row.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
   await page.getByRole("button", { name: /^待整理曲库/ }).click();
-  const video = page
-    .locator("article")
-    .filter({
-      has: page.getByRole("button", { name: "核对视频", exact: true }),
-    });
+  const video = page.locator("article").filter({
+    has: page.getByRole("button", { name: "核对视频", exact: true }),
+  });
   await video.getByRole("button", { name: "核对视频", exact: true }).click();
   await video.getByLabel("我已试听核对，这是与当前音轨对应的录音版本").check();
   await video.getByLabel("视频相对音轨偏移（秒）").fill("0");
@@ -304,6 +303,72 @@ try {
     ),
     "bulk-no-lyrics",
   );
+  await page.evaluate(() => {
+    window.songs = Array.from({ length: 45 }, (_, i) => ({
+      id: "select-" + i,
+      title: "跨页歌曲" + String(i).padStart(2, "0"),
+      artist: "测试歌手",
+      lyrics: i === 0 ? "[00:01]保留" : "",
+      tier: "standard",
+      metadataRevision: 0,
+      status: "ready",
+    }));
+    window.songs.push({
+      id: "another-tier",
+      title: "另一分类",
+      artist: "测试歌手",
+      lyrics: "",
+      tier: "audio",
+      metadataRevision: 0,
+    });
+  });
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await page.getByRole("button", { name: /^标准曲库/ }).click();
+  const all = page.getByRole("checkbox", {
+    name: "全选当前筛选歌曲（所有分页）",
+    exact: true,
+  });
+  await all.check();
+  await page.getByText("已选 45 首（可跨页）", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "歌曲下一页", exact: true }).click();
+  assert.equal(
+    await page
+      .getByRole("checkbox", { name: "选择本页歌曲", exact: true })
+      .isChecked(),
+    true,
+  );
+  await page
+    .getByRole("checkbox", { name: "选择本页歌曲", exact: true })
+    .uncheck();
+  assert.equal(await all.evaluate((el) => el.indeterminate), true);
+  await all.check();
+  await page
+    .getByRole("button", { name: "补充所选缺失歌词", exact: true })
+    .click();
+  const chunks = await page.evaluate(() =>
+    window.calls
+      .filter((c) => c.url === "/admin/lyrics-batch" && c.body.items)
+      .map((c) => c.body.items),
+  );
+  assert.deepEqual(
+    chunks.map((items) => items.length),
+    [20, 20, 5],
+  );
+  assert.equal(new Set(chunks.flat().map((item) => item.id)).size, 45);
+  await all.uncheck();
+  await page.getByRole("button", { name: /^补充全部缺失歌词 · 45$/ }).click();
+  assert.deepEqual(
+    await page.evaluate(
+      () =>
+        window.calls.filter((c) => c.url === "/admin/lyrics-batch").at(-1).body,
+    ),
+    { all: true },
+  );
+  await page.getByLabel("筛选曲库", { exact: true }).fill("跨页歌曲0");
+  await all.check();
+  await page.getByText("已选 10 首（可跨页）", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^半标准曲库/ }).click();
+  assert.equal(await all.isChecked(), false);
   assert.deepEqual(errors, []);
   console.log(
     "Library component browser contracts passed: clean refresh, draft conflicts, stale saves, candidate download, lyric provenance, MV confirmation, review actions, hide/restore.",

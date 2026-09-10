@@ -53,6 +53,7 @@ export function LibraryManager({ request, notify, onEdit }) {
   const [taskOpen, setTaskOpen] = useState(false),
     [importOpen, setImportOpen] = useState(false);
   const visited = useRef(new Set());
+  const allCheckbox = useRef(null);
   async function refresh() {
     const [library, pending, inbox, hidden, jobs] = await Promise.all([
       request("/admin/library"),
@@ -129,6 +130,14 @@ export function LibraryManager({ request, notify, onEdit }) {
   const chosen = entries.filter(
     (e) => selected.has(e.key) && e.tier === tab && e.tier !== "hidden",
   );
+  const allSelected =
+    filtered.length > 0 && filtered.every((e) => selected.has(e.key));
+  useEffect(() => {
+    if (allCheckbox.current)
+      allCheckbox.current.indeterminate =
+        !allSelected && filtered.some((e) => selected.has(e.key));
+  }, [allSelected, selected, tab, query, songs, reviews]);
+  const missingLyrics = songs.filter((song) => !song.lyrics?.trim()).length;
   const batchEntries = chosen.length ? chosen : filtered;
   const batchSongs = batchEntries.filter((e) => !e.review).map((e) => e.row);
   const batchReviews = batchEntries.filter((e) => e.review).map((e) => e.row);
@@ -170,6 +179,24 @@ export function LibraryManager({ request, notify, onEdit }) {
           <p>先找到歌曲，再处理需要补充的资源。</p>
         </div>
         <div className="actions">
+          <button
+            disabled={busy || !missingLyrics}
+            title="补充整个未隐藏曲库的缺失歌词，已有歌词保留；播放中或整理中的歌曲会跳过"
+            onClick={() =>
+              batch(async () => {
+                const response = await request(
+                  "/admin/lyrics-batch",
+                  { all: true },
+                  "POST",
+                );
+                setResults(response.results);
+                setTaskOpen(true);
+                return response.results;
+              })
+            }
+          >
+            补充全部缺失歌词 · {missingLyrics}
+          </button>
           <button
             onClick={() => setImportOpen((v) => !v)}
             aria-expanded={importOpen}
@@ -316,6 +343,25 @@ export function LibraryManager({ request, notify, onEdit }) {
               <label className="checkbox">
                 <input
                   type="checkbox"
+                  ref={allCheckbox}
+                  aria-label="全选当前筛选歌曲（所有分页）"
+                  disabled={busy || !filtered.length}
+                  checked={allSelected}
+                  onChange={(e) =>
+                    setSelected(
+                      e.target.checked
+                        ? new Set(filtered.map((item) => item.key))
+                        : new Set(),
+                    )
+                  }
+                />
+                全选（所有分页）
+              </label>
+            )}
+            {tab !== "hidden" && (
+              <label className="checkbox">
+                <input
+                  type="checkbox"
                   aria-label="选择本页歌曲"
                   checked={
                     visible.length > 0 &&
@@ -394,6 +440,34 @@ export function LibraryManager({ request, notify, onEdit }) {
               }
             >
               重新识别歌名与歌手
+            </button>
+            <button
+              disabled={busy || !batchSongs.length}
+              onClick={() =>
+                batch(async () => {
+                  const result = [];
+                  for (let start = 0; start < batchSongs.length; start += 20) {
+                    const response = await request(
+                      "/admin/lyrics-batch",
+                      {
+                        items: batchSongs
+                          .slice(start, start + 20)
+                          .map((row) => ({
+                            id: row.id,
+                            expectedRevision: row.metadataRevision,
+                          })),
+                      },
+                      "POST",
+                    );
+                    result.push(...response.results);
+                    setResults([...result]);
+                  }
+                  setTaskOpen(true);
+                  return result;
+                })
+              }
+            >
+              补充{chosen.length ? "所选" : "筛选结果"}缺失歌词
             </button>
             <button
               disabled={busy || !batchSongs.length}

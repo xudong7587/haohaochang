@@ -28,6 +28,7 @@ import { searchText, safeMedia } from "./media-utils.js";
 import { filesUnder, importKey, metadata } from "./library.js";
 import { enrichSong } from "./enrichment.js";
 import { hdUpgradeSource } from "./split-video.js";
+import { queueMissingLyrics } from "./lyrics-batch.js";
 export function libraryApi({
   app,
   admin,
@@ -42,6 +43,20 @@ export function libraryApi({
 }) {
   const { db, get, set } = store;
   const previews = new Map();
+  app.post("/api/admin/lyrics-batch", admin, (req, res) => {
+    const { all, items } = req.body;
+    if (
+      all !== true &&
+      (!Array.isArray(items) || !items.length || items.length > 20)
+    )
+      throw new Error("每批需包含 1 至 20 首歌曲，或选择补充全部缺失歌词");
+    const results = queueMissingLyrics(
+      store,
+      addJob,
+      all === true ? undefined : items,
+    );
+    res.json({ results });
+  });
   app.post("/api/admin/library/:id/compatible-video", admin, (req, res) => {
     const song = currentSong(store, req.params.id);
     assertSongIdle(store, song.id);
