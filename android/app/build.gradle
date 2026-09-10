@@ -6,8 +6,8 @@ android {
         applicationId 'home.haohaochang.tv'
         minSdk 23
         targetSdk 28
-        versionCode 13
-        versionName '0.3.10'
+        versionCode 14
+        versionName '0.3.11'
     }
     signingConfigs {
         release {

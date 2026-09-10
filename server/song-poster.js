@@ -138,7 +138,7 @@ export async function scrapePoster(
             "-frames:v",
             "1",
             "-vf",
-            "scale=w='min(1200,iw)':h=-2",
+            "scale=w='min(1200,iw)':h='min(1200,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,format=rgba,split[fg][bg];[bg]drawbox=c=white:t=fill:replace=1[base];[base][fg]overlay=shortest=1:format=auto,format=yuvj444p",
             "-q:v",
             "2",
             output,

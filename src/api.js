@@ -14,13 +14,18 @@ if (
 export let roomToken = localStorage.getItem("roomToken") || "";
 export let adminToken = sessionStorage.getItem("adminToken") || "";
 export async function api(url, body, method = "GET", isAdmin = false) {
+  const binary = typeof Blob !== "undefined" && body instanceof Blob;
   const response = await fetch("/api" + url, {
     method,
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": binary
+        ? body.type || "application/octet-stream"
+        : "application/json",
       Authorization: `Bearer ${isAdmin ? adminToken : roomToken}`,
     },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(body !== undefined
+      ? { body: binary ? body : JSON.stringify(body) }
+      : {}),
   });
   const result = await response.json();
   if (!response.ok)

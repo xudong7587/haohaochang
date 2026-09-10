@@ -87,18 +87,24 @@ export async function downloadPoster(
       continue;
     }
     const data = await readLimited(response, 8 * 1024 * 1024);
-    const jpeg = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
-    const png = data
-      .subarray(0, 8)
-      .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-    const webp =
-      data.toString("ascii", 0, 4) === "RIFF" &&
-      data.toString("ascii", 8, 12) === "WEBP";
-    if (!jpeg && !png && !webp)
-      throw new Error("封面不是有效的 JPEG、PNG 或 WebP 图片");
+    validatePosterBytes(data);
     return data;
   }
   throw new Error("封面来源重定向次数过多");
+}
+export function validatePosterBytes(data) {
+  if (!Buffer.isBuffer(data) || !data.length || data.length > 8 * 1024 * 1024)
+    throw new Error("封面需为不超过 8 MB 的图片");
+  const jpeg = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+  const png = data
+    .subarray(0, 8)
+    .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  const webp =
+    data.toString("ascii", 0, 4) === "RIFF" &&
+    data.toString("ascii", 8, 12) === "WEBP";
+  if (!jpeg && !png && !webp)
+    throw new Error("封面不是有效的 JPEG、PNG 或 WebP 图片");
+  return data;
 }
 let nextSearch = 0;
 async function paceSearch() {

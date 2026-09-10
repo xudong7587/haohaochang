@@ -547,7 +547,14 @@ export function libraryApi({
         req.body.title,
         req.body.artist,
         Number(req.body.duration) || 0,
-        { manual: true },
+        {
+          manual: true,
+          source: ["qqmusic", "netease", "lrclib", "local-lrc"].includes(
+            req.body.source,
+          )
+            ? req.body.source
+            : "auto",
+        },
       ),
     ),
   );

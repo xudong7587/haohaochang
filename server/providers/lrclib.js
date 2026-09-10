@@ -14,7 +14,10 @@ export function lrclibProvider(fetcher = fetch) {
       if (!response.ok) throw new Error("LRCLIB 歌词服务暂不可用");
       let rows = await response.json();
       if (!Array.isArray(rows)) throw new Error("LRCLIB 返回格式错误");
-      if (!rows.length && query.artist) {
+      if (
+        (query.manual || !rows.some((row) => row.syncedLyrics)) &&
+        query.artist
+      ) {
         // Artist separators differ between catalogs; match actual performers locally.
         url.searchParams.delete("artist_name");
         const fallback = await fetcher(url, {
@@ -23,8 +26,11 @@ export function lrclibProvider(fetcher = fetch) {
           redirect: "error",
         });
         if (!fallback.ok) throw new Error("LRCLIB 歌词服务暂不可用");
-        rows = await fallback.json();
-        if (!Array.isArray(rows)) throw new Error("LRCLIB 返回格式错误");
+        const broad = await fallback.json();
+        if (!Array.isArray(broad)) throw new Error("LRCLIB 返回格式错误");
+        rows = [
+          ...new Map([...rows, ...broad].map((row) => [row.id, row])).values(),
+        ];
       }
       return rows.slice(0, 200).map((row) => ({
         title: row.trackName,

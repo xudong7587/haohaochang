@@ -37,6 +37,10 @@ PC 更新器协议验证：安装 `psutil==7.0.0` 后执行 `python -m unittest 
 
 本地 NAS 预览仅放行 `POST /api/admin/find-lyrics` 作为读取远程歌词操作，其他管理写入继续拒绝；查得内容只是编辑草稿，不能保存到正式媒体。自动歌词匹配保留 120 秒时差限制，手动查找可展示超时差候选并提示核对。Live 后缀和合唱顺序在 `shared/lyrics-identity.js` 统一处理。
 
+封面手动编辑使用 `GET /api/admin/poster-search` 和短期候选图片代理；保存只接受服务端候选 ID，上传接口在管理员认证后接受不超过 8 MB 的原始图片字节。两条保存路径复用同歌写锁、修订检查及封面转换，不添加媒体下载任务。只读预览可搜索、查看候选，保存仍返回 403。
+
+歌词提供者新增 `qq-lyrics.js`、`netease-lyrics.js`，使用各平台公开搜索／歌词接口，不请求音频或平台账号。接口格式参考 [QQMusicApi](https://github.com/copws/qq-music-api) 与 [网易云接口实现](https://github.com/feeluown/feeluown-netease/blob/master/fuo_netease/api.py)，实际响应以受限 HTTPS 请求处理；重定向拒绝、10 秒超时、响应最多 2 MB，每次最多读取 6 个候选的 LRC。外部接口不保证长期稳定。测试为 `tests/chinese-lyrics.test.js`、`tests/poster-editor.test.js`、`tests/poster-editor.browser.mjs`，全部使用隔离 fixture。
+
 本机验证记录与待验收项见 [验证记录](VALIDATION.md)，系统决策见 [系统设计](DESIGN.md)。
 
 

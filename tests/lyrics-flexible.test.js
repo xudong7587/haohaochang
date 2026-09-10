@@ -44,9 +44,13 @@ test("manual lyric lookup accepts a duration outlier as a warned candidate while
   });
   assert.match(result.warning, /超过两分钟/);
   assert.ok(result.reviewReasons.includes("duration-mismatch"));
-  await assert.rejects(
-    findLyrics("晴天", "另一位歌手", 500, { providers, manual: true }),
-  );
+  const alternative = await findLyrics("晴天", "另一位歌手", 500, {
+    providers,
+    manual: true,
+  });
+  assert.equal(alternative.selectionRequired, true);
+  assert.match(alternative.candidates[0].warning, /演唱者不同/);
+  await assert.rejects(findLyrics("晴天", "另一位歌手", 500, { providers }));
 });
 test("connection failures are explained separately from no synced lyrics", async () => {
   await assert.rejects(

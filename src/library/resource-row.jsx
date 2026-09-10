@@ -4,6 +4,7 @@ import { createDraft, draftReducer, isRevisionConflict } from "./draft.js";
 import { VideoConfirmation, validOffset } from "./video-confirmation.jsx";
 import { SongArtwork } from "../song-artwork.jsx";
 import { roomToken } from "../api.js";
+import { PosterEditor } from "./poster-editor.jsx";
 
 const resourceNames = {
   video: "视频画面",
@@ -28,6 +29,8 @@ export function ResourceRow({
     [draft, dispatch] = useReducer(draftReducer, row, createDraft);
   const [pane, setPane] = useState("metadata");
   const [feedback, setFeedback] = useState(null);
+  const [lyricsProvider, setLyricsProvider] = useState("auto");
+  const [lyricsCandidates, setLyricsCandidates] = useState([]);
   function notify(message) {
     setFeedback({ message, error: false });
     if (!open) notifyPage(message);
@@ -166,6 +169,7 @@ export function ResourceRow({
   async function findLyrics() {
     setPane("lyrics");
     setOpen(true);
+    setLyricsCandidates([]);
     await run(async () => {
       const result = await request(
         "/admin/find-lyrics",
@@ -173,6 +177,7 @@ export function ResourceRow({
           title: form.title,
           artist: form.artist,
           duration: row.duration,
+          source: lyricsProvider,
           version:
             row.candidate?.identity?.version ||
             parsed?.candidate?.identity?.version ||
@@ -180,13 +185,27 @@ export function ResourceRow({
         },
         "POST",
       );
-      const { lyrics, ...lyricsSource } = result;
-      edit({ lyrics, lyricsSource });
-      notify(
-        result.warning ||
-          `${result.source || result.provider || "歌词提供者"} 候选已载入，请试听核对录音版本与字幕节奏后保存`,
-      );
+      setLyricsCandidates(result.candidates || []);
+      if (result.selectionRequired)
+        notify(
+          `找到 ${result.candidateCount} 份歌词候选，请预览后选择。当前歌词草稿保留。`,
+        );
+      else useLyrics(result);
     });
+  }
+  function useLyrics(candidate) {
+    const {
+      lyrics,
+      candidates,
+      selectionRequired,
+      candidateCount,
+      ...lyricsSource
+    } = candidate;
+    edit({ lyrics, lyricsSource });
+    notify(
+      candidate.warning ||
+        `${candidate.source || candidate.provider || "歌词提供者"} 候选已载入，请试听核对字幕节奏后保存`,
+    );
   }
   async function refreshMetadata() {
     setPane("metadata");
@@ -441,30 +460,11 @@ export function ResourceRow({
           </div>
         )}
         {pane === "metadata" && (
-          <div className="poster-maintenance">
-            <button
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  await request(
-                    `/admin/library/${row.id}/poster`,
-                    { expectedRevision: row.metadataRevision, force: true },
-                    "POST",
-                  );
-                  notify("已加入封面获取任务");
-                })
-              }
-            >
-              {row.hasPoster ? "重新获取封面" : "获取歌曲封面"}
-            </button>
-            <p>
-              {row.posterSource?.source ||
-                "B站歌曲使用视频封面，其他歌曲按歌名和歌手查找专辑封面。"}
-              {row.posterAttempt?.status === "failed"
-                ? ` · ${row.posterAttempt.error}`
-                : ""}
-            </p>
-          </div>
+          <PosterEditor
+            {...{ row, review, busy, request, run, notify }}
+            title={form.title}
+            artist={form.artist}
+          />
         )}
         {row.note && <p>{row.note}</p>}
         {row.missing?.length > 0 && (
@@ -609,7 +609,20 @@ export function ResourceRow({
             </div>
             <div hidden={pane !== "lyrics"}>
               <div className="actions">
-                {" "}
+                <label>
+                  歌词来源
+                  <select
+                    aria-label="查找歌词来源"
+                    value={lyricsProvider}
+                    disabled={busy}
+                    onChange={(event) => setLyricsProvider(event.target.value)}
+                  >
+                    <option value="auto">自动选择来源</option>
+                    <option value="qqmusic">QQ 音乐</option>
+                    <option value="netease">网易云音乐</option>
+                    <option value="lrclib">LRCLIB</option>
+                  </select>
+                </label>
                 <button
                   disabled={
                     busy || draft.conflict || !form.title || !form.artist
@@ -646,6 +659,50 @@ export function ResourceRow({
                   />
                 </label>
               </div>
+              {lyricsCandidates.length > 0 && (
+                <section className="lyrics-candidates" aria-label="歌词候选">
+                  <p className="muted">
+                    按歌手、版本和时长核对。候选只载入草稿，保存后才替换现有歌词。
+                  </p>
+                  {lyricsCandidates.map((candidate, index) => (
+                    <article
+                      className="lyrics-candidate"
+                      key={`${candidate.provider}:${candidate.sourceId}:${index}`}
+                    >
+                      <div>
+                        <strong>{candidate.recording.title}</strong>
+                        <p>
+                          {candidate.recording.artist} ·{" "}
+                          {candidate.recording.duration
+                            ? `${Math.round(candidate.recording.duration)} 秒 · `
+                            : ""}
+                          {candidate.source}
+                          {candidate.recording.album
+                            ? ` · ${candidate.recording.album}`
+                            : ""}
+                        </p>
+                      </div>
+                      {candidate.warning && (
+                        <p className="lyrics-candidate-warning">
+                          {candidate.warning}
+                        </p>
+                      )}
+                      <div className="actions">
+                        <button
+                          disabled={busy || draft.conflict}
+                          onClick={() => useLyrics(candidate)}
+                        >
+                          使用这份歌词
+                        </button>
+                        <details>
+                          <summary>预览歌词</summary>
+                          <pre>{candidate.lyrics}</pre>
+                        </details>
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              )}
               <p className="muted">
                 歌词来源：
                 {form.lyricsSource?.source ||

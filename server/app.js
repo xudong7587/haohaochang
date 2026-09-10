@@ -170,7 +170,7 @@ export function createApp(options = {}) {
   tvPairingApi(routeContext);
   libraryApi({ ...routeContext, resolveReview });
   libraryDeleteApi(routeContext);
-  posterApi(routeContext);
+  posterApi({ ...routeContext, posterOptions: options.posterOptions });
   libraryPreviewApi(routeContext);
   backgroundApi(routeContext);
   app.get("/api/health", (req, res) => res.json({ ok: true }));
