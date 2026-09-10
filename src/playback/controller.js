@@ -1,4 +1,4 @@
-// React-free lifecycle. One song clock drives audio, picture, lyrics and spectrum.
+// Independent media playback; lyrics read the selected audio clock.
 export function createPlaybackController({
   video,
   manifest,
@@ -9,8 +9,6 @@ export function createPlaybackController({
   },
   onStatus = () => {},
   onEnded = () => {},
-  schedule = setInterval,
-  cancel = clearInterval,
 }) {
   let context = null,
     disposed = false,
@@ -74,7 +72,9 @@ export function createPlaybackController({
         el.currentTime = Math.max(0, time);
       } catch {}
   }
-  function sync() {
+  // Align only at an explicit playback transition. During playback each media
+  // element runs continuously; small clock differences never trigger a seek.
+  function alignStart() {
     if (disposed) return;
     lastTime = getTime();
     const master = selected();
@@ -85,7 +85,8 @@ export function createPlaybackController({
   }
   function failure(t) {
     if (disposed) return;
-    const position = lastTime;
+    const position = getTime();
+    lastTime = position;
     t.failed = true;
     t.el.pause();
     const next = selected();
@@ -143,7 +144,11 @@ export function createPlaybackController({
   video.muted = true;
   if (manifest.resources.video) {
     video.src = manifest.resources.video.url;
+    video.preload = "auto";
     video.load();
+    listen(video, "loadedmetadata", () => {
+      if (!disposed) align(video, getTime() + manifest.resources.video.offset);
+    });
     listen(video, "error", () => {
       if (!disposed)
         onStatus({ pictureError: true, warning: "画面加载失败，音频继续播放" });
@@ -190,7 +195,7 @@ export function createPlaybackController({
       } catch {
         contextBlocked = true;
       }
-    sync();
+    alignStart();
     for (const t of active())
       try {
         pending.push(
@@ -249,9 +254,6 @@ export function createPlaybackController({
     if (!allowed()) stop();
     else if (!was) void start();
   }
-  const timer = schedule(() => {
-    if (allowed()) sync();
-  }, 100);
   video._audioTracks = tracks;
   video._audioContext = context;
   const controller = {
@@ -271,7 +273,6 @@ export function createPlaybackController({
       if (disposed) return;
       disposed = true;
       stop();
-      cancel(timer);
       listeners.forEach((remove) => remove());
       tracks.forEach(({ el }) => {
         el.removeAttribute("src");

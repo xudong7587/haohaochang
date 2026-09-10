@@ -79,7 +79,7 @@ function setup(options = {}) {
     video,
     audios,
     events,
-    pulse: () => pulse(),
+    pulse: () => pulse?.(),
     finished: () => finished,
   };
 }
@@ -200,10 +200,29 @@ test("switching audio preserves song time, aligns resource offsets and selected 
   s.audios[1].currentTime = 10;
   s.pulse();
   assert.equal(s.controller.getTime(), 10);
-  assert.equal(s.audios[0].currentTime, 12);
-  assert.equal(s.video.currentTime, 11);
+  assert.equal(
+    s.audios[0].currentTime,
+    2,
+    "playback does not continually seek the other audio",
+  );
+  assert.equal(
+    s.video.currentTime,
+    1,
+    "playback does not continually seek the picture",
+  );
   s.controller.setState({ variant: "vocal" });
   assert.equal(s.controller.getTime(), 10);
+  assert.equal(
+    s.audios[0].currentTime,
+    12,
+    "an explicit track switch aligns once",
+  );
+  s.controller.seek(10);
+  assert.equal(
+    s.video.currentTime,
+    11,
+    "an explicit seek still aligns resource offsets",
+  );
   assert.equal(s.audios[0].volume, 1);
   assert.equal(s.audios[1].volume, 0);
   s.audios[1].emit("ended");
@@ -211,6 +230,38 @@ test("switching audio preserves song time, aligns resource offsets and selected 
   s.audios[0].emit("ended");
   s.audios[0].emit("ended");
   assert.equal(s.finished(), 1);
+  s.controller.destroy();
+});
+
+test("continuous playback never schedules drift checks or seeks a slow video, and failure retains current song time", async () => {
+  let checks = 0;
+  const s = setup({
+    controller: {
+      schedule() {
+        checks++;
+        return 1;
+      },
+    },
+  });
+  s.controller.setState({ lease: true, paused: false, variant: "backing" });
+  await tick();
+  s.audios[1].currentTime = 30;
+  s.audios[0].currentTime = 29.8;
+  s.video.currentTime = 29;
+  for (let i = 0; i < 100; i++) {
+    s.controller.getTime();
+    s.pulse();
+  }
+  assert.equal(checks, 0, "no periodic synchronization timer");
+  assert.equal(s.video.currentTime, 29);
+  assert.equal(s.audios[0].currentTime, 29.8);
+  s.audios[1].emit("error");
+  assert.equal(s.controller.selected().kind, "vocal");
+  assert.equal(
+    s.controller.getTime(),
+    30,
+    "error fallback aligns to current position, not startup time",
+  );
   s.controller.destroy();
 });
 test("AudioContext resume denial is retried and graph resources close on teardown", async () => {

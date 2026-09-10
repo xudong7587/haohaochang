@@ -108,3 +108,5 @@ TV配对由 `/api/tv-pairing` 创建三分钟内存会话，二维码只携带�
 电视发现由 `server/index.js` 在 HTTP 启动后开启：`KTV_TV_DISCOVERY_ENABLED=1` 或现有 `KTV_DISCOVERY_ENABLED=1`，`KTV_LOCAL_ONLY=1` 禁用。UDP 43212 只响应私网 IPv4、受大小／频率限制且不含凭证；`KTV_TV_HTTP_PORT` 可声明外部 HTTP 端口，默认 `PORT`。LAN Compose 使用 host 网络接收广播；桥接环境不保证广播可达。
 
 新增 `tests/adaptive-player.browser.mjs` 检查歌星编辑、公共点歌、深色队列、闲置按钮、手机横竖屏、真实 legacy bundle 与启动恢复。`scripts/check-poster-runtime.mjs` 在实际 Docker FFmpeg 上执行 API 保存 PNG／JPEG、方形尺寸／白底和音轨不变检查，并检查启动脚本与图标；CI 和发布晋升 latest 前均执行。歌星资料存储于 `artist-profile:<hash>` KV 和 `/data/artists`，按歌手串行写入与修订检查；自动补图不覆盖已有照片。
+
+播放器资源由 `/api/playback-assets/:id` 给出，`/api/assets/:id/:kind` 使用 sendFile 直接提供范围请求，无播放时转码。v0.3.13 删除 controller 的 100ms 校时定时器；不得重新引入持续比较音画差／周期 seek。保持显式状态切换、拖动、错误后备的时间对齐，以及租约撤销后的立即静音。PlayerVisuals 只读音频时钟，不设置 currentTime；UI 的空闲菜单计时与播放租约心跳仍保留。APK UA 使用 CSS 全屏以保留 DOM 控件，浏览器继续原生全屏加 CSS 后备。

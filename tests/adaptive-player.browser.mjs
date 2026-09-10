@@ -124,6 +124,33 @@ try {
   await page.waitForFunction(() =>
     document.querySelector("video")?._audioTracks?.some((t) => !t.el.paused),
   );
+  const range = await fetch(
+    `${base}/api/assets/${"0".repeat(24)}/video?token=${encodeURIComponent(service.store.get("roomToken"))}`,
+    { headers: { Range: "bytes=0-15" } },
+  );
+  assert.equal(range.status, 206);
+  assert.match(range.headers.get("content-range"), /^bytes 0-15\//);
+  assert.equal((await range.arrayBuffer()).byteLength, 16);
+  await page.waitForFunction(
+    () => document.querySelector("video").currentTime > 0.5,
+  );
+  await page.evaluate(() => {
+    const v = document.querySelector("video");
+    window.unrequestedSeeks = 0;
+    v.addEventListener("seeking", () => window.unrequestedSeeks++);
+    v.playbackRate = 0.75;
+  });
+  await page.waitForTimeout(1800);
+  assert.equal(
+    await page.evaluate(() => window.unrequestedSeeks),
+    0,
+    "slow picture is allowed to continue without automatic seeks",
+  );
+  await page.evaluate(() => {
+    const v = document.querySelector("video");
+    v.playbackRate = 1;
+    v._playback.seek(v._playback.getTime());
+  });
   await page.getByRole("button", { name: "歌星点歌", exact: true }).click();
   await page.locator(".artist-card").click();
   await page
@@ -163,6 +190,76 @@ try {
   await page.getByRole("button", { name: "退出全屏", exact: true }).click();
   await page.close();
   await context.close();
+  const native = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+    userAgent: "Mozilla/5.0 Chrome/74.0 Safari/537.36 HaohaochangTV/0.3.13",
+  });
+  await native.addInitScript(
+    (token) => localStorage.setItem("roomToken", token),
+    service.store.get("roomToken"),
+  );
+  const tv = await native.newPage();
+  tv.on("pageerror", (e) => errors.push(e.message));
+  await tv.goto(base + "/tv");
+  await tv.waitForFunction(() =>
+    document.querySelector("video")?._audioTracks?.some((t) => !t.el.paused),
+  );
+  await tv.getByRole("button", { name: "全屏播放", exact: true }).click();
+  await tv.locator(".tv-player.is-full").waitFor();
+  assert.equal(
+    await tv.evaluate(() => document.fullscreenElement === null),
+    true,
+    "APK keeps controls in its immersive WebView",
+  );
+  await tv.keyboard.press("ArrowDown");
+  await tv.waitForFunction(
+    () => document.activeElement?.dataset.playerAction === "pause",
+  );
+  await tv.keyboard.press("Enter");
+  await tv
+    .locator('[data-player-action="pause"]')
+    .filter({ hasText: "继续" })
+    .waitFor();
+  await tv.keyboard.press("Enter");
+  await tv
+    .locator('[data-player-action="pause"]')
+    .filter({ hasText: "暂停" })
+    .waitFor();
+  await tv.locator('.tv-player[data-controls="hidden"]').waitFor();
+  await tv.keyboard.down("Enter");
+  await tv.keyboard.down("Enter");
+  await tv.keyboard.up("Enter");
+  await tv.waitForFunction(
+    () => document.activeElement?.dataset.playerAction === "pause",
+  );
+  assert.equal(await tv.locator(".tv-player.is-full").count(), 1);
+  assert.equal(
+    await tv.locator('[data-player-action="pause"]').innerText(),
+    "暂停",
+    "first confirmation wakes controls without pausing",
+  );
+  await tv.keyboard.press("ArrowDown");
+  assert.ok(
+    await tv
+      .locator(".video-caption")
+      .evaluate((el) => el.contains(document.activeElement)),
+  );
+  await tv.getByLabel("歌词提前 0.5 秒", { exact: true }).focus();
+  await tv.keyboard.press("Enter");
+  await tv
+    .locator(".lyric-adjust output")
+    .filter({ hasText: "提前 0.5 秒" })
+    .waitFor();
+  await tv.screenshot({ path: "test-results/adaptive/fullscreen-menu.png" });
+  await tv.locator('[data-player-action="next"]').focus();
+  await tv.keyboard.press("Enter");
+  await tv
+    .locator(".now-playing strong")
+    .filter({ hasText: "歌曲 01" })
+    .waitFor();
+  await tv.keyboard.press("Escape");
+  assert.equal(await tv.locator(".tv-player.is-full").count(), 0);
+  await native.close();
   const phone = await browser.newContext({
     viewport: { width: 390, height: 844 },
     isMobile: true,
@@ -234,7 +331,7 @@ try {
   await broken.close();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS artist editing and public enqueue, dark queue, idle control wake, phone orientations, legacy bundle and boot recovery",
+    "PASS direct Range streaming without periodic video seeking, fullscreen remote menu, artist editing and enqueue, dark queue, phone orientations, legacy bundle and boot recovery",
   );
 } finally {
   await browser.close();

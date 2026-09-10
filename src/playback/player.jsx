@@ -1,9 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Mic2, Monitor, Play } from "lucide-react";
 import { useMediaPlayback } from "../media-playback.js";
-import { Spectrum } from "../spectrum.jsx";
-import { Lyrics } from "../lyrics.jsx";
-import { Background } from "./background.jsx";
+import { PlayerVisuals } from "./player-visuals.jsx";
 import { usePlayerLease } from "./use-player-lease.js";
 import { useIdleControls } from "./use-idle-controls.js";
 
@@ -61,8 +59,7 @@ export function Player({
     window.addEventListener("storage", sync);
     return () => window.removeEventListener("storage", sync);
   }, []);
-  const [time, setTime] = useState(0),
-    [showQueue, setShowQueue] = useState(false),
+  const [showQueue, setShowQueue] = useState(false),
     [actualVariant, setActualVariant] = useState(null);
   const [blocked, setBlocked] = useState(false),
     [full, setFull] = useState(false),
@@ -152,7 +149,6 @@ export function Player({
     setWarning("");
     setBlocked(false);
     setPictureError(false);
-    setTime(0);
     setActualVariant(null);
   }, [current?.id]);
   // Legacy muxed media is isolated from the v2 controller.
@@ -213,23 +209,6 @@ export function Player({
     };
   }, [playback.paused, current?.id, lease, manifest]);
   useEffect(() => {
-    let raf,
-      last = 0;
-    const tick = (now) => {
-      if (now - last > 32) {
-        setTime(
-          video.current?._playback?.getTime() ??
-            video.current?.currentTime ??
-            0,
-        );
-        last = now;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  useEffect(() => {
     const handler = () => {
       if (document.fullscreenElement === container.current) {
         if (fullscreenMode.current === "none") {
@@ -280,6 +259,10 @@ export function Player({
       // CSS also fills the TV WebView on devices which reject the native API.
       fullscreenMode.current = "fallback";
       setFull(true);
+      stage.current?.focus({ preventScroll: true });
+      // The APK is already immersive. Keep video and controls in the same
+      // WebView instead of handing the picture to Android's custom video view.
+      if (/HaohaochangTV\//.test(navigator.userAgent)) return;
       try {
         // Escape updates React before the browser finishes its native exit.
         await fullscreenExit.current;
@@ -354,9 +337,11 @@ export function Player({
         tabIndex={0}
         role="group"
         aria-label={
-          lyricsVisible
-            ? "演唱画面，确认键全屏，左右键微调歌词"
-            : "演唱画面，确认键全屏"
+          full
+            ? "演唱画面，按下键或确认键打开播放控制"
+            : lyricsVisible
+              ? "演唱画面，确认键全屏，左右键微调歌词"
+              : "演唱画面，确认键全屏"
         }
         onKeyDown={(event) => {
           if (
@@ -387,25 +372,16 @@ export function Player({
               setError("播放失败，请重试或检查 NAS 连接");
           }}
         />
-        {audioStage && (
-          <>
-            <Background
-              background={background || manifest.background}
-              token={token}
-              time={time}
-            />
-            <Spectrum video={video} />
-          </>
-        )}
-        {current && lyricsVisible && (
-          <Lyrics
-            song={current}
-            time={time}
-            token={token}
-            resource={manifest?.resources?.lyrics}
-            offsetMs={playback.lyricsOffsetMs || 0}
-          />
-        )}
+        <PlayerVisuals
+          video={video}
+          current={current}
+          manifest={manifest}
+          background={background}
+          token={token}
+          lyricsVisible={lyricsVisible}
+          audioStage={audioStage}
+          offsetMs={playback.lyricsOffsetMs || 0}
+        />
         {!current && (
           <div className="stage-empty">
             <Mic2 size={34} />
@@ -486,7 +462,12 @@ export function Player({
           ))}
         </div>
       </div>
-      <div className="video-caption" aria-hidden={!controlsVisible}>
+      <div
+        className="video-caption"
+        role="group"
+        aria-label={full ? "全屏播放控制" : "播放控制"}
+        aria-hidden={!controlsVisible}
+      >
         <div className="video-caption-heading">
           <span data-audio-variant={actualVariant || variant}>
             <span className={`dot ${lease ? "" : "offline"}`} />
@@ -526,6 +507,7 @@ export function Player({
             ].map(([action, label]) => (
               <button
                 key={action}
+                data-player-action={action}
                 onClick={() =>
                   request(
                     "/control",

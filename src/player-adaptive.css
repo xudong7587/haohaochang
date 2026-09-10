@@ -108,6 +108,28 @@
   background: #352840;
   color: #f4eaff;
   border-color: #655072;
+  font-size: 15px;
+  min-height: 42px;
+}
+.tv-player.is-full .video-caption {
+  padding: 18px 28px;
+  gap: 14px;
+  border-top: 1px solid #655072;
+  max-height: 50%;
+}
+.tv-player.is-full .full-controls {
+  width: 100%;
+  flex-wrap: wrap;
+}
+.tv-player.is-full .full-controls button {
+  min-width: 110px;
+}
+.tv-player.is-full .full-controls [data-player-action="pause"] {
+  background: #cfb6ed;
+  color: #281636;
+}
+.tv-player.is-full .lyric-adjust output {
+  font-size: 13px;
 }
 .tv-player.is-full .lyric-lines {
   font-size: clamp(24px, 3vw, 46px);
