@@ -15,6 +15,7 @@ export function pcApi({ app, admin, store, discovery }) {
       discovery: discovery.info(),
       tasks,
       resourceCleanup: store.get("resource-cleanup", null),
+      downloadCleanup: store.get("download-cleanup", null),
       worker: null,
     };
     if (!config.pcEndpoint)
@@ -74,7 +75,16 @@ export function pcApi({ app, admin, store, discovery }) {
               ]),
           ),
         );
+      for (const [index, job] of jobs.entries()) {
+        const progress = data.jobs[index]?.media_progress;
+        if (progress && Number.isFinite(progress.percent))
+          job.media_progress = {
+            label: clipText(progress.label, 50),
+            percent: Math.max(0, Math.min(100, progress.percent)),
+          };
+      }
       const worker = {
+        version: clipText(data.version || "旧版（未报告版本）"),
         name: clipText(data.name),
         concurrency: Number(data.concurrency) || 1,
         device: clipText(data.device),
@@ -90,7 +100,16 @@ export function pcApi({ app, admin, store, discovery }) {
         },
         gpu: data.gpu
           ? {
-              utilization: Number(data.gpu.utilization) || 0,
+              utilization:
+                data.gpu.utilization == null
+                  ? null
+                  : Number(data.gpu.utilization),
+              encoder:
+                data.gpu.encoder == null ? null : Number(data.gpu.encoder),
+              decoder:
+                data.gpu.decoder == null ? null : Number(data.gpu.decoder),
+              busiest:
+                data.gpu.busiest == null ? null : Number(data.gpu.busiest),
               used_mb: Number(data.gpu.used_mb) || 0,
               total_mb: Number(data.gpu.total_mb) || 0,
             }

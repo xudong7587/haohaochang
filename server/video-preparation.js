@@ -28,6 +28,7 @@ export async function prepareVideoOnPc(store, song, file, staging) {
     result = await runProviderJob(store, song, file, staging, config, {
       clip: { start: 0, end: info.duration },
       videoOnly: true,
+      videoInfo: info,
     });
   } catch (error) {
     if (
@@ -46,10 +47,12 @@ export async function prepareVideoOnPc(store, song, file, staging) {
     output.audio.length ||
     output.height < info.height ||
     output.width < info.width ||
-    Math.abs(output.duration - info.duration) > 0.5
+    Math.abs(output.duration - (info.videoDuration || info.duration)) > 0.5
   ) {
     store.set(result.checkpointKey, null);
-    throw new Error("PC 画面结果的轨道、编码或时长不匹配，旧资源保持可用");
+    throw new Error(
+      `PC 画面校验失败：输入 ${info.width}×${info.height}，画面 ${(info.videoDuration || info.duration).toFixed(3)}秒 / 容器 ${info.duration.toFixed(3)}秒；输出 ${output.width}×${output.height} ${output.videoCodec}/${output.pixelFormat} ${output.duration.toFixed(3)}秒，音轨${output.audio.length}。旧资源保持可用`,
+    );
   }
   return result;
 }

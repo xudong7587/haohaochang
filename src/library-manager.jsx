@@ -1,3 +1,4 @@
+import { statusNames } from "./view-constants.js";
 import React, { useEffect, useState } from "react";
 import { ResourceRow } from "./library/resource-row.jsx";
 import { VideoReview } from "./library/video-review.jsx";
@@ -12,6 +13,7 @@ export { LyricsSettings } from "./library/lyrics-settings.jsx";
 
 export function LibraryManager({ request, notify, onEdit }) {
   const [songs, setSongs] = useState([]),
+    [tasks, setTasks] = useState([]),
     [hiddenSongs, setHiddenSongs] = useState([]),
     [reviews, setReviews] = useState([]);
   const [tab, setTab] = useState("pending"),
@@ -19,13 +21,15 @@ export function LibraryManager({ request, notify, onEdit }) {
     [busy, setBusy] = useState(false),
     [results, setResults] = useState([]);
   async function refresh() {
-    const [library, pending, inbox, hidden] = await Promise.all([
+    const [library, pending, inbox, hidden, jobs] = await Promise.all([
       request("/admin/library"),
       request("/admin/reviews"),
       request("/admin/inbox"),
       request("/admin/library?hidden=true"),
+      request("/admin/tasks").catch(() => []),
     ]);
     setSongs(library);
+    setTasks(Array.isArray(jobs) ? jobs : []);
     setReviews([...pending, ...inbox]);
     setHiddenSongs(hidden);
   }
@@ -90,12 +94,59 @@ export function LibraryManager({ request, notify, onEdit }) {
           </button>
         </div>
       </div>
+      {tasks.some((j) =>
+        ["running", "queued", "waiting-worker"].includes(j.status),
+      ) && (
+        <section className="settings-card">
+          <h3>正在整理</h3>
+          {tasks
+            .filter((j) =>
+              ["running", "queued", "waiting-worker"].includes(j.status),
+            )
+            .sort(
+              (a, b) =>
+                Number(b.status === "running") - Number(a.status === "running"),
+            )
+            .map((j) => (
+              <article className="pc-job" key={j.id}>
+                <strong>
+                  {j.title || "后台任务"}
+                  {j.artist ? " · " + j.artist : ""}
+                </strong>
+                <p>
+                  {statusNames[j.status]} ·{" "}
+                  {j.media_progress?.label ||
+                    {
+                      separating: "去除人声",
+                      decoding: "提取音频",
+                      downloading: "下载视频",
+                      clipping: "裁剪片段",
+                      "preparing-video": "保存原画面",
+                      "preparing-audio": "准备音轨",
+                      "preparing-video-pc": "转换画面",
+                    }[j.stage] ||
+                    "等待处理"}
+                </p>
+                {j.media_progress && (
+                  <progress max="100" value={j.media_progress.percent} />
+                )}
+                {Number.isFinite(j.model_progress) && (
+                  <progress max="100" value={j.model_progress} />
+                )}
+              </article>
+            ))}
+        </section>
+      )}
       <p className="note">
         “重新识别歌名与歌手”会批量更新歌曲名称；“刷新列表”只读取最新任务和曲库状态。列表也会每
         10 秒自动刷新。
       </p>
-      <BatchResults results={results} />
-      <SourceImport {...{ request, action, busy, notify }} />
+      <BatchResults
+        results={results.filter(
+          (r) => !["success", "skipped"].includes(r.status),
+        )}
+      />
+
       <div className="library-tabs">
         {[
           ["pending", "待整理曲库"],
@@ -160,10 +211,10 @@ export function LibraryManager({ request, notify, onEdit }) {
               })
             }
           >
-            整理已有标准曲库
+            老版本多视频合一
           </button>
           <small>
-            检查旧格式、保留已有双音轨并回收过期版本；播放中的歌曲会跳过。
+            每首只保留当前画面，保留原唱、伴奏和歌词；播放中或已点入队列的歌曲会跳过。
           </small>
         </div>
       )}
@@ -287,6 +338,17 @@ export function LibraryManager({ request, notify, onEdit }) {
           </article>
         ))}
       {!visibleCount && <p>这个分类暂时没有匹配歌曲。</p>}
+      {results.some((r) => ["success", "skipped"].includes(r.status)) && (
+        <details className="settings-card">
+          <summary>已完成批量提交结果</summary>
+          <BatchResults
+            results={results.filter((r) =>
+              ["success", "skipped"].includes(r.status),
+            )}
+          />
+        </details>
+      )}
+      <SourceImport {...{ request, action, busy, notify }} />
     </section>
   );
 }

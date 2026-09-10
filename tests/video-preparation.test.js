@@ -1,3 +1,4 @@
+import { prepareVideoOnPc } from "../server/video-preparation.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -12,7 +13,7 @@ import { run } from "../server/process.js";
 
 process.env.FFMPEG = ffmpeg;
 process.env.FFPROBE = ffprobe.path;
-test("non-H264 picture goes to PC, checkpoints persist before publication, and bad results preserve the current package", async (t) => {
+test("original video bypasses conversion; explicit PC conversion checkpoints and rejects invalid results", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "ktv-video-pc-")),
     cache = path.join(root, "cache"),
     source = path.join(root, "source.webm"),
@@ -101,18 +102,25 @@ test("non-H264 picture goes to PC, checkpoints persist before publication, and b
   });
   store.set("ai", { pcEndpoint: `http://127.0.0.1:${server.address().port}` });
   await prepareSong(store, "song", [root], cache);
-  assert.equal(uploads, 1);
+  assert.equal(uploads, 0);
   const directory = store.get("package:song"),
     original = await readFile(path.join(directory, "原唱.m4a"));
   const video = await probe(path.join(directory, "画面.mp4"));
-  assert.equal(video.videoCodec, "h264");
+  assert.equal(video.videoCodec, "vp9");
   assert.equal(video.audio.length, 0);
   assert.ok((await probe(source)).audio.length);
   store.set("package-fingerprint:song", null);
+  const staging = path.join(root, "staging");
+  await mkdir(staging);
+  const song = store.db.prepare("SELECT * FROM songs WHERE id='song'").get();
+  const prepared = await prepareVideoOnPc(store, song, source, staging);
+  assert.equal(uploads, 1);
+  assert.equal((await probe(prepared.file)).videoCodec, "h264");
+  store.set(prepared.checkpointKey, null);
   invalid = true;
   await assert.rejects(
-    prepareSong(store, "song", [root], cache),
-    /PC 画面结果/,
+    prepareVideoOnPc(store, song, source, staging),
+    /PC 画面校验失败/,
   );
   assert.equal(store.get("package:song"), directory);
   assert.deepEqual(await readFile(path.join(directory, "原唱.m4a")), original);

@@ -81,7 +81,18 @@ export async function download(job, payload, context) {
       }
     } else file = await clipOnPc(store, job, payload, original, downloads);
     const info = await stat(file);
+    const cleanupSources = await Promise.all(
+      [
+        ...new Set(
+          [file, original, downloaded.videoFile, videoFile].filter(Boolean),
+        ),
+      ].map(async (source) => {
+        const value = await stat(source);
+        return { file: source, signature: value.size + ":" + value.mtimeMs };
+      }),
+    );
     addJob("import", {
+      cleanupSources,
       file,
       videoFile,
       downloadedHeight: downloaded.height,

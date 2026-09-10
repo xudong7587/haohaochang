@@ -25,7 +25,9 @@ export function taskStatus(store) {
     return {
       ...row,
       media_progress:
-        row.status === "running" ? taskProgress(store, row.id) : null,
+        row.status === "running"
+          ? taskProgress(store, row.id) || checkpoint?.media_progress || null
+          : null,
       title:
         song?.title ||
         p.metadata?.title ||

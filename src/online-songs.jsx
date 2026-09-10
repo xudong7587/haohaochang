@@ -141,21 +141,6 @@ function VideoPreview({ selection, close, notify, canLogin = false }) {
           会员高清需要在“在线资源”保存该会员账号最新的 B站
           Cookie；仅在网页登录不会同步到 NAS。
         </p>
-        {(error ||
-          (preview &&
-            (preview.downloadHeight || preview.previewHeight) < 720)) && (
-          <BiliLogin
-            compact
-            canLogin={canLogin}
-            request={(url, body, method) => api(url, body, method, canLogin)}
-            notify={notify}
-            onLogin={() => {
-              resumeAt.current = video.current?.currentTime || position;
-              pause();
-              setReload((v) => v + 1);
-            }}
-          />
-        )}
         {preview ? (
           <>
             <video
@@ -199,14 +184,20 @@ function VideoPreview({ selection, close, notify, canLogin = false }) {
               onEnded={pause}
               onVolumeChange={() => sync()}
               onRateChange={() => sync()}
-              onError={() => setError("预览流不可用，请重新打开视频。")}
+              onError={() => {
+                pause();
+                setError("预览线路不可用，请点击重试预览刷新线路。");
+              }}
             />
             {preview.audio && (
               <audio
                 ref={audio}
                 src={mediaUrl(preview.audio)}
                 preload="auto"
-                onError={() => setError("预览声音加载失败，请重新打开视频。")}
+                onError={() => {
+                  pause();
+                  setError("预览声音加载失败，请点击重试预览刷新线路。");
+                }}
               />
             )}
           </>
@@ -269,7 +260,15 @@ function VideoPreview({ selection, close, notify, canLogin = false }) {
         {error && (
           <p role="alert">
             {error}{" "}
-            <button onClick={() => setReload((v) => v + 1)}>重试预览</button>
+            <button
+              onClick={() => {
+                resumeAt.current = video.current?.currentTime || position;
+                pause();
+                setReload((v) => v + 1);
+              }}
+            >
+              重试预览
+            </button>
           </p>
         )}
         <a href={row.url} target="_blank" rel="noreferrer">

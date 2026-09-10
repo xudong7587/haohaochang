@@ -62,14 +62,19 @@ def register(app, root, config, plan, device):
         if device == 'cuda':
             try:
                 result = subprocess.run(['nvidia-smi', '-i', str(plan.get('gpu_index', 0)),
-                    '--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu',
+                    '--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,utilization.encoder,utilization.decoder',
                     '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=3,
                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), check=True)
-                values = [float(v.strip()) for v in result.stdout.strip().split(',')]
-                gpu = dict(utilization=values[0], used_mb=values[1], total_mb=values[2], temperature=values[3])
+                values = []
+                for value in result.stdout.strip().split(','):
+                    try: values.append(float(value.strip()))
+                    except ValueError: values.append(None)
+                compute, used, total, temperature, encoder, decoder = values
+                gpu = dict(utilization=compute, used_mb=used, total_mb=total, temperature=temperature,
+                    encoder=encoder, decoder=decoder, busiest=max((v for v in (compute, encoder, decoder) if v is not None), default=None))
             except (OSError, ValueError, subprocess.SubprocessError):
                 pass
-        return dict(lan=getattr(app.state, 'lan', {}), addresses=[f'http://{ip}:{config["port"]}' for ip in addresses()], name='好好唱资源 AI 整理器', device=device, gpu_name=plan.get('gpu_name'),
+        return dict(version='0.3.7', lan=getattr(app.state, 'lan', {}), addresses=[f'http://{ip}:{config["port"]}' for ip in addresses()], name='好好唱资源 AI 整理器', device=device, gpu_name=plan.get('gpu_name'),
                     model='htdemucs', segment=float(os.environ.get('SEPARATION_SEGMENT', 4)),
                     runtime=plan['runtime'], host=config.get('host', '127.0.0.1'), port=config['port'],
                     uptime=round(time.time()-started), cpu=psutil.cpu_percent(),

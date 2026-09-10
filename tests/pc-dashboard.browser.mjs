@@ -32,6 +32,13 @@ worker.get("/desktop/status", (q, r) => {
     secret: "must-not-reach-browser",
     jobs: [
       {
+        id: "old-job",
+        status: "done",
+        stage: "done",
+        title: "已整理旧歌曲",
+        elapsed_seconds: 60,
+      },
+      {
         id: "test-job",
         status: "running",
         stage: "clipping",
@@ -112,6 +119,15 @@ try {
   await page.getByRole("button", { name: "查看状态" }).click();
   await page.getByText("PC 已连接，任务自动处理", { exact: true }).waitFor();
   await page.getByText("测试视频裁剪", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByText("已整理旧歌曲", { exact: true }).isVisible(),
+    false,
+  );
+  await page.getByText("已完成记录 · 1 项", { exact: true }).click();
+  await page.getByText("已整理旧歌曲", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "刷新状态", exact: true }).click();
+  await page.getByText("已整理旧歌曲", { exact: true }).waitFor();
+  await page.getByText("已完成记录 · 1 项", { exact: true }).click();
   await page.getByText("待整理歌曲 · 测试歌手", { exact: true }).waitFor();
   await page.getByText("查看日志", { exact: true }).click();
   await page.getByText("正在裁剪所选区间", { exact: true }).waitFor();
@@ -170,6 +186,10 @@ try {
     await page.getByRole("link", { name: "返回管理页面" }).count(),
     0,
   );
+  await page
+    .locator("summary")
+    .filter({ hasText: /^PC 连接设置$/ })
+    .click();
   await page
     .getByLabel("PC 地址", { exact: true })
     .fill("http://192.168.11.155:8000");

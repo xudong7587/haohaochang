@@ -66,6 +66,7 @@ export async function inspectPackage(store, song, directory) {
             file,
             "-map",
             "0",
+            ...(kind === "video" ? ["-c", "copy"] : []),
             "-f",
             "null",
             "-",
@@ -79,7 +80,12 @@ export async function inspectPackage(store, song, directory) {
           available: true,
           duration: media.duration,
           ...(kind === "video"
-            ? { width: media.width, height: media.height }
+            ? {
+                width: media.width,
+                height: media.height,
+                codec: media.videoCodec,
+                verification: "packets",
+              }
             : {}),
         };
       });

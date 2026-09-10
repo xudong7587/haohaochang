@@ -35,6 +35,21 @@ export async function probe(file) {
     ]),
   );
   return {
+    videoDuration: Number(
+      data.streams.find(
+        (s) => s.codec_type === "video" && !s.disposition?.attached_pic,
+      )?.duration ||
+        data.format?.duration ||
+        0,
+    ),
+    videoFps: (() => {
+      const rate =
+        data.streams.find(
+          (s) => s.codec_type === "video" && !s.disposition?.attached_pic,
+        )?.avg_frame_rate || "0/1";
+      const [n, d] = rate.split("/").map(Number);
+      return n / (d || 1);
+    })(),
     width:
       data.streams.find(
         (s) => s.codec_type === "video" && !s.disposition?.attached_pic,

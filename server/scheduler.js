@@ -1,5 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import { runJob } from "./jobs.js";
+import { cleanImportedDownloads } from "./download-cleanup.js";
+import { cleanSongVersions } from "./resource-cleanup.js";
 import { songIdFor, currentSong, withSongWrite } from "./song-writes.js";
 import { resourceManifest } from "./resource-manifest.js";
 export function createScheduler(
@@ -179,6 +181,32 @@ export function createScheduler(
       db.prepare(
         "UPDATE jobs SET status='done',stage='done',error='' WHERE id=?",
       ).run(job.id);
+      const finishedPayload = JSON.parse(
+        db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id).payload,
+      );
+      if (finishedPayload.id) {
+        try {
+          await cleanSongVersions(store, finishedPayload.id, cache, {
+            legacyCache: dependencies.legacyCache,
+            isPlaying: dependencies.isPlaying,
+          });
+        } catch (error) {
+          store.set("resource-cleanup", {
+            error: error.message,
+            checkedAt: Date.now(),
+          });
+        }
+        try {
+          await cleanImportedDownloads(store, dependencies.downloads, {
+            id: finishedPayload.id,
+          });
+        } catch (error) {
+          store.set("download-cleanup", {
+            error: error.message,
+            checkedAt: Date.now(),
+          });
+        }
+      }
     } catch (e) {
       if (e.code === "WAITING_WORKER") {
         db.prepare(

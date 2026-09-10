@@ -1,3 +1,4 @@
+import { TaskList } from "./task-list.jsx";
 import React, { useState, useEffect, useRef } from "react";
 import { BackgroundSettings } from "./background-settings.jsx";
 import { HardDrive, Check, RefreshCw } from "lucide-react";
@@ -190,90 +191,93 @@ export function Settings({ admin, attempt, refresh }) {
             </button>
           </div>
           {admin.jobs.length ? (
-            admin.jobs.map((j) => (
-              <div className="job" key={j.id}>
-                <div>
-                  <strong>
-                    {
+            <TaskList jobs={admin.jobs}>
+              {(j) => (
+                <div className="job" key={j.id}>
+                  <div>
+                    <strong>
                       {
-                        "attach-video": "补充视频",
-                        "upgrade-hd": "升级高清画面",
-                        acquire: "自动找歌",
-                        "find-video": "补充 MTV",
-                        "favorite-sync": "检查收藏夹",
-                        "favorite-download": "收藏夹下载",
-                        enrich: "AI 信息刮削",
-                        import: "下载自动入库",
-                        organize: "整理歌曲",
-                        scan: "扫描媒体目录",
-                        prepare: "准备播放版本",
-                        standardize: "整理已有标准曲库",
-                        "resource-cleanup": "回收过期资源版本",
-                        download: "下载在线资源",
-                      }[j.kind]
-                    }
-                  </strong>
-                  <p className="task-song">
-                    {j.title || "媒体目录"}
-                    {j.artist ? " · " + j.artist : ""}
-                    {j.priority === "online" ? " · 优先处理" : ""}
-                  </p>
-                  {j.media_progress && (
-                    <div>
-                      <progress max="100" value={j.media_progress.percent} />
-                      <span>
-                        {j.media_progress.label} {j.media_progress.percent}%
-                      </span>
-                    </div>
+                        {
+                          "attach-video": "补充视频",
+                          "upgrade-hd": "升级高清画面",
+                          "compatible-video": "转换设备兼容画面",
+                          acquire: "自动找歌",
+                          "find-video": "补充 MTV",
+                          "favorite-sync": "检查收藏夹",
+                          "favorite-download": "收藏夹下载",
+                          enrich: "AI 信息刮削",
+                          import: "下载自动入库",
+                          organize: "整理歌曲",
+                          scan: "扫描媒体目录",
+                          prepare: "准备播放版本",
+                          standardize: "老版本多视频合一",
+                          "resource-cleanup": "回收过期资源版本",
+                          download: "下载在线资源",
+                        }[j.kind]
+                      }
+                    </strong>
+                    <p className="task-song">
+                      {j.title || "媒体目录"}
+                      {j.artist ? " · " + j.artist : ""}
+                      {j.priority === "online" ? " · 优先处理" : ""}
+                    </p>
+                    {j.media_progress && (
+                      <div>
+                        <progress max="100" value={j.media_progress.percent} />
+                        <span>
+                          {j.media_progress.label} {j.media_progress.percent}%
+                        </span>
+                      </div>
+                    )}
+                    {Number.isFinite(j.model_progress) && (
+                      <div>
+                        <progress max="100" value={j.model_progress} />
+                        <span>模型当前步骤 {j.model_progress}%</span>
+                      </div>
+                    )}
+                    <small>
+                      {new Date(j.created).toLocaleString()} ·{" "}
+                      {statusNames[j.status]}
+                      {j.status === "running" &&
+                        ({
+                          downloading: " · 下载视频",
+                          clipping: " · PC 裁剪",
+                          separating: " · 伴奏分离",
+                          decoding: " · 提取音频",
+                          validating: " · 校验资源",
+                          preparing: " · 准备播放资源",
+                          "preparing-video": " · NAS 准备画面与校验",
+                          "preparing-video-pc": " · PC 转换画面",
+                          "preparing-audio": " · NAS 准备音轨与校验",
+                          "resource-cleanup": " · 清理未使用的旧版本",
+                        }[j.stage] ||
+                          "")}
+                      {j.started && !j.finished
+                        ? ` · 已处理 ${Math.max(0, Math.round((Date.now() - j.started) / 1000))} 秒`
+                        : ""}
+                      {j.started && j.finished
+                        ? " · 耗时 " +
+                          Math.round((j.finished - j.started) / 1000) +
+                          " 秒"
+                        : ""}
+                    </small>
+                    {j.error && <p className="error">{j.error}</p>}
+                  </div>
+                  {["failed", "waiting-worker"].includes(j.status) && (
+                    <button
+                      onClick={async () => {
+                        await attempt(() =>
+                          api(`/admin/jobs/${j.id}/retry`, {}, "POST", true),
+                        );
+                        refresh();
+                      }}
+                    >
+                      重试
+                    </button>
                   )}
-                  {Number.isFinite(j.model_progress) && (
-                    <div>
-                      <progress max="100" value={j.model_progress} />
-                      <span>模型当前步骤 {j.model_progress}%</span>
-                    </div>
-                  )}
-                  <small>
-                    {new Date(j.created).toLocaleString()} ·{" "}
-                    {statusNames[j.status]}
-                    {j.status === "running" &&
-                      ({
-                        downloading: " · 下载视频",
-                        clipping: " · PC 裁剪",
-                        separating: " · 伴奏分离",
-                        decoding: " · 提取音频",
-                        validating: " · 校验资源",
-                        preparing: " · 准备播放资源",
-                        "preparing-video": " · NAS 准备画面与校验",
-                        "preparing-video-pc": " · PC 转换画面",
-                        "preparing-audio": " · NAS 准备音轨与校验",
-                        "resource-cleanup": " · 清理未使用的旧版本",
-                      }[j.stage] ||
-                        "")}
-                    {j.started && !j.finished
-                      ? ` · 已处理 ${Math.max(0, Math.round((Date.now() - j.started) / 1000))} 秒`
-                      : ""}
-                    {j.started && j.finished
-                      ? " · 耗时 " +
-                        Math.round((j.finished - j.started) / 1000) +
-                        " 秒"
-                      : ""}
-                  </small>
-                  {j.error && <p className="error">{j.error}</p>}
                 </div>
-                {["failed", "waiting-worker"].includes(j.status) && (
-                  <button
-                    onClick={async () => {
-                      await attempt(() =>
-                        api(`/admin/jobs/${j.id}/retry`, {}, "POST", true),
-                      );
-                      refresh();
-                    }}
-                  >
-                    重试
-                  </button>
-                )}
-              </div>
-            ))
+              )}
+            </TaskList>
           ) : (
             <p>还没有任务。扫描曲库后，就从这里开始。</p>
           )}

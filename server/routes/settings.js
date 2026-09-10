@@ -28,6 +28,7 @@ export function settingsApi({
   allowedOrigin,
 }) {
   biliLoginApi({ app, admin, store });
+  app.get("/api/admin/tasks", admin, (req, res) => res.json(taskStatus(store)));
   app.get("/api/admin", admin, (req, res) =>
     res.json({
       roots,

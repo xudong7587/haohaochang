@@ -3,8 +3,9 @@ import { lstat, realpath, readdir, unlink, rmdir } from "node:fs/promises";
 import { inside } from "./media-utils.js";
 import { withSongWrite, songIdFor } from "./song-writes.js";
 import { resourceManifest } from "./resource-manifest.js";
+import { compactSongVideos } from "./song-storage.js";
 
-export const resourceGraceMs = 10 * 60 * 1000;
+export const resourceGraceMs = 0;
 const versionName = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const resourceFile =
   /^(?:画面\.mp4|原唱\.m4a|伴奏\.m4a|歌词\.lrc|歌曲信息\.json|来源画面\.mp4|来源\.[a-z0-9]+)$/i;
@@ -47,6 +48,12 @@ export async function cleanSongVersions(
             j.id !== ignoreJobId && songIdFor(JSON.parse(j.payload)) === id,
         );
     if (busy()) return result;
+    const compacted = await compactSongVideos(store, song, cache, {
+      dryRun,
+      busy,
+    });
+    result.sourceFiles = compacted.files;
+    result.bytes += compacted.bytes;
     const base = store.get("package-base:" + id);
     if (!base) return result;
     let root;

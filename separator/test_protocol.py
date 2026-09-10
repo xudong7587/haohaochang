@@ -261,7 +261,8 @@ class RouteTests(unittest.TestCase):
         import subprocess
         from clipping import execute_clip
         job, _ = self.module.jobs.reserve('video:0:1', 'fallback')
-        with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cuda'}), patch('clipping.subprocess.run', side_effect=[subprocess.CalledProcessError(1, 'nvenc'), None]) as run:
+        (self.module.ROOT / job / 'clip.mp4').write_bytes(b'validated test output')
+        with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cuda'}), patch('clipping.run_ffmpeg', side_effect=[subprocess.CalledProcessError(1, 'nvenc'), None, None]) as run:
             execute_clip(self.module.jobs, job, 0, 1, True)
         self.assertEqual(self.module.jobs.state(job)['status'], 'done')
         self.assertIn('h264_nvenc', run.call_args_list[0].args[0])

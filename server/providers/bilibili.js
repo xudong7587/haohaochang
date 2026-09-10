@@ -115,15 +115,52 @@ export const bilibiliProvider = {
         throw new Error("B站未提供下载签名，请稍后重试");
       endpoint.search = signWbi(endpoint.searchParams, account.data.wbi_img);
     }
-    const response = await fetcher(endpoint, {
-      headers: headers(cookie),
-      signal: AbortSignal.timeout(15000),
-      redirect: "error",
-    });
-    if (!response.ok) throw new Error("B站取流暂时不可用");
-    const body = await response.json();
-    if (body.code !== 0 || !body.data?.dash)
-      throw new Error("B站未提供可预览的视频流");
+    const requestStreams = async () => {
+      const response = await fetcher(endpoint, {
+        headers: headers(cookie),
+        signal: AbortSignal.timeout(15000),
+        redirect: "error",
+      });
+      if (!response.ok)
+        throw Object.assign(
+          new Error(`B站取流失败（HTTP ${response.status}），请稍后重试`),
+          { previewSafe: true },
+        );
+      const body = await response.json();
+      if (body.code !== 0 || !body.data?.dash)
+        throw Object.assign(
+          new Error(
+            `B站未提供视频流（接口代码 ${Number(body.code) || 0}），请重试预览`,
+          ),
+          { previewSafe: true },
+        );
+      return body;
+    };
+    let body;
+    try {
+      body = await requestStreams();
+    } catch (primary) {
+      if (download) throw primary;
+      // Some videos reject the legacy endpoint. Retry the signed endpoint
+      // without imposing the download-only login/quality requirement.
+      try {
+        const nav = await fetcher(
+          "https://api.bilibili.com/x/web-interface/nav",
+          {
+            headers: headers(cookie),
+            signal: AbortSignal.timeout(15000),
+            redirect: "error",
+          },
+        );
+        const account = await nav.json();
+        if (!account.data?.wbi_img) throw primary;
+        endpoint.pathname = "/x/player/wbi/playurl";
+        endpoint.search = signWbi(endpoint.searchParams, account.data.wbi_img);
+        body = await requestStreams();
+      } catch {
+        throw primary;
+      }
+    }
     const available = body.data.dash.video || [];
     const limit = quality === "highest" ? Infinity : Number(quality);
     const video = available
@@ -150,6 +187,8 @@ export const bilibiliProvider = {
       ),
       video: video.baseUrl || video.base_url,
       audio: audio.baseUrl || audio.base_url,
+      videoBackups: video.backupUrl || video.backup_url || [],
+      audioBackups: audio.backupUrl || audio.backup_url || [],
     };
   },
 };

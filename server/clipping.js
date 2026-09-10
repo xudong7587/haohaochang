@@ -60,7 +60,13 @@ export async function clipOnPc(
     info.hasVideo &&
     (videoOnly ? !info.audio.length : info.audio.length) &&
     (!source.height || info.height >= source.height) &&
-    Math.abs(info.duration - (clip.end - clip.start)) < 0.5;
+    Math.abs(
+      info.duration -
+        ((videoOnly
+          ? Math.min(clip.end, source.videoDuration || source.duration)
+          : clip.end) -
+          clip.start),
+    ) < 0.5;
   try {
     if (valid(await probe(target))) return target;
   } catch {}
@@ -72,7 +78,7 @@ export async function clipOnPc(
       file,
       staging,
       config,
-      { clip, videoOnly },
+      { clip, videoOnly, videoInfo: source },
     );
   } catch (error) {
     if (

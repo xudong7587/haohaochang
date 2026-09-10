@@ -57,7 +57,12 @@ async function fingerprint(file) {
   for await (const chunk of createReadStream(file)) hash.update(chunk);
   return hash.digest("hex");
 }
-async function saveResult(value, config, target) {
+async function saveResult(
+  value,
+  config,
+  target,
+  { video = false, validation } = {},
+) {
   let url;
   try {
     url = new URL(value, config.endpoint + "/");
@@ -82,11 +87,22 @@ async function saveResult(value, config, target) {
       terminal: response.status === 404 || response.status === 410,
     });
   let total = 0;
+  const maximum = (video ? 4 : 1) * 1024 ** 3;
+  if (Number(response.headers.get("content-length")) > maximum) {
+    await response.body.cancel();
+    throw new Error(`${video ? "PC画面" : "分离"}结果超过 ${video ? 4 : 1} GB`);
+  }
+  const hash = createHash("sha256");
   const limit = new Transform({
     transform(chunk, encoding, callback) {
       total += chunk.length;
+      hash.update(chunk);
       callback(
-        total > 1024 * 1024 * 1024 ? new Error("分离结果超过 1 GB") : null,
+        total > maximum
+          ? new Error(
+              `${video ? "PC画面" : "分离"}结果超过 ${video ? 4 : 1} GB`,
+            )
+          : null,
         chunk,
       );
     },
@@ -96,6 +112,16 @@ async function saveResult(value, config, target) {
     limit,
     createWriteStream(target),
   );
+  const digest = hash.digest("hex");
+  if (
+    validation?.decoded === true &&
+    /^[a-f0-9]{64}$/.test(validation.sha256 || "")
+  ) {
+    if (validation.sha256 !== digest)
+      throw new Error("PC画面传输校验失败，文件与完整解码结果不一致");
+    return true;
+  }
+  return false;
 }
 
 export async function runProviderJob(
@@ -104,7 +130,7 @@ export async function runProviderJob(
   vocal,
   staging,
   config,
-  { pollInterval = 3000, clip, videoOnly = false } = {},
+  { pollInterval = 3000, clip, videoOnly = false, videoInfo } = {},
 ) {
   if ((await stat(vocal)).size > (clip ? 1024 : 100) * 1024 * 1024)
     throw new Error(clip ? "待裁剪视频超过 1 GB" : "待分离音频超过 100 MB");
@@ -127,6 +153,10 @@ export async function runProviderJob(
     form.set("model", config.model);
     if (clip) {
       if (videoOnly) form.set("video_only", "true");
+      if (videoInfo) {
+        form.set("video_height", String(videoInfo.height || 1080));
+        form.set("video_fps", String(videoInfo.videoFps || 30));
+      }
       form.set("start", String(clip.start));
       form.set("end", String(clip.end));
     }
@@ -194,11 +224,20 @@ export async function runProviderJob(
     );
   }
   const file = path.join(staging, clip ? "clip.mp4" : "backing.wav");
+  let validated = false;
   try {
-    await saveResult(resultUrl, config, file);
+    validated = await saveResult(resultUrl, config, file, {
+      video: !!clip,
+      validation: clip ? result.validation : undefined,
+    });
   } catch (error) {
     if (error.terminal) store.set(checkpointKey, null);
     throw error;
   }
-  return { file, checkpointKey, vocalActivity: result.vocal_activity };
+  return {
+    file,
+    checkpointKey,
+    vocalActivity: result.vocal_activity,
+    validated,
+  };
 }

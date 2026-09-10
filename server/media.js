@@ -172,7 +172,12 @@ export async function prepareSong(store, id, roots, cache) {
       const splitVideo = store.get("split-video:" + id);
       if (splitVideo) {
         const video = await probe(await safeMedia(splitVideo, roots));
-        if (!video.hasVideo || Math.abs(video.duration - info.duration) > 1)
+        if (
+          !video.hasVideo ||
+          (splitVideo !==
+            path.join(store.get("package:" + id) || "", "画面.mp4") &&
+            Math.abs(video.duration - info.duration) > 1)
+        )
           throw new Error("独立画面与音频时长不匹配");
         info.hasVideo = true;
       }

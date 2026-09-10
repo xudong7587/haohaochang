@@ -88,3 +88,9 @@ B站预览优先使用播放器提供的 AVC/AAC DASH 流，yt-dlp 为后备；�
 新增契约测试：`bili-hd.test.js`、`pc-flow.test.js`、`metadata-batch.test.js`、`preview-cancel.test.js`、`lyrics-alignment.test.js`。外部平台均用受控传输fixture，真实用户验证只在隔离本机目录进行，不能把其Cookie、登录二维码或原始媒体加入Git。
 
 TV配对由 `/api/tv-pairing` 创建三分钟内存会话，二维码只携带手机确认凭据；手机通过member认证后确认，电视用另一随机凭据轮询并一次性领取roomToken。Android13+使用OnBackInvokedCallback，旧设备用onBackPressed。网页`haohaochangBack()`返回是否消费操作，根页面交由APK双返回退出。`node tests/tv-pairing.browser.mjs`在隔离localhost上验证首次/重复扫码、登录持久化及返回层级，并已纳入CI；原生遥控器退出仍需实机验收。
+
+## v0.3.7 存储与预览
+
+`server/song-storage.js` 在歌曲写锁内将受管来源视频的全部音轨无损保存为 MKA，更新来源指针与指纹后清除重复画面；`resource-cleanup.js` 回收无引用版本，`download-cleanup.js` 根据成功导入记录和文件签名删除下载输入。生产文件只由正式部署后的任务执行清理，测试使用临时目录。当前播放／队列／在途任务均保护歌曲；未知文件和外部来源不参与删除。
+
+`tests/resource-storage.test.js` 包含多视频合一与后续准备回归，`tests/download-cleanup.test.js` 覆盖失败、改动和共享输入保护，`tests/preview-fallback.test.js` 覆盖签名后备及 CDN Range 保留。默认视频只封装并遍历数据包，显式编码由 PC 完整解码并返回 SHA-256；这两种校验级别必须在文档和状态中区别表述。

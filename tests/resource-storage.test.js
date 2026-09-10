@@ -9,6 +9,7 @@ import {
   readdir,
   rm,
   symlink,
+  copyFile,
 } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -22,9 +23,145 @@ import { saveSongMetadata } from "../server/song-metadata.js";
 import { stageResources } from "../server/resource-publication.js";
 import { cleanSongVersions } from "../server/resource-cleanup.js";
 import { resourceManifest } from "../server/resource-manifest.js";
+import { probe } from "../server/media-utils.js";
 
 process.env.FFMPEG = ffmpeg;
 process.env.FFPROBE = ffprobe.path;
+test("consolidating managed standard songs leaves one video and preserves audio, lyrics and future preparation", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "ktv-one-video-")),
+    cache = path.join(root, "cache"),
+    base = path.join(cache, "歌曲", "Artist - Song [12345678]");
+  await mkdir(base, { recursive: true });
+  const source = path.join(base, "画面.mp4"),
+    store = openStore(path.join(root, "db"));
+  t.after(async () => {
+    store.db.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  await run(ffmpeg, [
+    "-y",
+    "-v",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc2=s=160x90:r=10:d=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "sine=frequency=440:duration=1",
+    "-f",
+    "lavfi",
+    "-i",
+    "sine=frequency=880:duration=1",
+    "-map",
+    "0:v",
+    "-map",
+    "1:a",
+    "-map",
+    "2:a",
+    "-c:v",
+    "libx264",
+    "-c:a",
+    "aac",
+    source,
+  ]);
+  const audioHash = await run(ffmpeg, [
+    "-v",
+    "error",
+    "-i",
+    source,
+    "-map",
+    "0:a",
+    "-c",
+    "copy",
+    "-f",
+    "hash",
+    "-hash",
+    "sha256",
+    "-",
+  ]);
+  store.db
+    .prepare(
+      "INSERT INTO songs(id,path,title,artist,mode,vocal,backing,lyrics,created) VALUES('song',?,'Song','Artist','tracks',0,1,'[00:00.00]original lyrics',0)",
+    )
+    .run(source);
+  store.set("package:song", base);
+  store.set("package-base:song", base);
+  await prepareSong(store, "song", [root], cache);
+  let song = store.db.prepare("SELECT * FROM songs WHERE id='song'").get();
+  await saveSongMetadata(
+    store,
+    "song",
+    {
+      lyrics: "[00:00.10]edited lyrics",
+      expectedRevision: song.metadataRevision,
+    },
+    cache,
+  );
+  const current = store.get("package:song"),
+    picture = path.join(current, "画面.mp4");
+  const before = await Promise.all(
+    ["画面.mp4", "原唱.m4a", "伴奏.m4a", "歌词.lrc"].map((name) =>
+      readFile(path.join(current, name)),
+    ),
+  );
+  await copyFile(picture, path.join(base, "来源画面.mp4"));
+  store.set("split-video:song", path.join(base, "来源画面.mp4"));
+  const videos = async () =>
+    (await readdir(base, { recursive: true })).filter((name) =>
+      /\.(mp4|mkv|webm)$/i.test(name),
+    );
+  assert.ok((await videos()).length > 2);
+  store.db.prepare("INSERT INTO queue VALUES('q','song','listener',0)").run();
+  assert.equal((await cleanSongVersions(store, "song", cache)).removed, 0);
+  assert.ok((await videos()).length > 2);
+  store.db.prepare("DELETE FROM queue").run();
+  await cleanSongVersions(store, "song", cache);
+  assert.equal((await videos()).length, 1);
+  song = store.db.prepare("SELECT * FROM songs WHERE id='song'").get();
+  assert.equal((await probe(song.path)).hasVideo, false);
+  assert.equal((await probe(song.path)).audio.length, 2);
+  assert.equal(
+    await run(ffmpeg, [
+      "-v",
+      "error",
+      "-i",
+      song.path,
+      "-map",
+      "0:a",
+      "-c",
+      "copy",
+      "-f",
+      "hash",
+      "-hash",
+      "sha256",
+      "-",
+    ]),
+    audioHash,
+  );
+  assert.equal(resourceManifest(store, song, cache).tier, "standard");
+  assert.equal(store.get("split-video:song"), picture);
+  assert.deepEqual(
+    await Promise.all(
+      ["画面.mp4", "原唱.m4a", "伴奏.m4a", "歌词.lrc"].map((name) =>
+        readFile(path.join(current, name)),
+      ),
+    ),
+    before,
+  );
+  await prepareSong(store, "song", [root], cache);
+  await cleanSongVersions(store, "song", cache);
+  assert.equal((await videos()).length, 1);
+  assert.equal(
+    resourceManifest(
+      store,
+      store.db.prepare("SELECT * FROM songs WHERE id='song'").get(),
+      cache,
+    ).tier,
+    "standard",
+  );
+});
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "ktv-storage-"));
   const cache = path.join(root, "media"),
@@ -110,7 +247,10 @@ test("cleanup protects grace period, playback, resumable jobs, current media and
   const f = await fixture(t),
     first = f.dir();
   await f.edit("[00:00.00]new");
-  assert.equal((await f.clean({ now: Date.now() })).removed, 0);
+  assert.equal(
+    (await f.clean({ now: Date.now(), graceMs: 10 * 60 * 1000 })).removed,
+    0,
+  );
   f.store.db
     .prepare(
       "INSERT INTO queue(id,song_id,name,position) VALUES('q','song','listener',0)",

@@ -245,6 +245,30 @@ export function ResourceRow({
               </button>
             </>
           )}
+          {!review && row.tier === "standard" && (
+            <details>
+              <summary>设备兼容</summary>
+              <p>
+                默认保留原画面。仅当播放设备不支持原编码时转换为
+                H.264，音轨和歌词保留。
+              </p>
+              <button
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await request(
+                      `/admin/library/${row.id}/compatible-video`,
+                      { expectedRevision: row.metadataRevision },
+                      "POST",
+                    );
+                    notify("已提交兼容画面转换，原唱和伴奏保持不变");
+                  })
+                }
+              >
+                转换兼容画面
+              </button>
+            </details>
+          )}
           <button disabled={busy} onClick={() => setOpen(true)}>
             {row.tier === "audio" ? "补充 MV" : "替换视频"}
           </button>

@@ -72,7 +72,12 @@ export async function savePackageInfo(store, song, cache) {
     ),
   );
 }
-export async function encodeResource(args, out, progress) {
+export async function encodeResource(
+  args,
+  out,
+  progress,
+  verification = "decode",
+) {
   const temporary = out + "." + randomUUID() + ".tmp";
   const execute = async (args, phase) => {
     if (!progress) return run(process.env.FFMPEG || "ffmpeg", args, 3600000);
@@ -106,6 +111,7 @@ export async function encodeResource(args, out, progress) {
         temporary,
         "-map",
         "0",
+        ...(verification === "packets" ? ["-c", "copy"] : []),
         "-f",
         "null",
         "-",
@@ -141,7 +147,10 @@ export async function encodePackageResource(
   const file = path.join(directory, resourceNames[kind]);
   const job = jobScope();
   const input = args[args.indexOf("-i") + 1];
-  const duration = job && input ? (await probe(input)).duration : 0;
+  const inputInfo = input ? await probe(input) : null;
+  const duration = job && inputInfo ? inputInfo.duration : 0;
+  const passthrough =
+    kind === "video" && args[args.indexOf("-c:v") + 1] === "copy";
   let result;
   try {
     result = await encodeResource(
@@ -157,11 +166,18 @@ export async function encodePackageResource(
               }),
           }
         : null,
+      passthrough ? "packets" : "decode",
     );
   } finally {
     if (job) taskProgress(store, job, null);
   }
   const { media, info } = result;
+  if (
+    passthrough &&
+    Math.abs(media.duration - (inputInfo.videoDuration || inputInfo.duration)) >
+      0.5
+  )
+    throw new Error("原画面封装后时长不一致，源文件已保留");
   if (
     !(media.duration > 0) ||
     (kind === "video"
@@ -169,8 +185,8 @@ export async function encodePackageResource(
       : media.hasVideo || media.audio.length !== 1)
   )
     throw new Error("生成资源的音视频轨道或时长无效");
-  // encodeResource already decoded the entire output with -xerror. Preserve
-  // that evidence so subsequent package inspection does not decode it again.
+  // Passthrough traverses every packet without decoding; newly encoded media
+  // is fully decoded. Cache the evidence for this exact immutable file.
   store.set("package-health:" + song.id, {
     ...store.get("package-health:" + song.id, {}),
     [kind]: {
@@ -179,7 +195,14 @@ export async function encodePackageResource(
       mtimeMs: info.mtimeMs,
       available: true,
       duration: media.duration,
-      ...(kind === "video" ? { width: media.width, height: media.height } : {}),
+      ...(kind === "video"
+        ? {
+            width: media.width,
+            height: media.height,
+            codec: media.videoCodec,
+            verification: passthrough ? "packets" : "decode",
+          }
+        : {}),
     },
   });
 }
@@ -191,23 +214,20 @@ export async function encodePicture(
   { info, force = false } = {},
 ) {
   info ||= await probe(source);
-  let codec =
-    !force &&
-    info.videoCodec === "h264" &&
-    ["yuv420p", "yuvj420p"].includes(info.pixelFormat)
-      ? ["-c:v", "copy"]
-      : [
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "22",
-          "-vf",
-          "scale=w='trunc(iw/2)*2':h=-2",
-          "-pix_fmt",
-          "yuv420p",
-        ];
+  let codec = !force
+    ? ["-c:v", "copy"]
+    : [
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "22",
+        "-vf",
+        "scale=w='trunc(iw/2)*2':h=-2",
+        "-pix_fmt",
+        "yuv420p",
+      ];
   let prepared;
   try {
     if (codec.includes("libx264")) {
@@ -215,11 +235,41 @@ export async function encodePicture(
       prepared = await prepareVideoOnPc(store, song, source, directory);
       if (prepared) codec = ["-c:v", "copy"];
     }
+    if (prepared?.validated) {
+      // The PC decoded this exact SHA-256 and NAS verified it while streaming.
+      // Move the already-faststart file in this unpublished directory; do not
+      // decode a full 4K video a second time on the NAS CPU.
+      const target = path.join(directory, resourceNames.video);
+      await rename(prepared.file, target);
+      const [media, value] = await Promise.all([probe(target), stat(target)]);
+      store.set("package-health:" + song.id, {
+        ...store.get("package-health:" + song.id, {}),
+        video: {
+          file: target,
+          size: value.size,
+          mtimeMs: value.mtimeMs,
+          available: true,
+          duration: media.duration,
+          width: media.width,
+          height: media.height,
+        },
+      });
+      store.set(prepared.checkpointKey, null);
+      return;
+    }
     await encodePackageResource(
       store,
       song,
       "video",
-      ["-i", prepared?.file || source, "-map", "0:v:0", "-an", ...codec],
+      [
+        "-i",
+        prepared?.file || source,
+        "-map",
+        "0:v:0",
+        "-an",
+        ...codec,
+        ...(!force && info.videoCodec === "hevc" ? ["-tag:v", "hvc1"] : []),
+      ],
       directory,
     );
     if (prepared) store.set(prepared.checkpointKey, null);

@@ -83,8 +83,9 @@ try {
     .click();
   await page.locator(".artist-library summary").first().click();
   await page
-    .getByRole("button", { name: "整理已有标准曲库", exact: true })
+    .getByRole("button", { name: "老版本多视频合一", exact: true })
     .click();
+  await page.getByText("已完成批量提交结果", { exact: true }).click();
   await page.getByText("已排队检查格式并回收旧版本", { exact: true }).waitFor();
   assert.deepEqual(
     await page.evaluate(
@@ -101,6 +102,7 @@ try {
   assert.equal(await page.getByText("旧曲库工具", { exact: true }).count(), 0);
   let row = page.locator('[data-song-id="song-a"]');
   assert.deepEqual(await row.locator("header button").allTextContents(), [
+    "转换兼容画面",
     "替换视频",
     "编辑歌曲",
     "删除",
@@ -260,6 +262,7 @@ try {
   await page.getByRole("button", { name: /^待整理曲库/ }).click();
   await page.locator('[data-song-id="bulk-no-lyrics"]').waitFor();
   await page.getByRole("button", { name: "全部整理", exact: true }).click();
+  await page.getByText("已完成批量提交结果", { exact: true }).click();
   await page.getByText("已加入整理队列", { exact: true }).waitFor();
   assert.equal(
     await page.evaluate(

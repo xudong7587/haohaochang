@@ -12,15 +12,20 @@ import { download } from "./job-handlers/download.js";
 import { cleanResourceVersions } from "./resource-cleanup.js";
 import { standardize } from "./job-handlers/standardize.js";
 import { upgradeHd } from "./job-handlers/upgrade-hd.js";
+import { compatibleVideo } from "./job-handlers/compatible-video.js";
+import { cleanImportedDownloads } from "./download-cleanup.js";
 
 const handlers = {
+  "compatible-video": compatibleVideo,
   "upgrade-hd": upgradeHd,
   standardize,
-  "resource-cleanup": (_job, _payload, context) =>
-    cleanResourceVersions(context.store, context.cache, {
+  "resource-cleanup": async (_job, _payload, context) => {
+    await cleanResourceVersions(context.store, context.cache, {
       legacyCache: context.legacyCache,
       isPlaying: context.isPlaying,
-    }),
+    });
+    await cleanImportedDownloads(context.store, context.downloads);
+  },
   organize: organize,
   acquire: acquire,
   attach: attach,

@@ -27,6 +27,7 @@ export async function resolvePreview(url, cookie, dir, quality = "highest") {
   url = canonicalVideo(url);
   if (new URL(url).hostname !== "www.bilibili.com")
     throw new Error("预览仅支持 B站视频");
+  let primaryError;
   try {
     const data = await bilibiliProvider.preview(url, cookie, fetch, quality);
     const media = (value) => ({
@@ -42,32 +43,65 @@ export async function resolvePreview(url, cookie, dir, quality = "highest") {
       qualities: data.qualities,
       previewHeight: data.previewHeight,
       downloadHeight: data.downloadHeight,
-      video: media(data.video),
-      audio: media(data.audio),
+      video: {
+        ...media(data.video),
+        backups: (data.videoBackups || []).filter((value) => {
+          try {
+            biliStreamUrl(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      },
+      audio: {
+        ...media(data.audio),
+        backups: (data.audioBackups || []).filter((value) => {
+          try {
+            biliStreamUrl(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      },
     };
-  } catch {}
-  const raw = await withBiliCookie(cookie, dir, (file) =>
-    run(
-      process.env.YTDLP || "yt-dlp",
-      [
-        "--ignore-config",
-        "--no-playlist",
-        "--skip-download",
-        "--dump-single-json",
-        "--socket-timeout",
-        "15",
-        "--retries",
-        "1",
-        ...(file ? ["--cookies", file] : []),
-        "-f",
-        videoFormat(quality)
-          .replace("bv*", "bv[vcodec^=avc1][ext=mp4]")
-          .replace("+ba", "+ba[ext=m4a]"),
-        url,
-      ],
-      60000,
-    ),
-  );
+  } catch (error) {
+    primaryError = error;
+  }
+  let raw;
+  try {
+    raw = await withBiliCookie(cookie, dir, (file) =>
+      run(
+        process.env.YTDLP || "yt-dlp",
+        [
+          "--ignore-config",
+          "--no-playlist",
+          "--skip-download",
+          "--dump-single-json",
+          "--socket-timeout",
+          "15",
+          "--retries",
+          "1",
+          ...(file ? ["--cookies", file] : []),
+          "-f",
+          videoFormat(quality)
+            .replace("bv*", "bv[vcodec^=avc1][ext=mp4]")
+            .replace("+ba", "+ba[ext=m4a]"),
+          url,
+        ],
+        60000,
+      ),
+    );
+  } catch {
+    if (primaryError?.previewSafe) throw primaryError;
+    throw Object.assign(
+      new Error(
+        "B站视频信息或预览线路读取失败，请稍后重试；当前错误不代表账号已退出。",
+      ),
+      { previewSafe: true },
+    );
+  }
   const data = JSON.parse(raw),
     formats = data.requested_formats || [data];
   const video = formats.find((f) => f.vcodec && f.vcodec !== "none"),
@@ -162,9 +196,11 @@ export function previewSessions({
             expires: Date.now() + 20 * 60000,
           });
           return publicData(id, data);
-        } catch {
+        } catch (error) {
           throw new Error(
-            "B站暂时无法提供预览，请稍后重试；需要登录的视频可在后台保存 B站 Cookie。",
+            error.previewSafe
+              ? error.message
+              : "预览读取失败，请重试预览刷新线路；若仍失败，可稍后再试。",
           );
         } finally {
           pending--;
@@ -194,29 +230,39 @@ export function previewSessions({
       res.on("close", closed);
       streaming++;
       try {
-        let url = media.url,
-          response;
-        for (let count = 0; count < 4; count++) {
-          response = await fetcher(biliStreamUrl(url), {
-            headers: {
-              ...media.headers,
-              "Accept-Encoding": "identity",
-              ...(range ? { Range: range } : {}),
-            },
-            signal: controller.signal,
-            redirect: "manual",
-          });
-          if ([301, 302, 303, 307, 308].includes(response.status)) {
-            url = new URL(response.headers.get("location"), url).href;
+        let response;
+        for (const candidate of [media.url, ...(media.backups || [])].slice(
+          0,
+          4,
+        )) {
+          let url = candidate;
+          try {
+            for (let count = 0; count < 4; count++) {
+              response = await fetcher(biliStreamUrl(url), {
+                headers: {
+                  ...media.headers,
+                  "Accept-Encoding": "identity",
+                  ...(range ? { Range: range } : {}),
+                },
+                signal: controller.signal,
+                redirect: "manual",
+              });
+              if ([301, 302, 303, 307, 308].includes(response.status)) {
+                url = new URL(response.headers.get("location"), url).href;
+                await response.body?.cancel();
+                continue;
+              }
+              break;
+            }
+            if ([200, 206, 416].includes(response.status)) break;
             await response.body?.cancel();
-            continue;
+          } catch (error) {
+            if (controller.signal.aborted) throw error;
           }
-          break;
+          response = null;
         }
-        if (![200, 206, 416].includes(response.status)) {
-          await response.body?.cancel();
-          throw new Error("B站预览流暂时不可用，请重新打开");
-        }
+        if (!response)
+          throw new Error("B站预览线路暂时不可用，请点“重试预览”刷新线路");
         res.status(response.status).set("Cache-Control", "private, no-store");
         for (const name of ["content-length", "content-range", "accept-ranges"])
           if (response.headers.has(name))

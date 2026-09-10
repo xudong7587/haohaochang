@@ -42,6 +42,25 @@ export function libraryApi({
 }) {
   const { db, get, set } = store;
   const previews = new Map();
+  app.post("/api/admin/library/:id/compatible-video", admin, (req, res) => {
+    const song = currentSong(store, req.params.id);
+    assertSongIdle(store, song.id);
+    checkRevision(song, req.body.expectedRevision, false);
+    if (
+      snapshot().ambient?.song_id === song.id ||
+      db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
+    )
+      throw new Error("请在歌曲播放结束后转换兼容画面");
+    const manifest = resourceManifest(store, song, cache);
+    if (!manifest.video || !manifest.vocal || !manifest.backing)
+      throw new Error("请先完成歌曲整理");
+    res.json({
+      id: addJob("compatible-video", {
+        id: song.id,
+        expectedRevision: song.metadataRevision,
+      }),
+    });
+  });
   const assertIdle = (id) => assertSongIdle(store, id);
   const organize = (req, res) => {
     const song = db
