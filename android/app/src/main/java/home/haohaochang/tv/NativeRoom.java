@@ -68,6 +68,9 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private int wakeKey = -1;
   private String pageBeforeFull = "stage";
   private View confirmTarget;
+  private TextView controlHint;
+  private View hintAnchor;
+  private final Runnable clearHint = this::hideHint;
 
   NativeRoom(Activity activity, RoomApi api, Actions actions) {
     this(activity, api, actions, true);
@@ -194,39 +197,40 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     offsetLabel = TvStyle.text(activity, "歌词原始时间", 12, TvStyle.MUTED);
     lyricInfo.addView(offsetLabel);
     reset = TvStyle.button(activity, "复位", "重置歌词微调", () -> adjust(0, true));
+    TvStyle.iconOnly(reset, "reset");
     lyricInfo.addView(reset, new LinearLayout.LayoutParams(dp(44), dp(28)));
     controls = new LinearLayout(activity);
     controls.setGravity(Gravity.CENTER_VERTICAL);
     footer.addView(controls);
     lyricToggle = TvStyle.button(activity, "歌词", "隐藏歌词", this::toggleLyrics);
-    TvStyle.icon(lyricToggle, "lyrics");
-    controls.addView(lyricToggle, new LinearLayout.LayoutParams(dp(74), -1));
+    TvStyle.iconOnly(lyricToggle, "lyrics");
+    controls.addView(lyricToggle, new LinearLayout.LayoutParams(dp(44), -1));
     leftAdjust = adjustGroup(new double[] {10, 3, .5}, false);
     controls.addView(leftAdjust, new LinearLayout.LayoutParams(0, -1, 1));
     LinearLayout mainControls = new LinearLayout(activity);
     mainControls.setGravity(Gravity.CENTER);
-    LinearLayout.LayoutParams centerParams = new LinearLayout.LayoutParams(dp(200), -1);
+    LinearLayout.LayoutParams centerParams = new LinearLayout.LayoutParams(dp(148), -1);
     centerParams.leftMargin = dp(8);
     centerParams.rightMargin = dp(8);
     controls.addView(mainControls, centerParams);
     vocal = TvStyle.button(activity, "伴奏", "切换原唱伴奏", () -> control("vocal"));
-    TvStyle.icon(vocal, "mic");
-    mainControls.addView(vocal, new LinearLayout.LayoutParams(dp(68), -1));
+    TvStyle.iconOnly(vocal, "mic");
+    mainControls.addView(vocal, new LinearLayout.LayoutParams(dp(44), -1));
     pause = TvStyle.button(activity, "Ⅱ", "暂停", () -> control("pause"));
-    LinearLayout.LayoutParams pauseParams = new LinearLayout.LayoutParams(dp(48), -1);
+    LinearLayout.LayoutParams pauseParams = new LinearLayout.LayoutParams(dp(44), -1);
     pauseParams.leftMargin = dp(8);
     pauseParams.rightMargin = dp(8);
     mainControls.addView(pause, pauseParams);
     pause.setTextSize(22);
     TvStyle.primary(pause);
     next = TvStyle.button(activity, "切歌", "切歌", () -> control("next"));
-    TvStyle.icon(next, "next");
-    mainControls.addView(next, new LinearLayout.LayoutParams(dp(68), -1));
+    TvStyle.iconOnly(next, "next");
+    mainControls.addView(next, new LinearLayout.LayoutParams(dp(44), -1));
     rightAdjust = adjustGroup(new double[] {.5, 3, 10}, true);
     controls.addView(rightAdjust, new LinearLayout.LayoutParams(0, -1, 1));
     fullscreen = TvStyle.button(activity, "全屏", "全屏播放", () -> setFull(!full));
-    TvStyle.icon(fullscreen, "screen");
-    controls.addView(fullscreen, new LinearLayout.LayoutParams(dp(90), -1));
+    TvStyle.iconOnly(fullscreen, "screen");
+    controls.addView(fullscreen, new LinearLayout.LayoutParams(dp(44), -1));
     status = TvStyle.text(activity, "正在连接播放会话…", 13, TvStyle.INK);
     status.setBackground(TvStyle.shape(activity, 0xee252031, 8));
     status.setPadding(dp(12), dp(8), dp(12), dp(8));
@@ -234,6 +238,22 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
         new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
     statusParams.topMargin = dp(8);
     addView(status, statusParams);
+    controlHint = TvStyle.text(activity, "", 11, TvStyle.INK);
+    controlHint.setContentDescription("播放控制提示");
+    controlHint.setGravity(Gravity.CENTER);
+    controlHint.setPadding(dp(10), dp(6), dp(10), dp(6));
+    controlHint.setBackground(TvStyle.shape(activity, 0xf53a3149, 8));
+    controlHint.setVisibility(GONE);
+    controlHint.setFocusable(false);
+    addView(controlHint);
+    List<View> hintButtons = new ArrayList<>();
+    collectAllButtons(footer, hintButtons);
+    for (View view : hintButtons)
+      view.setOnFocusChangeListener(
+          (button, focused) -> {
+            if (focused) showHint(button);
+            else if (hintAnchor == button) hideHint();
+          });
     layoutRoom();
     show("stage");
     updateControls();
@@ -271,10 +291,17 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
       Button b =
           TvStyle.button(
               activity,
-              number,
+              number + "\n" + (advance ? "→" : "←"),
               "歌词" + (advance ? "提前 " : "延后 ") + number + " 秒",
               () -> adjust((int) (seconds * 1000) * (advance ? 1 : -1), false));
       b.setTextSize(14);
+      b.setSingleLine(false);
+      b.setMaxLines(2);
+      b.setIncludeFontPadding(false);
+      android.text.SpannableString caption = new android.text.SpannableString(b.getText());
+      caption.setSpan(
+          new android.text.style.RelativeSizeSpan(.8f), number.length() + 1, caption.length(), 0);
+      b.setText(caption);
       TvStyle.subtle(b);
       b.setPadding(0, 0, 0, 0);
       LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(40), 1);
@@ -285,7 +312,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   }
 
   private void layoutRoom() {
-    int nav = full ? 0 : dp(144), bar = dp(84);
+    int nav = full ? 0 : dp(144), bar = dp(full ? 84 : 72);
     FrameLayout.LayoutParams stageParams = new FrameLayout.LayoutParams(-1, -1);
     stageParams.leftMargin = nav;
     stageParams.bottomMargin = full ? 0 : bar;
@@ -373,11 +400,11 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
 
   private void setFull(boolean value) {
     if (full == value) return;
+    hideHint();
     if (value) pageBeforeFull = tab;
     full = value;
     controlsVisible = true;
-    fullscreen.setText(full ? "退出" : "全屏");
-    TvStyle.icon(fullscreen, full ? "exit" : "screen");
+    TvStyle.glyph(fullscreen, full ? "exit" : "screen", false);
     fullscreen.setContentDescription(full ? "退出全屏" : "全屏播放");
     layoutRoom();
     footer.setVisibility(VISIBLE);
@@ -397,6 +424,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private void hidePanel() {
     if (!full || paused() || dialogOpen || !error.isEmpty()) return;
     controlsVisible = false;
+    hideHint();
     stage.requestFocusFromTouch();
     footer.setVisibility(GONE);
   }
@@ -411,6 +439,47 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     footer.setVisibility(VISIBLE);
     if (focus) focusPlayback();
     armHide();
+  }
+
+  private void showHint(View button) {
+    if (controlHint == null || !button.isShown()) return;
+    handler.removeCallbacks(clearHint);
+    hintAnchor = button;
+    String text = String.valueOf(button.getContentDescription());
+    if (button == vocal) text += variant().equals("vocal") ? " · 当前原唱" : " · 当前伴奏";
+    controlHint.setText(text);
+    controlHint.measure(
+        MeasureSpec.makeMeasureSpec(Math.max(dp(180), getWidth()), MeasureSpec.AT_MOST),
+        MeasureSpec.makeMeasureSpec(dp(40), MeasureSpec.AT_MOST));
+    android.graphics.Rect bounds = new android.graphics.Rect();
+    button.getDrawingRect(bounds);
+    offsetDescendantRectToMyCoords(button, bounds);
+    FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-2, -2);
+    p.leftMargin =
+        Math.max(
+            dp(8),
+            Math.min(
+                getWidth() - controlHint.getMeasuredWidth() - dp(8),
+                bounds.centerX() - controlHint.getMeasuredWidth() / 2));
+    p.topMargin = Math.max(dp(8), bounds.top - controlHint.getMeasuredHeight() - dp(8));
+    controlHint.setLayoutParams(p);
+    controlHint.setVisibility(VISIBLE);
+    handler.postDelayed(clearHint, 1600);
+  }
+
+  private void hideHint() {
+    handler.removeCallbacks(clearHint);
+    if (controlHint != null) controlHint.setVisibility(GONE);
+    hintAnchor = null;
+  }
+
+  private static void collectAllButtons(View root, List<View> result) {
+    if (root instanceof Button) result.add(root);
+    else if (root instanceof ViewGroup) {
+      ViewGroup group = (ViewGroup) root;
+      for (int i = 0; i < group.getChildCount(); i++)
+        collectAllButtons(group.getChildAt(i), result);
+    }
   }
 
   boolean back() {
@@ -646,14 +715,9 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
         has && current.optString("mode").equals("original")
             ? "原始音频"
             : variant().equals("vocal") ? "原唱" : "伴奏";
-    vocal.setText(voice);
-    pause.setText("");
-    pause.setCompoundDrawables(null, null, null, null);
-    pause.setForeground(
-        new TvIcon(activity, paused() ? "play" : "pause", ColorStateList.valueOf(Color.WHITE), 23));
-    pause.setForegroundGravity(Gravity.CENTER);
+    vocal.setSelected(variant().equals("vocal"));
+    TvStyle.glyph(pause, paused() ? "play" : "pause", true);
     pause.setContentDescription(paused() ? "播放" : "暂停");
-    lyricToggle.setText("歌词");
     lyricToggle.setSelected(lyricsVisible);
     lyricToggle.setContentDescription(lyricsVisible ? "隐藏歌词" : "显示歌词");
     title.setText(has ? current.optString("title") : "下一首，就唱你喜欢的");

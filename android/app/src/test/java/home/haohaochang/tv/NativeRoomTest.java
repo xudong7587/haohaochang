@@ -256,7 +256,7 @@ public class NativeRoomTest {
     assertEquals(View.GONE, lyrics.getVisibility());
     View background = find("演唱画面，确认键全屏");
     assertEquals(144, background.getLeft());
-    assertEquals(456, background.getHeight());
+    assertEquals(468, background.getHeight());
     assertEquals(816, background.getWidth());
     View pause = find("暂停");
     find("歌名点歌").performClick();
@@ -303,7 +303,8 @@ public class NativeRoomTest {
   public void lyricButtonsHaveReversedDirectionsAndStayConditional() throws Exception {
     find("全屏播放").performClick();
     layout(960, 540);
-    assertEquals("0.5", ((Button) find("歌词延后 0.5 秒")).getText().toString());
+    assertEquals("0.5\n←", ((Button) find("歌词延后 0.5 秒")).getText().toString());
+    assertEquals("3\n→", ((Button) find("歌词提前 3 秒")).getText().toString());
     assertFalse(
         descendants(room).stream()
             .anyMatch(v -> String.valueOf(v.getContentDescription()).contains("0.1 秒")));
@@ -321,6 +322,27 @@ public class NativeRoomTest {
     find("重置歌词微调").performClick();
     drain();
     assertTrue(commands.get(2).getBoolean("reset"));
+  }
+
+  @Test
+  public void iconControlsExplainFocusBrieflyWithoutPermanentLabels() throws Exception {
+    for (String name : new String[] {"暂停", "切换原唱伴奏", "切歌", "全屏播放", "隐藏歌词"}) {
+      assertEquals("", ((Button) find(name)).getText().toString());
+    }
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    assertTrue(find("暂停").hasFocus());
+    View hint = find("播放控制提示");
+    assertTrue(hint.isShown());
+    assertEquals("暂停", ((android.widget.TextView) hint).getText().toString());
+    Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2));
+    assertFalse(hint.isShown());
+    assertTrue(find("暂停").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    assertTrue(hint.isShown());
+    assertEquals("切歌", ((android.widget.TextView) hint).getText().toString());
+    layout(960, 540);
+    capture("native-tv-control-hint.png");
   }
 
   @Test

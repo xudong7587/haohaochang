@@ -119,4 +119,25 @@ final class TvStyle {
     button.setBackground(states);
     button.setTextColor(INK);
   }
+
+  static void iconOnly(Button button, String name) {
+    subtle(button);
+    glyph(button, name, false);
+  }
+
+  static void glyph(Button button, String name, boolean primary) {
+    button.setText("");
+    button.setCompoundDrawables(null, null, null, null);
+    ColorStateList colors =
+        new ColorStateList(
+            new int[][] {
+              new int[] {-android.R.attr.state_enabled},
+              new int[] {android.R.attr.state_focused},
+              new int[] {android.R.attr.state_selected},
+              new int[] {}
+            },
+            new int[] {0xff625c72, Color.WHITE, ACCENT, primary ? Color.WHITE : 0xffc4bbd5});
+    button.setForeground(new TvIcon(button.getContext(), name, colors, primary ? 21 : 20));
+    button.setForegroundGravity(Gravity.CENTER);
+  }
 }

@@ -34,6 +34,10 @@ final class TvIcon extends Drawable {
     canvas.scale(getBounds().width() / 24f, getBounds().height() / 24f);
     paint.setColor(colors.getColorForState(getState(), colors.getDefaultColor()));
     switch (name) {
+      case "reset":
+        canvas.drawArc(4, 4, 20, 20, -140, 295, false, paint);
+        path(canvas, 3, 3, 3, 9, 9, 9);
+        break;
       case "play":
         path(canvas, 7, 4, 20, 12, 7, 20, 7, 4);
         break;
