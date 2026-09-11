@@ -23,6 +23,12 @@ test("resource filters combine missing fields and actual resolution bands", () =
     "none",
   );
   assert.equal(videoResolution({ videoInfo: { available: true } }), "unknown");
+  const unprepared = {
+    videoInfo: { available: true, height: 1080 },
+    manifest: { version: 1, video: false },
+  };
+  assert.equal(videoResolution(unprepared), "1080");
+  assert.equal(matchesResourceFilters(unprepared, ["video"], ""), false);
   assert.equal(videoResolution({ videoInfo: { height: 800 } }), "720");
   assert.equal(videoResolution({ videoInfo: { height: 240 } }), "low");
 });

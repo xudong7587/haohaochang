@@ -27,6 +27,8 @@ jobs:
         timeout-minutes: 3
       - run: node tests/poster.browser.mjs
         timeout-minutes: 3
+      - run: node tests/artist-artwork.browser.mjs
+        timeout-minutes: 3
       - run: node tests/poster-editor.browser.mjs
         timeout-minutes: 3
       - run: node tests/pc-dashboard.browser.mjs

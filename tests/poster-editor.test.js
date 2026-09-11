@@ -79,6 +79,23 @@ async function fixture(t, readOnlyMedia = false) {
     });
   return { ...service, id, file, call, downloads };
 }
+test("library cover availability checks the file rather than a stale database path", async (t) => {
+  const f = await fixture(t);
+  const poster = path.join(path.dirname(f.file), "poster.png");
+  f.store.db.prepare("UPDATE songs SET poster=? WHERE id=?").run(poster, f.id);
+  const available = async () =>
+    (await (await f.call("/admin/library")).json())[0].hasPoster;
+  assert.equal(await available(), false);
+  await writeFile(poster, png);
+  assert.equal(await available(), true);
+  await writeFile(poster, "");
+  assert.equal(await available(), false);
+  f.store.db
+    .prepare("UPDATE songs SET poster=? WHERE id=?")
+    .run(path.dirname(poster), f.id);
+  assert.equal(await available(), false);
+});
+
 test("cover search returns selectable images; selection and upload preserve audio and reject invalid/stale writes", async (t) => {
   const f = await fixture(t);
   assert.equal(

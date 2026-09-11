@@ -32,6 +32,16 @@ import { hdUpgradeSource } from "./split-video.js";
 import { queueMissingLyrics } from "./lyrics-batch.js";
 import { recordingSource } from "./recording-source.js";
 import { canonicalBiliRecording } from "../shared/video-refresh.js";
+
+async function posterAvailable(file) {
+  if (!file) return false;
+  try {
+    const info = await stat(file);
+    return info.isFile() && info.size > 0;
+  } catch {
+    return false;
+  }
+}
 export function libraryApi({
   app,
   admin,
@@ -219,7 +229,7 @@ export function libraryApi({
           manifest,
           videoInfo: await libraryVideoInfo(store, s, manifest, cache),
           missing: manifest.missing,
-          hasPoster: !!s.poster,
+          hasPoster: await posterAvailable(s.poster),
           posterSource: get("poster-source:" + s.id, null),
           posterAttempt: get("poster-attempt:" + s.id, null),
           lyricsSource: get("lyrics-match:" + s.id, null),

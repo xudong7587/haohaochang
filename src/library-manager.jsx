@@ -137,7 +137,7 @@ export function LibraryManager({ request, notify, onEdit }) {
   const visible = filtered.slice((currentPage - 1) * 20, currentPage * 20);
   const visibleKeys = new Set(visible.map((e) => e.key));
   visible.forEach((e) => visited.current.add(e.key));
-  const chosen = entries.filter(
+  const chosen = filtered.filter(
     (e) => selected.has(e.key) && e.tier === tab && e.tier !== "hidden",
   );
   const allSelected =

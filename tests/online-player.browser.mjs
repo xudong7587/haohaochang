@@ -190,6 +190,23 @@ try {
   assert.ok(
     await page.locator(".song-preview").evaluate((body) => body.scrollTop > 0),
   );
+  await page
+    .getByRole("dialog")
+    .getByRole("heading")
+    .evaluate((heading) => {
+      heading.textContent = "很长的歌曲标题与演唱者".repeat(30);
+    });
+  const longTitleClose = await page
+    .getByRole("button", { name: "关闭", exact: true })
+    .boundingBox();
+  assert.ok(
+    longTitleClose.y >= 0 && longTitleClose.y + longTitleClose.height < 640,
+  );
+  assert.ok((await page.locator(".song-preview").boundingBox()).height > 100);
+  await page.screenshot({
+    path: "test-results/online/pinned-close-mobile.png",
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   assert.equal(await page.getByRole("dialog").count(), 0);
   await page.setViewportSize({ width: 1280, height: 900 });

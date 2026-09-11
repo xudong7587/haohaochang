@@ -6,7 +6,9 @@ export const resourceFilters = [
 
 export function videoResolution(row) {
   const video = row.videoInfo || row.manifest?.resources?.video;
-  if (video?.available === false || row.manifest?.video === false)
+  // libraryVideoInfo also probes an unprepared legacy source. Its result is
+  // more specific than the manifest, which describes prepared playback assets.
+  if (video?.available === false || (!video && row.manifest?.video === false))
     return "none";
   const height = Number(video?.height);
   if (!(height > 0)) return "unknown";

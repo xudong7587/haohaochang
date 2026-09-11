@@ -48,7 +48,8 @@ export function cropPhotoBars(img) {
     top -
     Math.round((bounds.bottom / preview.height) * img.naturalHeight);
   const output = document.createElement("canvas");
-  output.width = Math.min(1200, img.naturalWidth);
+  const outputRatio = Math.min(1, 1200 / Math.max(img.naturalWidth, height));
+  output.width = Math.max(1, Math.round(img.naturalWidth * outputRatio));
   output.height = Math.max(
     1,
     Math.round((output.width * height) / img.naturalWidth),

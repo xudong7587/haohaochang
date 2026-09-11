@@ -19,6 +19,15 @@
   min-width: 44px;
   min-height: 44px;
 }
+.video-preview-modal .modal-head h2 {
+  min-width: 0;
+  max-height: 4.5em;
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
 .video-preview-modal .song-preview {
   min-height: 0;
   overflow-y: auto;

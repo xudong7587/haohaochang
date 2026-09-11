@@ -530,6 +530,30 @@ try {
   await page.getByRole("button", { name: "缺少视频", exact: true }).click();
   assert.equal(await page.locator("article[data-song-id]:visible").count(), 0);
   await page.getByRole("button", { name: "清除资源筛选", exact: true }).click();
+  // A background task can finish while a filtered selection is still checked.
+  await page.getByRole("button", { name: "缺少歌词", exact: true }).click();
+  await all.check();
+  await page.evaluate(() => {
+    window.songs[0].lyrics = "[00:01]后台已补齐";
+  });
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await page.getByText("已选 2 首（可跨页）", { exact: true }).waitFor();
+  await page
+    .getByRole("button", { name: "补充所选缺失歌词", exact: true })
+    .click();
+  assert.deepEqual(
+    (
+      await page.evaluate(() =>
+        window.calls
+          .filter((call) => call.url === "/admin/lyrics-batch")
+          .at(-1),
+      )
+    ).body.items
+      .map((item) => item.id)
+      .sort(),
+    ["order-b", "order-c"],
+  );
+  await page.getByRole("button", { name: "清除资源筛选", exact: true }).click();
   await page.getByRole("button", { name: "缺少视频", exact: true }).click();
   assert.deepEqual(
     await page
