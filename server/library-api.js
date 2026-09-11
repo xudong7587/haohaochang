@@ -10,6 +10,7 @@ import {
 import { assertSongIdle, currentSong, checkRevision } from "./song-writes.js";
 import { saveSongMetadata } from "./song-metadata.js";
 import path from "node:path";
+import { libraryVideoInfo } from "./library-video-info.js";
 import { stat } from "node:fs/promises";
 import {
   libraryTier,
@@ -216,6 +217,7 @@ export function libraryApi({
           ...s,
           tier: manifest.tier,
           manifest,
+          videoInfo: await libraryVideoInfo(store, s, manifest, cache),
           missing: manifest.missing,
           hasPoster: !!s.poster,
           posterSource: get("poster-source:" + s.id, null),

@@ -12,6 +12,8 @@ import { TaskList, completedTask } from "./task-list.jsx";
 import { TaskActions } from "./task-actions.jsx";
 import { Pagination } from "./workbench-controls.jsx";
 import { ResourceRow } from "./library/resource-row.jsx";
+import { HiddenSong } from "./library/hidden-song.jsx";
+import { compareLibraryEntries, librarySorts } from "./library/sorting.js";
 import { VideoReview } from "./library/video-review.jsx";
 import { SourceImport } from "./library/source-import.jsx";
 import { BatchResults } from "./library/batch-results.jsx";
@@ -37,7 +39,14 @@ export function LibraryManager({ request, notify, onEdit }) {
     [busy, setBusy] = useState(false),
     [results, setResults] = useState([]);
   const [page, setPage] = useState(1),
-    [sort, setSort] = useState("title"),
+    [sort, setSort] = useState(() => {
+      try {
+        const value = localStorage.getItem("haohaochang.librarySort");
+        return librarySorts.some(([id]) => id === value) ? value : "title";
+      } catch {
+        return "title";
+      }
+    }),
     [grouped, setGrouped] = useState(false);
   const [view, setView] = useState(() => {
     try {
@@ -111,16 +120,7 @@ export function LibraryManager({ request, notify, onEdit }) {
       .includes(query.trim().toLowerCase());
   const filtered = entries
     .filter((e) => e.tier === tab && matches(e))
-    .sort((a, b) => {
-      if (sort === "title" && !grouped)
-        return (a.row.title || "").localeCompare(b.row.title || "", "zh-CN");
-      return (
-        (a.row.artist || "未知歌手").localeCompare(
-          b.row.artist || "未知歌手",
-          "zh-CN",
-        ) || (a.row.title || "").localeCompare(b.row.title || "", "zh-CN")
-      );
-    });
+    .sort((a, b) => compareLibraryEntries(a, b, sort, grouped));
   const currentPage = Math.min(
     page,
     Math.max(1, Math.ceil(filtered.length / 20)),
@@ -275,10 +275,16 @@ export function LibraryManager({ request, notify, onEdit }) {
             onChange={(e) => {
               setSort(e.target.value);
               setPage(1);
+              try {
+                localStorage.setItem("haohaochang.librarySort", e.target.value);
+              } catch {}
             }}
           >
-            <option value="artist">按歌手排序</option>
-            <option value="title">按歌名排序</option>
+            {librarySorts.map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
           </select>
           <div
             className="library-view-switch"
@@ -321,7 +327,8 @@ export function LibraryManager({ request, notify, onEdit }) {
                 ? "原唱、伴奏可用，等待补充视频画面。"
                 : tab === "standard"
                   ? "画面、原唱、伴奏已准备，可随时点唱。"
-                  : "媒体仍保留，恢复后重新按资源能力分类。"}
+                  : "媒体仍保留，可恢复歌曲，或彻底删除歌曲及对应媒体。"}
+            {grouped && " 分组时先按歌手排列，组内使用所选排序。"}
           </span>
           <small>每 10 秒自动刷新</small>
         </div>
@@ -563,29 +570,9 @@ export function LibraryManager({ request, notify, onEdit }) {
                     </button>
                   )}
                   {entry.tier === "hidden" ? (
-                    <article className="workbench-row" hidden={hidden}>
-                      <header>
-                        <div className="resource-identity">
-                          <strong>{row.title}</strong>
-                          <p>{row.artist}</p>
-                        </div>
-                        <button
-                          disabled={busy}
-                          onClick={() =>
-                            action(async () => {
-                              await request(
-                                `/admin/library/${row.id}/restore`,
-                                {},
-                                "POST",
-                              );
-                              notify("歌曲已恢复");
-                            })
-                          }
-                        >
-                          恢复歌曲
-                        </button>
-                      </header>
-                    </article>
+                    <HiddenSong
+                      {...{ row, hidden, request, action, busy, notify }}
+                    />
                   ) : review && row.kind === "find-video" ? (
                     <VideoReview
                       {...{

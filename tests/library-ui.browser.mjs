@@ -23,7 +23,7 @@ window.request=async(url,body,method)=>{
  if(url==='/admin/organize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已加入整理队列'}))};
  if(url==='/admin/standardize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已排队检查格式并回收旧版本'}))};
  if(url.endsWith('/delete-preview'))return {title:'初始歌名',token:'preview-token',targets:[{path:'/isolated/song-folder',directory:true}]};
- if(url.endsWith('/delete-files')){if(body.token!=='preview-token')throw new Error('无效确认');window.songs=window.songs.filter(row=>row.id!==url.split('/')[3]);return {ok:true};}
+ if(url.endsWith('/delete-files')){if(window.failDelete)throw new Error('文件已变化');if(body.token!=='preview-token')throw new Error('无效确认');window.songs=window.songs.filter(row=>row.id!==url.split('/')[3]);window.hiddenSongs=window.hiddenSongs.filter(row=>row.id!==url.split('/')[3]);return {ok:true};}
  if(url==='/admin/source-info')return {title:'可爱女人',artist:'周杰伦',duration:240,candidateId:'retained-preview-id',candidate:{canonicalUrl:body.url,externalTitle:'第14P',page:14}};
  if(url==='/admin/find-lyrics')return {lyrics:'[00:01]本地候选歌词',source:'本地 LRC',provider:'local-lrc',sourceId:'local-1'};
  if(url==='/admin/refresh-metadata')return {title:'识别歌名',artist:'测试歌手',needs_review:body.id==='review'};
@@ -290,6 +290,57 @@ try {
   await row.getByRole("button", { name: "确认永久删除", exact: true }).click();
   await page.waitForFunction(() => window.songs.length === 0);
   await page.evaluate(() => {
+    window.hiddenSongs = [
+      {
+        id: "hidden-only",
+        title: "隐藏测试",
+        artist: "测试歌手",
+        videoInfo: { available: true, height: 480 },
+      },
+    ];
+  });
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await page.getByRole("button", { name: /^已隐藏/ }).click();
+  const hiddenRow = page.locator('[data-song-id="hidden-only"]');
+  assert.ok((await hiddenRow.textContent()).includes("480p"));
+  await hiddenRow
+    .getByRole("button", { name: "彻底删除", exact: true })
+    .click();
+  const deleteDialog = page.getByRole("dialog", {
+    name: "彻底删除《隐藏测试》",
+    exact: true,
+  });
+  assert.ok(
+    (await deleteDialog.textContent()).includes("/isolated/song-folder"),
+  );
+  await deleteDialog.getByRole("button", { name: "取消", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.hiddenSongs.length), 1);
+  await hiddenRow
+    .getByRole("button", { name: "彻底删除", exact: true })
+    .click();
+  await page.evaluate(() => {
+    window.failDelete = true;
+  });
+  await deleteDialog
+    .getByRole("button", { name: "确认永久删除", exact: true })
+    .click();
+  await deleteDialog.getByRole("alert").waitFor();
+  assert.equal(await page.evaluate(() => window.hiddenSongs.length), 1);
+  await deleteDialog
+    .getByRole("button", { name: "关闭歌曲详情", exact: true })
+    .click();
+  await page.evaluate(() => {
+    window.failDelete = false;
+  });
+  await hiddenRow
+    .getByRole("button", { name: "彻底删除", exact: true })
+    .click();
+  await deleteDialog
+    .getByRole("button", { name: "确认永久删除", exact: true })
+    .click();
+  await page.waitForFunction(() => window.hiddenSongs.length === 0);
+  await hiddenRow.waitFor({ state: "detached" });
+  await page.evaluate(() => {
     window.songs = [
       {
         id: "bulk-no-lyrics",
@@ -384,9 +435,76 @@ try {
   await page.getByText("已选 10 首（可跨页）", { exact: true }).waitFor();
   await page.getByRole("button", { name: /^半标准曲库/ }).click();
   assert.equal(await all.isChecked(), false);
+  await page.getByLabel("筛选曲库", { exact: true }).fill("");
+  await page.evaluate(() => {
+    window.songs = [
+      {
+        id: "order-a",
+        title: "爱",
+        artist: "周杰伦",
+        created: 30,
+        videoInfo: { available: true, height: 480 },
+      },
+      {
+        id: "order-b",
+        title: "晴",
+        artist: "陈奕迅",
+        created: 10,
+        videoInfo: { available: true, height: 720 },
+      },
+      {
+        id: "order-c",
+        title: "雨",
+        artist: "周杰伦",
+        created: 20,
+        videoInfo: { available: false },
+      },
+    ].map((row) => ({
+      ...row,
+      tier: "standard",
+      status: "ready",
+      metadataRevision: 0,
+    }));
+  });
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await page.getByRole("button", { name: /^标准曲库/ }).click();
+  const sorting = page.getByLabel("歌曲排序", { exact: true });
+  for (const [sort, expected] of [
+    ["artist", ["b", "a", "c"]],
+    ["artist-desc", ["c", "a", "b"]],
+    ["title", ["a", "b", "c"]],
+    ["title-desc", ["c", "b", "a"]],
+    ["created", ["b", "c", "a"]],
+    ["created-desc", ["a", "c", "b"]],
+  ]) {
+    await sorting.selectOption(sort);
+    assert.deepEqual(
+      await page
+        .locator("article[data-song-id]:visible")
+        .evaluateAll((rows) => rows.map((row) => row.dataset.songId)),
+      expected.map((id) => "order-" + id),
+    );
+  }
+  assert.ok(
+    (
+      await page.locator('[data-song-id="order-a"] header').textContent()
+    ).includes("480p"),
+  );
+  assert.ok(
+    (
+      await page.locator('[data-song-id="order-b"] header').textContent()
+    ).includes("720p"),
+  );
+  assert.ok(
+    (
+      await page.locator('[data-song-id="order-c"] header').textContent()
+    ).includes("无视频"),
+  );
+  await page.reload();
+  assert.equal(await sorting.inputValue(), "created-desc");
   assert.deepEqual(errors, []);
   console.log(
-    "Library component browser contracts passed: clean refresh, draft conflicts, stale saves, candidate download, lyric provenance, MV confirmation, review actions, hide/restore.",
+    "Library component browser contracts passed: drafts, candidates, lyrics, hide/restore/permanent delete, six sorting orders with persistence, and SD/HD video labels.",
   );
 } finally {
   await browser.close();

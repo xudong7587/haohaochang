@@ -6,6 +6,7 @@ import { SongArtwork } from "../song-artwork.jsx";
 import { roomToken } from "../api.js";
 import { PosterEditor } from "./poster-editor.jsx";
 import { VideoRefresh } from "./video-refresh.jsx";
+import { videoQuality } from "./video-quality.js";
 
 const resourceNames = {
   video: "视频画面",
@@ -265,9 +266,7 @@ export function ResourceRow({
               "waiting-worker": "等待 PC 上线",
             }[row.status || row.kind] || "待处理"}
             {draft.dirty ? " · 草稿未保存" : ""}
-            {row.manifest?.resources?.video?.height
-              ? ` · ${row.manifest.resources.video.height}p`
-              : ""}
+            {` · ${videoQuality(row)}`}
           </p>
         </div>
         <div className="actions row-primary-actions">

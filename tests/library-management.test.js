@@ -48,6 +48,7 @@ test("delete preview checks revisions, queue and real files; organize accepts kn
     "INSERT INTO songs(id,path,title,artist,created,needs_review) VALUES(?,?,?,?,?,?)",
   ).run("a", file, "自定歌曲", "自定歌手", Date.now(), 1);
   set("package:a", folder);
+  set("hidden:a", true);
   const queued = await request("library/a/organize", { expectedRevision: 0 });
   assert.equal(queued.status, 200);
   const job = db.prepare("SELECT * FROM jobs WHERE kind='organize'").get();
@@ -79,6 +80,7 @@ test("delete preview checks revisions, queue and real files; organize accepts kn
     200,
   );
   await assert.rejects(stat(folder), { code: "ENOENT" });
+  assert.equal(service.store.get("hidden:a"), undefined);
   assert.ok(await stat(path.join(root, "keep.mp4")));
   assert.equal(
     db.prepare("SELECT id FROM songs WHERE id='a'").get(),
