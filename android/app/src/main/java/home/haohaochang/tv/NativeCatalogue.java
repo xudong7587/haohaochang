@@ -125,7 +125,6 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     this.page = page;
     artist = "";
     tag = "";
-    queueKey = "";
     search.setText("");
     onlinePage = 1;
     load();
@@ -156,6 +155,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
 
   private void load() {
     int request = ++generation;
+    queueKey = "";
     more.setVisibility(GONE);
     rows = new JSONArray();
     adapter.notifyDataSetChanged();
