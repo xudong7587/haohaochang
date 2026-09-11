@@ -2,134 +2,452 @@ package home.haohaochang.tv;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.os.Bundle;
+import android.content.SharedPreferences;
+import android.graphics.BitmapFactory;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.content.SharedPreferences;
-import android.graphics.Color;
+import android.util.Base64;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceResponse;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.json.JSONObject;
 
-/** Native media playback with a shared NAS-backed WebView song catalogue. */
+/** Native TV entry point. No WebView or Javascript bridge is instantiated. */
 public final class MainActivity extends Activity {
-    private WebView web;
-    private NativePlayback nativePlayback;
-    private FrameLayout root;
-    private View overlay,fullVideo;
-    private WebChromeClient.CustomViewCallback fullCallback;
-    private SharedPreferences preferences;
-    private String server="";
-    private long exitPressedAt;
-    private boolean backPending,loading,destroyed,television;
-    private int generation;
-    private AppUpdater updater;
-    private LanDiscovery discovery;
-    private final Handler handler=new Handler(Looper.getMainLooper());
-    private final ExecutorService executor=Executors.newSingleThreadExecutor();
+  private FrameLayout root;
+  private NativeRoom room;
+  private RoomApi connectionApi;
+  private SharedPreferences preferences;
+  private AppUpdater updater;
+  private LanDiscovery discovery;
+  private String server = "";
+  private boolean destroyed, resumed;
+  private int generation;
+  private long exitPressedAt;
+  private final Handler handler = new Handler(Looper.getMainLooper());
+  private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
-    @Override public void onCreate(Bundle state) {
-        super.onCreate(state);updater=new AppUpdater(this);
-        television=(getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_TYPE_MASK)==android.content.res.Configuration.UI_MODE_TYPE_TELEVISION || !getPackageManager().hasSystemFeature("android.hardware.touchscreen");
-        if(television)setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-        if(Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::handleBack);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-        preferences=getSharedPreferences("connection",MODE_PRIVATE);root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(16,14,25));setContentView(root);createWeb();
-        server=preferences.getString("server","");if(server.isEmpty())discover();else connect(server);
+  @Override
+  public void onCreate(Bundle state) {
+    super.onCreate(state);
+    updater = new AppUpdater(this);
+    setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+    if (Build.VERSION.SDK_INT >= 33)
+      getOnBackInvokedDispatcher()
+          .registerOnBackInvokedCallback(
+              android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
+    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    immersive();
+    preferences = getSharedPreferences("connection", MODE_PRIVATE);
+    root = new FrameLayout(this);
+    root.setBackgroundColor(TvStyle.BACKGROUND);
+    setContentView(root);
+    server = preferences.getString("server", "");
+    if (server.isEmpty()) discover();
+    else connect(server);
+  }
+
+  private void immersive() {
+    getWindow()
+        .getDecorView()
+        .setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+  }
+
+  private void reset() {
+    generation++;
+    handler.removeCallbacksAndMessages(null);
+    if (discovery != null) {
+      discovery.cancel();
+      discovery = null;
     }
-    private void createWeb() {
-        web=new WebView(this);web.setBackgroundColor(Color.TRANSPARENT);web.setFocusable(true);web.setFocusableInTouchMode(true);root.addView(web,0,new FrameLayout.LayoutParams(-1,-1));
-        web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);web.getSettings().setMediaPlaybackRequiresUserGesture(false);
-        web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setLoadWithOverviewMode(true);web.getSettings().setUseWideViewPort(true);
-        web.getSettings().setUserAgentString(web.getSettings().getUserAgentString()+" HaohaochangTV/"+BuildConfig.VERSION_NAME);
-        nativePlayback = new NativePlayback(this, root, web);
-        web.setWebViewClient(new WebViewClient() {
-            @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return navigate(request.getUrl().toString(),request.isForMainFrame());}
-            @Override public boolean shouldOverrideUrlLoading(WebView view,String url){return navigate(url,true);}
-            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) {
-                nativePlayback.navigating(url,server);
-                if(!ConnectionPolicy.sameOrigin(url,server))return;
-                loading=true;int current=++generation;showLoading();
-                handler.postDelayed(()->{if(current==generation&&loading)failed("页面加载时间较长","请确认 NAS 已启动、地址正确。也可以重新寻找家庭歌房。");},25000);
-            }
-            @Override public void onPageFinished(WebView view,String url){nativePlayback.installBridge();if(loading)checkReady(generation);}
-            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame()&&loading)failed("暂时连不上歌房","请检查电视网络与 NAS 地址，然后重新连接。");}
-            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame()&&loading)failed("服务器暂时无法打开页面","服务器返回 HTTP "+response.getStatusCode()+"。请检查 NAS 服务后重试。");}
-            @Override public void onReceivedSslError(WebView view,android.webkit.SslErrorHandler callback,android.net.http.SslError error){callback.cancel();if(loading)failed("服务器证书无法验证","请检查 HTTPS 域名与证书，或使用家庭网络中的 NAS 地址。");}
-            @Override public boolean onRenderProcessGone(WebView view,android.webkit.RenderProcessGoneDetail detail){nativePlayback.destroy();root.removeView(view);view.destroy();createWeb();failed("电视播放页面已停止","可以重新连接。若重复出现，请更新电视系统的 Android System WebView。");return true;}
+    if (room != null) {
+      room.close();
+      room = null;
+    }
+    if (connectionApi != null) {
+      connectionApi.close();
+      connectionApi = null;
+    }
+    root.removeAllViews();
+  }
+
+  private void connect(String address) {
+    try {
+      server = ConnectionPolicy.normalize(address);
+    } catch (IllegalArgumentException error) {
+      settings();
+      return;
+    }
+    reset();
+    int current = generation;
+    String token = preferences.getString("token:" + server, "");
+    RoomApi api = new RoomApi(server, token);
+    connectionApi = api;
+    ConnectionScreen loading = screen("正在连接你的歌房", "连接 NAS 后即可在电视上点歌、查看歌词和播放。");
+    loading.loading(server);
+    root.addView(loading, new FrameLayout.LayoutParams(-1, -1));
+    android.view.inputmethod.InputMethodManager keyboard =
+        (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+    if (keyboard != null) keyboard.hideSoftInputFromWindow(root.getWindowToken(), 0);
+    executor.execute(
+        () -> {
+          try {
+            api.json("/api/health", null);
+            if (!token.isEmpty()) api.json("/api/state", null);
+            handler.post(
+                () -> {
+                  if (stale(current)) return;
+                  preferences.edit().putString("server", server).apply();
+                  if (token.isEmpty()) pair();
+                  else openRoom(api);
+                });
+          } catch (Exception error) {
+            handler.post(
+                () -> {
+                  if (stale(current)) return;
+                  if (RoomSession.auth(error)) {
+                    preferences.edit().remove("token:" + server).apply();
+                    api.token = "";
+                    pair();
+                  } else failed("暂时连不上歌房", RoomSession.message(error));
+                });
+          }
         });
-        web.setWebChromeClient(new WebChromeClient() {
-            @Override public void onShowCustomView(View view,CustomViewCallback callback){if(fullVideo!=null){callback.onCustomViewHidden();return;}fullVideo=view;fullCallback=callback;root.addView(view,new FrameLayout.LayoutParams(-1,-1));web.setVisibility(View.GONE);view.setFocusableInTouchMode(true);view.requestFocus();}
-            @Override public void onHideCustomView(){exitFull();}
-        });
-    }
-    private boolean navigate(String url,boolean mainFrame){if(mainFrame&&"haohaochang://connection".equals(url)&&ConnectionPolicy.sameOrigin(web.getUrl(),server)){settings();return true;}return !ConnectionPolicy.sameOrigin(url,server);}
-    private void checkReady(int current) {
-        if(!loading||current!=generation||destroyed)return;
-        web.evaluateJavascript("(function(){var b=window.haohaochangBoot;return b&&b.failed?'failed':b&&b.loaded?'ready':document.querySelector('#root .app,#root .login')?'ready':'waiting';})()",value->{
-            if(current!=generation||!loading||destroyed)return;
-            if("\"failed\"".equals(value)){failed("播放页面未能启动","请重新加载。若仍失败，请更新电视系统的 Android System WebView。");return;}
-            if("\"ready\"".equals(value)){loading=false;preferences.edit().putString("server",server).apply();hideOverlay();web.requestFocus();return;}
-            handler.postDelayed(()->checkReady(current),500);
-        });
-    }
-    private void connect(String address) {
-        cancelDiscovery();exitFull();try{server=ConnectionPolicy.normalize(address);}catch(IllegalArgumentException error){settings();return;}
-        android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(keyboard!=null)keyboard.hideSoftInputFromWindow(root.getWindowToken(),0);
-        ++generation;loading=true;showLoading();web.loadUrl(server+(television?"/tv":"/play"));
-    }
-    private void showLoading(){ConnectionScreen screen=screen("正在打开你的歌房","连接后显示二维码，手机确认即可开唱。");screen.loading(server);showOverlay(screen);}
-    private void cancelDiscovery(){if(discovery!=null){discovery.cancel();discovery=null;}}
-    private void stopLoading(){++generation;loading=false;web.stopLoading();}
-    private void discover() {
-        cancelDiscovery();stopLoading();exitFull();final int current=generation;
-        ConnectionScreen screen=screen("寻找家庭歌房","正在寻找同一网络中的好好唱服务器，大约需要 8 秒。");screen.searching(preferences.getString("server",""));showOverlay(screen);
-        LanDiscovery search=new LanDiscovery();discovery=search;
-        executor.execute(()->{
-            List<LanDiscovery.Server> found=search.search();handler.post(()->{
-                if(destroyed||current!=generation||discovery!=search)return;discovery=null;
-                if(found.size()==1){connect(found.get(0).address);return;}
-                if(found.isEmpty()){ConnectionScreen manual=screen("还没有找到歌房","确认电视与 NAS 在同一网络，并已启用 LAN 自动发现。也可以直接输入服务器地址。");manual.manual(server,!preferences.getString("server","").isEmpty());showOverlay(manual);}
-                else{ConnectionScreen choices=screen("找到 "+found.size()+" 个家庭歌房","请选择这台电视要连接的服务器。");choices.servers(found);showOverlay(choices);}
+  }
+
+  private boolean stale(int current) {
+    return destroyed || generation != current;
+  }
+
+  private void openRoom(RoomApi api) {
+    generation++;
+    handler.removeCallbacksAndMessages(null);
+    connectionApi = null;
+    root.removeAllViews();
+    room =
+        new NativeRoom(
+            this,
+            api,
+            new NativeRoom.Actions() {
+              public void settings() {
+                menu();
+              }
+
+              public void authRequired() {
+                handler.post(
+                    () -> {
+                      preferences.edit().remove("token:" + server).apply();
+                      connect(server);
+                    });
+              }
             });
+    root.addView(room, new FrameLayout.LayoutParams(-1, -1));
+    room.foreground(resumed);
+    room.requestFocus();
+  }
+
+  private void pair() {
+    int current = ++generation;
+    RoomApi api = connectionApi;
+    LinearLayout panel = new LinearLayout(this);
+    panel.setOrientation(LinearLayout.VERTICAL);
+    panel.setGravity(Gravity.CENTER);
+    panel.setPadding(dp(24), dp(18), dp(24), dp(18));
+    panel.setBackgroundColor(TvStyle.BACKGROUND);
+    root.removeAllViews();
+    root.addView(panel, new FrameLayout.LayoutParams(-1, -1));
+    TextView title = TvStyle.text(this, "手机扫码，连接这台电视", 26, TvStyle.INK);
+    panel.addView(title);
+    TextView hint = TvStyle.text(this, "手机登录歌房并确认后，电视自动进入。", 15, TvStyle.MUTED);
+    hint.setPadding(0, dp(10), 0, dp(12));
+    panel.addView(hint);
+    ImageView qr = new ImageView(this);
+    qr.setContentDescription("电视连接二维码");
+    panel.addView(qr, new LinearLayout.LayoutParams(dp(220), dp(220)));
+    TextView code = TvStyle.text(this, "正在生成二维码…", 16, TvStyle.ACCENT);
+    code.setPadding(0, dp(8), 0, dp(12));
+    panel.addView(code);
+    LinearLayout buttons = new LinearLayout(this);
+    panel.addView(buttons);
+    Button refresh = TvStyle.button(this, "刷新二维码", "刷新二维码", this::pair);
+    buttons.addView(refresh, new LinearLayout.LayoutParams(dp(120), dp(44)));
+    Button password = TvStyle.button(this, "密码登录", "使用管理密码登录", this::password);
+    LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(120), dp(44));
+    p.leftMargin = dp(12);
+    buttons.addView(password, p);
+    Button change = TvStyle.button(this, "更换歌房", "更换歌房", this::settings);
+    LinearLayout.LayoutParams changeParams = new LinearLayout.LayoutParams(dp(120), dp(44));
+    changeParams.leftMargin = dp(12);
+    buttons.addView(change, changeParams);
+    refresh.requestFocus();
+    executor.execute(
+        () -> {
+          try {
+            JSONObject data =
+                (JSONObject) api.json("/api/tv-pairing", RoomApi.object("origin", server));
+            String image = data.getString("qr");
+            byte[] bytes = Base64.decode(image.substring(image.indexOf(',') + 1), Base64.DEFAULT);
+            android.graphics.Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            handler.post(
+                () -> {
+                  if (stale(current)) return;
+                  qr.setImageBitmap(bitmap);
+                  code.setText("请核对连接码：" + data.optString("code"));
+                  pollPair(api, data, current, code);
+                });
+          } catch (Exception error) {
+            handler.post(
+                () -> {
+                  if (!stale(current)) code.setText(RoomSession.message(error) + "，请选择刷新二维码。");
+                });
+          }
         });
+  }
+
+  private void pollPair(RoomApi api, JSONObject pair, int current, TextView status) {
+    if (stale(current)) return;
+    executor.execute(
+        () -> {
+          try {
+            JSONObject data =
+                (JSONObject)
+                    api.json(
+                        "/api/tv-pairing/" + pair.optString("id") + "/check",
+                        RoomApi.object("pollKey", pair.optString("pollKey")));
+            handler.post(
+                () -> {
+                  if (stale(current)) return;
+                  if (data.optString("status").equals("approved")) {
+                    api.token = data.optString("token");
+                    preferences.edit().putString("token:" + server, api.token).apply();
+                    openRoom(api);
+                  } else handler.postDelayed(() -> pollPair(api, pair, current, status), 2000);
+                });
+          } catch (Exception error) {
+            handler.post(
+                () -> {
+                  if (stale(current)) return;
+                  status.setText(RoomSession.message(error) + "，请选择刷新二维码。");
+                });
+          }
+        });
+  }
+
+  private void password() {
+    EditText input = new EditText(this);
+    input.setSingleLine();
+    input.setInputType(
+        android.text.InputType.TYPE_CLASS_TEXT
+            | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+    input.setHint("NAS 管理密码");
+    AlertDialog dialog =
+        new AlertDialog.Builder(this)
+            .setTitle("登录歌房")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("登录", null)
+            .create();
+    dialog.setOnShowListener(
+        d ->
+            dialog
+                .getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(
+                    v -> {
+                      String secret = input.getText().toString();
+                      if (secret.isEmpty()) {
+                        input.setError("请输入密码");
+                        return;
+                      }
+                      int current = generation;
+                      dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+                      executor.execute(
+                          () -> {
+                            try (RoomApi login = new RoomApi(server, secret)) {
+                              JSONObject result =
+                                  (JSONObject) login.json("/api/login", new JSONObject());
+                              handler.post(
+                                  () -> {
+                                    if (stale(current)) return;
+                                    String token = result.optString("token");
+                                    preferences.edit().putString("token:" + server, token).apply();
+                                    dialog.dismiss();
+                                    connect(server);
+                                  });
+                            } catch (Exception error) {
+                              handler.post(
+                                  () -> {
+                                    if (stale(current)) return;
+                                    input.setError(RoomSession.message(error));
+                                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+                                  });
+                            }
+                          });
+                    }));
+    dialog.show();
+  }
+
+  private ConnectionScreen screen(String title, String description) {
+    return new ConnectionScreen(
+        this,
+        new ConnectionScreen.Actions() {
+          public void scan() {
+            discover();
+          }
+
+          public void manual() {
+            settings();
+          }
+
+          public void connect(String address) {
+            MainActivity.this.connect(address);
+          }
+
+          public void cancel() {
+            connect(preferences.getString("server", server));
+          }
+        },
+        title,
+        description);
+  }
+
+  private void settings() {
+    reset();
+    ConnectionScreen view = screen("连接你的家庭歌房", "输入 NAS 地址或 HTTPS 域名，成功后自动记住。");
+    view.manual(server, !preferences.getString("server", "").isEmpty());
+    root.addView(view, new FrameLayout.LayoutParams(-1, -1));
+  }
+
+  private void discover() {
+    reset();
+    int current = generation;
+    ConnectionScreen view = screen("寻找家庭歌房", "正在寻找同一网络中的服务器，大约需要 8 秒。");
+    view.searching(server);
+    root.addView(view, new FrameLayout.LayoutParams(-1, -1));
+    LanDiscovery search = new LanDiscovery();
+    discovery = search;
+    executor.execute(
+        () -> {
+          List<LanDiscovery.Server> found = search.search();
+          handler.post(
+              () -> {
+                if (stale(current)) return;
+                discovery = null;
+                if (found.size() == 1) {
+                  connect(found.get(0).address);
+                  return;
+                }
+                root.removeAllViews();
+                ConnectionScreen result =
+                    screen(
+                        found.isEmpty() ? "还没有找到歌房" : "找到 " + found.size() + " 个歌房",
+                        found.isEmpty() ? "请确认 NAS 已启动 LAN 自动发现，也可以手动输入地址。" : "选择这台电视要连接的服务器。");
+                if (found.isEmpty()) result.manual(server, !server.isEmpty());
+                else result.servers(found);
+                root.addView(result, new FrameLayout.LayoutParams(-1, -1));
+              });
+        });
+  }
+
+  private void failed(String title, String description) {
+    reset();
+    ConnectionScreen view = screen(title, description);
+    view.failure(
+        server, "Android " + Build.VERSION.RELEASE + " · 原生 TV " + BuildConfig.VERSION_NAME);
+    root.addView(view, new FrameLayout.LayoutParams(-1, -1));
+  }
+
+  private void menu() {
+    new AlertDialog.Builder(this)
+        .setTitle("好好唱设置 · " + BuildConfig.VERSION_NAME)
+        .setItems(
+            new String[] {"重试当前播放", "播放信息", "重新连接歌房", "连接设置", "重新自动发现", "检查应用更新", "退出歌房登录"},
+            (d, w) -> {
+              if (w == 0 && room != null) room.retry();
+              else if (w == 1 && room != null) room.diagnostics();
+              else if (w == 2) connect(server);
+              else if (w == 3) settings();
+              else if (w == 4) discover();
+              else if (w == 5) updater.check();
+              else if (w == 6) {
+                preferences.edit().remove("token:" + server).apply();
+                connect(server);
+              }
+            })
+        .setNegativeButton("关闭", null)
+        .show();
+  }
+
+  @Override
+  public boolean dispatchKeyEvent(KeyEvent event) {
+    if (event.getAction() == KeyEvent.ACTION_DOWN && event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
+      if (event.getRepeatCount() == 0) menu();
+      return true;
     }
-    private ConnectionScreen screen(String title,String message) {
-        return new ConnectionScreen(this,new ConnectionScreen.Actions(){
-            public void scan(){discover();}public void manual(){settings();}public void connect(String address){MainActivity.this.connect(address);}
-            public void cancel(){String old=preferences.getString("server","");if(!old.isEmpty())MainActivity.this.connect(old);}
-        },title,message);
+    return super.dispatchKeyEvent(event);
+  }
+
+  @Override
+  public void onBackPressed() {
+    handleBack();
+  }
+
+  private void handleBack() {
+    if (room != null && room.back()) {
+      exitPressedAt = 0;
+      return;
     }
-    private void settings(){cancelDiscovery();stopLoading();exitFull();ConnectionScreen screen=screen("连接你的家庭歌房","填入 NAS 地址或 HTTPS 域名。成功连接后会自动记住，下次打开即可进入。");screen.manual(server,!preferences.getString("server","").isEmpty());showOverlay(screen);}
-    private void failed(String title,String message){stopLoading();ConnectionScreen screen=screen(title,message);screen.failure(server,webVersion());showOverlay(screen);}
-    private String webVersion(){String agent=web.getSettings().getUserAgentString();java.util.regex.Matcher match=java.util.regex.Pattern.compile("Chrome/([0-9.]+)").matcher(agent);return "Android "+Build.VERSION.RELEASE+(match.find()?" · WebView "+match.group(1):"");}
-    private void showOverlay(View view){nativePlayback.foreground(false);if(overlay!=null)root.removeView(overlay);overlay=view;web.setVisibility(View.INVISIBLE);root.addView(view,new FrameLayout.LayoutParams(-1,-1));}
-    private void hideOverlay(){nativePlayback.foreground(true);if(overlay!=null){root.removeView(overlay);overlay=null;}web.setVisibility(View.VISIBLE);}
-    private void exitFull(){if(fullVideo!=null){root.removeView(fullVideo);fullVideo=null;web.setVisibility(View.VISIBLE);web.requestFocus();if(fullCallback!=null){fullCallback.onCustomViewHidden();fullCallback=null;}}}
-    private void reloadInterface(){if(server.isEmpty()){settings();return;}cancelDiscovery();exitFull();web.clearCache(true);web.loadUrl(server+(television?"/tv":"/play")+"?refresh="+System.currentTimeMillis(),java.util.Collections.singletonMap("Cache-Control","no-cache"));}
-    @Override public boolean dispatchKeyEvent(KeyEvent event){if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getKeyCode()==KeyEvent.KEYCODE_MENU){new AlertDialog.Builder(this).setTitle("好好唱设置").setItems(new String[]{"热更新网页","连接设置","重新自动发现","检查应用更新"},(d,w)->{if(w==0)reloadInterface();else if(w==1)settings();else if(w==2)discover();else updater.check();}).show();return true;}return super.dispatchKeyEvent(event);}
-    @Override public void onBackPressed(){handleBack();}
-    private void handleBack(){
-        if(fullVideo!=null){exitFull();exitPressedAt=0;return;}if(overlay!=null){exitOrHint();return;}if(backPending)return;backPending=true;
-        web.evaluateJavascript("typeof window.haohaochangBack === 'function' && window.haohaochangBack()",result->{backPending=false;if(isFinishing()||isDestroyed())return;if("true".equals(result)){exitPressedAt=0;return;}exitOrHint();});
+    long now = SystemClock.elapsedRealtime();
+    if (exitPressedAt != 0 && now - exitPressedAt < 2500) {
+      finish();
+      return;
     }
-    private void exitOrHint(){long now=SystemClock.elapsedRealtime();if(exitPressedAt!=0&&now-exitPressedAt<2500){finish();return;}exitPressedAt=now;Toast.makeText(this,"再按一次返回退出好好唱",Toast.LENGTH_SHORT).show();}
-    @Override protected void onPause(){super.onPause();nativePlayback.foreground(false);web.onPause();}
-    @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();if(nativePlayback!=null)nativePlayback.foreground(overlay==null);if(updater!=null)updater.resume();}
-    @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(overlay!=null){if(loading)showLoading();else if(discovery!=null)discover();else settings();}}
-    @Override protected void onDestroy(){destroyed=true;cancelDiscovery();handler.removeCallbacksAndMessages(null);executor.shutdownNow();updater.destroy();nativePlayback.destroy();web.destroy();super.onDestroy();}
+    exitPressedAt = now;
+    Toast.makeText(this, "再按一次返回退出好好唱", Toast.LENGTH_SHORT).show();
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    resumed = true;
+    immersive();
+    if (room != null) room.foreground(true);
+    if (updater != null) updater.resume();
+  }
+
+  @Override
+  protected void onPause() {
+    resumed = false;
+    if (room != null) room.foreground(false);
+    super.onPause();
+  }
+
+  @Override
+  protected void onDestroy() {
+    destroyed = true;
+    reset();
+    executor.shutdownNow();
+    updater.destroy();
+    super.onDestroy();
+  }
+
+  private int dp(float n) {
+    return TvStyle.dp(this, n);
+  }
 }

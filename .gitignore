@@ -25,3 +25,4 @@ release/*.apk
 release/haohaochang-pc-update.json
 release/SHA256SUMS.txt
 release/SHA256SUMS-v*.txt
+release/tv-previous/

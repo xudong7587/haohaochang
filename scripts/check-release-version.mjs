@@ -13,11 +13,13 @@ assert.ok(
   ),
   "PC version differs",
 );
+const tvVersion = (await readFile("android/app/build.gradle", "utf8")).match(
+  /versionName '([^']+)'/,
+)?.[1];
 assert.ok(
-  (await readFile("android/app/build.gradle", "utf8")).includes(
-    `versionName '${version}'`,
-  ),
-  "TV version differs",
+  tvVersion === version ||
+    new RegExp(`^${version.replaceAll(".", "\\.")}\\.\\d+$`).test(tvVersion),
+  "TV version must match the release or be its APK-only patch",
 );
 assert.equal(
   JSON.parse(await readFile("package-lock.json", "utf8")).version,
@@ -26,8 +28,9 @@ assert.equal(
 console.log(`Release versions and user documentation agree: v${version}`);
 const releaseGuide = await readFile("docs/USER-GUIDE.md", "utf8");
 for (const asset of [
-  `haohaochang-tv-v${version}.apk`,
+  `haohaochang-tv-v${tvVersion}.apk`,
   `haohaochang-resource-ai-v${version}.zip`,
   `haohaochang-nas-v${version}.zip`,
   `haohaochang-preprocess-v${version}.zip`,
-]) assert.ok(releaseGuide.includes(asset), `User guide must name ${asset}`);
+])
+  assert.ok(releaseGuide.includes(asset), `User guide must name ${asset}`);

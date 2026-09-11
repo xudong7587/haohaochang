@@ -7,8 +7,8 @@ android {
         applicationId 'home.haohaochang.tv'
         minSdk 23
         targetSdk 28
-        versionCode 22
-        versionName '0.4.4'
+        versionCode 23
+        versionName '0.4.4.1'
     }
     signingConfigs {
         release {
@@ -25,8 +25,15 @@ android {
     // Distributed directly to home TVs, not Google Play. Keep the existing TV
     // behavior target; all other release lint checks remain enabled.
     lint { disable 'ExpiredTargetSdkVersion' }
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            jvmArgs '--add-opens=java.base/java.lang=ALL-UNNAMED', '--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.base/java.util=ALL-UNNAMED'
+        }
+    }
 }
 dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.11.0'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
 }

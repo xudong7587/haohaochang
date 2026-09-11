@@ -77,7 +77,15 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: '9.4.1'}
-      - run: gradle -p android testDebugUnitTest assembleDebug
+      - run: gradle -p android testDebugUnitTest lintDebug assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-tv-validation
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/reports/lint-results-debug.html
+            android/app/build/test-screenshots/
       - name: Build signed TV update
         if: github.event_name != 'pull_request'
         env:
