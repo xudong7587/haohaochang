@@ -14,6 +14,8 @@ import { Pagination } from "./workbench-controls.jsx";
 import { ResourceRow } from "./library/resource-row.jsx";
 import { HiddenSong } from "./library/hidden-song.jsx";
 import { compareLibraryEntries, librarySorts } from "./library/sorting.js";
+import { matchesResourceFilters, resourceFilters } from "./library/filters.js";
+import "./library/controls.css";
 import { VideoReview } from "./library/video-review.jsx";
 import { SourceImport } from "./library/source-import.jsx";
 import { BatchResults } from "./library/batch-results.jsx";
@@ -63,6 +65,8 @@ export function LibraryManager({ request, notify, onEdit }) {
   const [taskOpen, setTaskOpen] = useState(false),
     [importOpen, setImportOpen] = useState(false);
   const visited = useRef(new Set());
+  const [missing, setMissing] = useState([]);
+  const [resolution, setResolution] = useState("");
   const allCheckbox = useRef(null);
   async function refresh() {
     const [library, pending, inbox, hidden, jobs] = await Promise.all([
@@ -119,7 +123,12 @@ export function LibraryManager({ request, notify, onEdit }) {
       .toLowerCase()
       .includes(query.trim().toLowerCase());
   const filtered = entries
-    .filter((e) => e.tier === tab && matches(e))
+    .filter(
+      (e) =>
+        e.tier === tab &&
+        matches(e) &&
+        matchesResourceFilters(e.row, missing, resolution),
+    )
     .sort((a, b) => compareLibraryEntries(a, b, sort, grouped));
   const currentPage = Math.min(
     page,
@@ -137,7 +146,7 @@ export function LibraryManager({ request, notify, onEdit }) {
     if (allCheckbox.current)
       allCheckbox.current.indeterminate =
         !allSelected && filtered.some((e) => selected.has(e.key));
-  }, [allSelected, selected, tab, query, songs, reviews]);
+  }, [allSelected, selected, tab, query, songs, reviews, missing, resolution]);
   const missingLyrics = songs.filter((song) => !song.lyrics?.trim()).length;
   const batchEntries = chosen.length ? chosen : filtered;
   const batchSongs = batchEntries.filter((e) => !e.review).map((e) => e.row);
@@ -269,23 +278,38 @@ export function LibraryManager({ request, notify, onEdit }) {
               }}
             />
           </label>
-          <select
+          <div
+            className="library-sort-buttons"
+            role="group"
             aria-label="歌曲排序"
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value);
-              setPage(1);
-              try {
-                localStorage.setItem("haohaochang.librarySort", e.target.value);
-              } catch {}
-            }}
           >
-            {librarySorts.map(([id, label]) => (
-              <option key={id} value={id}>
+            {[
+              ["title", "歌名"],
+              ["artist", "歌手"],
+              ["created", "时间"],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                aria-pressed={sort.split("-")[0] === id}
+                data-sort={id}
+                onClick={() => {
+                  const next = sort === id ? `${id}-desc` : id;
+                  setSort(next);
+                  setPage(1);
+                  try {
+                    localStorage.setItem("haohaochang.librarySort", next);
+                  } catch {}
+                }}
+              >
                 {label}
-              </option>
+                {sort.split("-")[0] === id
+                  ? sort.endsWith("-desc")
+                    ? "↓"
+                    : "↑"
+                  : ""}
+              </button>
             ))}
-          </select>
+          </div>
           <div
             className="library-view-switch"
             role="group"
@@ -319,6 +343,64 @@ export function LibraryManager({ request, notify, onEdit }) {
             按歌手分组
           </label>
         </div>
+        <div
+          className="library-resource-filters"
+          role="group"
+          aria-label="资源筛选"
+        >
+          {resourceFilters.map(([id, label]) => (
+            <button
+              key={id}
+              aria-pressed={missing.includes(id)}
+              onClick={() => {
+                setMissing((values) =>
+                  values.includes(id)
+                    ? values.filter((v) => v !== id)
+                    : [...values, id],
+                );
+                setPage(1);
+                setSelected(new Set());
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          <label>
+            视频分辨率
+            <select
+              aria-label="视频分辨率筛选"
+              value={resolution}
+              onChange={(event) => {
+                setResolution(event.target.value);
+                setPage(1);
+                setSelected(new Set());
+              }}
+            >
+              <option value="">全部分辨率</option>
+              {[2160, 1440, 1080, 720, 480, 360].map((h) => (
+                <option key={h} value={h}>
+                  {h}p{h === 2160 ? "及以上" : "档"}
+                </option>
+              ))}
+              <option value="low">低于360p</option>
+              <option value="unknown">分辨率待识别</option>
+              <option value="none">无视频</option>
+            </select>
+          </label>
+          {(missing.length > 0 || resolution) && (
+            <button
+              onClick={() => {
+                setMissing([]);
+                setResolution("");
+                setPage(1);
+                setSelected(new Set());
+              }}
+            >
+              清除资源筛选
+            </button>
+          )}
+          <small>多项筛选同时满足</small>
+        </div>
         <div className="collection-description">
           <span>
             {tab === "pending"
@@ -333,7 +415,7 @@ export function LibraryManager({ request, notify, onEdit }) {
           <small>每 10 秒自动刷新</small>
         </div>
         <div className="collection-actions">
-          <div className="actions">
+          <div className="actions collection-selection">
             {tab !== "hidden" && (
               <label className="checkbox">
                 <input

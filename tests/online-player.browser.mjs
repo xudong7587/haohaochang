@@ -175,6 +175,28 @@ try {
     await page.getByRole("dialog").getByRole("heading").textContent(),
     "测试歌名 · 测试歌手",
   );
+  await page.setViewportSize({ width: 390, height: 640 });
+  const closeBefore = await page
+    .getByRole("button", { name: "关闭", exact: true })
+    .boundingBox();
+  await page.locator(".song-preview").evaluate((body) => {
+    body.scrollTop = body.scrollHeight;
+  });
+  const closeAfter = await page
+    .getByRole("button", { name: "关闭", exact: true })
+    .boundingBox();
+  assert.equal(closeAfter.y, closeBefore.y);
+  assert.ok(closeAfter.y >= 0 && closeAfter.y + closeAfter.height <= 640);
+  assert.ok(
+    await page.locator(".song-preview").evaluate((body) => body.scrollTop > 0),
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  assert.equal(await page.getByRole("dialog").count(), 0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator(".video-card").first().click();
+  await page.waitForFunction(
+    () => document.querySelector("video")?.readyState >= 1,
+  );
   await page.locator("video").evaluate((v) => {
     v.pause();
     v.currentTime = 1.25;

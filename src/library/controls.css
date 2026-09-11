@@ -1,0 +1,47 @@
+.library-sort-buttons,
+.library-resource-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.library-resource-filters {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.library-resource-filters label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.library-resource-filters small {
+  color: var(--muted);
+}
+.library-sort-buttons button[aria-pressed="true"],
+.library-resource-filters button[aria-pressed="true"] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.library-workspace .collection-selection {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 16px;
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 4px 0;
+}
+.library-workspace .collection-selection .checkbox {
+  display: flex;
+  align-items: center;
+  flex: none;
+  white-space: nowrap;
+  margin: 0;
+  gap: 8px;
+}
+.collection-selection > span {
+  white-space: nowrap;
+}

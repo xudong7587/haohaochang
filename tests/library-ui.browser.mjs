@@ -1,5 +1,6 @@
 // Isolated component contract test: no real database, downloader, or media requests.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
@@ -57,7 +58,7 @@ const server = await createServer({
       },
     },
   ],
-  server: { host: "127.0.0.1", port: 0 },
+  server: { host: "127.0.0.1", port: 0, watch: null },
 });
 await server.listen();
 const browser = await chromium.launch({
@@ -217,6 +218,9 @@ try {
     .first()
     .click();
   await row.getByText(/歌词来源：本地 LRC/).waitFor();
+  await row
+    .getByLabel("编辑 LRC 歌词")
+    .fill("[ar:修改后的歌手]\n[00:01]本地候选歌词");
   await row.getByRole("button", { name: "仅保存信息", exact: true }).click();
   assert.equal(
     (
@@ -224,7 +228,15 @@ try {
         window.calls.filter((call) => call.url.endsWith("/save")).at(-1),
       )
     ).body.lyricsSource.provider,
-    "local-lrc",
+    "manual",
+  );
+  assert.equal(
+    (
+      await page.evaluate(() =>
+        window.calls.filter((call) => call.url.endsWith("/save")).at(-1),
+      )
+    ).body.lyrics,
+    "[ar:修改后的歌手]\n[00:01]本地候选歌词",
   );
   await row.getByRole("button", { name: "视频画面", exact: true }).click();
   await row
@@ -477,7 +489,15 @@ try {
     ["created", ["b", "c", "a"]],
     ["created-desc", ["a", "c", "b"]],
   ]) {
-    await sorting.selectOption(sort);
+    const button = sorting.locator(`[data-sort="${sort.split("-")[0]}"]`);
+    await button.click();
+    if (
+      (await page.evaluate(() =>
+        localStorage.getItem("haohaochang.librarySort"),
+      )) !== sort
+    )
+      await button.click();
+    assert.equal(await button.getAttribute("aria-pressed"), "true");
     assert.deepEqual(
       await page
         .locator("article[data-song-id]:visible")
@@ -500,8 +520,50 @@ try {
       await page.locator('[data-song-id="order-c"] header').textContent()
     ).includes("无视频"),
   );
+  await page.getByLabel("视频分辨率筛选").selectOption("720");
+  assert.deepEqual(
+    await page
+      .locator("article[data-song-id]:visible")
+      .evaluateAll((rows) => rows.map((row) => row.dataset.songId)),
+    ["order-b"],
+  );
+  await page.getByRole("button", { name: "缺少视频", exact: true }).click();
+  assert.equal(await page.locator("article[data-song-id]:visible").count(), 0);
+  await page.getByRole("button", { name: "清除资源筛选", exact: true }).click();
+  await page.getByRole("button", { name: "缺少视频", exact: true }).click();
+  assert.deepEqual(
+    await page
+      .locator("article[data-song-id]:visible")
+      .evaluateAll((rows) => rows.map((row) => row.dataset.songId)),
+    ["order-c"],
+  );
+  await page.getByRole("button", { name: "清除资源筛选", exact: true }).click();
+  await page.addStyleTag({
+    content: await readFile(
+      new URL("../src/style.css", import.meta.url),
+      "utf8",
+    ),
+  });
+  await page.addStyleTag({
+    content: await readFile(
+      new URL("../src/library/controls.css", import.meta.url),
+      "utf8",
+    ),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const labels = await page
+    .locator(".collection-selection label")
+    .evaluateAll((items) =>
+      items.map((item) => item.getBoundingClientRect().y),
+    );
+  assert.equal(labels[0], labels[1]);
   await page.reload();
-  assert.equal(await sorting.inputValue(), "created-desc");
+  assert.equal(
+    await sorting
+      .getByRole("button", { name: "时间↓" })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
   assert.deepEqual(errors, []);
   console.log(
     "Library component browser contracts passed: drafts, candidates, lyrics, hide/restore/permanent delete, six sorting orders with persistence, and SD/HD video labels.",

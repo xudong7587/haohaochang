@@ -208,7 +208,7 @@ export function ResourceRow({
     edit({ lyrics, lyricsSource });
     notify(
       candidate.warning ||
-        `${candidate.source || candidate.provider || "歌词提供者"} 候选已载入，请试听核对字幕节奏后保存`,
+        `${candidate.source || candidate.provider || "歌词提供者"} 候选已载入，可在下方编辑 LRC，核对后保存`,
     );
   }
   async function refreshMetadata() {
@@ -703,8 +703,9 @@ export function ResourceRow({
                 。歌名、歌手和时长匹配只代表候选，请试听核对录音版本与字幕节奏。
               </p>
               <label>
-                歌词
+                歌词（LRC，可直接编辑）
                 <textarea
+                  aria-label="编辑 LRC 歌词"
                   disabled={busy}
                   value={form.lyrics}
                   onChange={(event) =>
@@ -720,6 +721,9 @@ export function ResourceRow({
                   placeholder="[00:12.00]带时间戳的歌词"
                 />
               </label>
+              <p className="muted">
+                导入文件或选择候选后，可直接修改歌手名、文字和时间戳；点击下方保存按钮后生效。仅修改署名时请保留原时间戳。
+              </p>
               {row.lyricsAlignment && !review && (
                 <p>
                   已按人声起点自动校准{" "}

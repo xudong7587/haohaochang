@@ -5,6 +5,7 @@ import { rankVideos } from "../shared/video-ranking.js";
 import { BiliLogin } from "./bili-login.jsx";
 import { MobileRequests } from "./mobile-requests.jsx";
 import { videoRefreshMode } from "../shared/video-refresh.js";
+import "./online-preview.css";
 
 const time = (n) =>
   `${Math.floor((n || 0) / 60)}:${((n || 0) % 60).toFixed(1).padStart(4, "0")}`;

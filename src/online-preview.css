@@ -1,0 +1,27 @@
+.video-preview-modal[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  max-height: 85vh;
+}
+.video-preview-modal .modal-head {
+  flex: none;
+  margin: 0;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  background: #fff;
+  z-index: 2;
+}
+.video-preview-modal .modal-head button {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+}
+.video-preview-modal .song-preview {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 22px;
+}
