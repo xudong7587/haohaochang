@@ -38,7 +38,16 @@ export async function downloadBiliTracks(
   const streams = await resolve(url, cookie, fetch, quality, true);
   requireDownloadHeight(streams.previewHeight, quality, expectedHeight);
   const id = createHash("sha256")
-    .update(url + "\n" + cookie + "\n" + quality + "\n" + streams.previewHeight)
+    .update(
+      [
+        url,
+        cookie,
+        quality,
+        streams.previewHeight,
+        streams.previewFps || 0,
+        streams.videoCodec || "",
+      ].join("\n"),
+    )
     .digest("hex")
     .slice(0, 24);
   return withKeyLock(locks, path.resolve(directory, id), async () => {
@@ -53,6 +62,8 @@ export async function downloadBiliTracks(
         quality,
         Math.max(expectedHeight, streams.previewHeight),
       );
+      if (streams.previewFps > 0 && v.videoFps + 0.1 < streams.previewFps)
+        throw new Error("实际视频帧率低于所选视频流，请重试下载");
       if (
         !a.audio.length ||
         a.hasVideo ||

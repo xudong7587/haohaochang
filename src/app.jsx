@@ -14,7 +14,7 @@ import {
   tvPairFromHash,
 } from "./api.js";
 import { TvLoginQr, PhonePairing } from "./tv-pairing.jsx";
-import { handleTvBack } from "./tv-back.js";
+import { useTvNavigation } from "./playback/tv-navigation.js";
 import { reloadInterface } from "./reload-interface.js";
 import { modeNames, statusNames } from "./view-constants.js";
 import { SearchBox, Empty, Modal } from "./components.jsx";
@@ -224,99 +224,22 @@ export function App() {
       live = false;
     };
   }, [authenticated, refresh, taskRefresh]);
-  useEffect(() => {
-    if (route !== "tv") return;
-    window.haohaochangBack = handleTvBack;
-    function key(e) {
-      if (e.defaultPrevented) return;
-      document.body.classList.add("keyboard");
-      if (e.key === "Escape" || e.key === "BrowserBack") {
-        if (!authenticated) return;
-        if (document.querySelector("dialog[open]")) return;
-        if (!showQR && !artist && !query && !tag && tab === "stage") return;
-        e.preventDefault();
-        if (showQR) setShowQR(false);
-        else if (artist) {
-          setArtist("");
-          setTab("artists");
-        } else if (query || tag) {
-          setQuery("");
-          setTag("");
-        } else {
-          setTab("stage");
-          document.querySelector("nav button")?.focus();
-        }
-        return;
-      }
-      if (
-        !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) ||
-        (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) &&
-          ["ArrowLeft", "ArrowRight"].includes(e.key)) ||
-        document.activeElement?.tagName === "SELECT"
-      )
-        return;
-      const focusRoot =
-        document.querySelector("dialog[open]") ||
-        document.fullscreenElement ||
-        document.querySelector(".tv-player.is-full") ||
-        document;
-      const items = [
-        ...focusRoot.querySelectorAll(
-          "button:not(:disabled),input,a[href],select,textarea,summary,[tabindex]",
-        ),
-      ].filter(
-        (el) =>
-          el.tabIndex >= 0 &&
-          el.getClientRects().length &&
-          !el.closest("[inert]") &&
-          getComputedStyle(el).visibility !== "hidden",
-      );
-      const active = document.activeElement;
-      if (!items.includes(active)) {
-        e.preventDefault();
-        items[0]?.focus();
-        return;
-      }
-      const rect = active.getBoundingClientRect(),
-        x = rect.x + rect.width / 2,
-        y = rect.y + rect.height / 2;
-      let best,
-        score = Infinity;
-      for (const el of items) {
-        if (el === active) continue;
-        const r = el.getBoundingClientRect(),
-          dx = r.x + r.width / 2 - x,
-          dy = r.y + r.height / 2 - y;
-        const main =
-          e.key === "ArrowRight"
-            ? dx
-            : e.key === "ArrowLeft"
-              ? -dx
-              : e.key === "ArrowDown"
-                ? dy
-                : -dy;
-        const cross =
-          e.key === "ArrowRight" || e.key === "ArrowLeft"
-            ? Math.abs(dy)
-            : Math.abs(dx);
-        if (main > 4 && main + cross * 2.5 < score) {
-          score = main + cross * 2.5;
-          best = el;
-        }
-      }
-      e.preventDefault();
-      best?.focus();
-      best?.scrollIntoView({ block: "nearest" });
-    }
-    document.addEventListener("keydown", key);
-    const pointer = () => document.body.classList.remove("keyboard");
-    document.addEventListener("pointerdown", pointer);
-    return () => {
-      delete window.haohaochangBack;
-      document.removeEventListener("keydown", key);
-      document.removeEventListener("pointerdown", pointer);
-    };
-  }, [tab, artist, showQR, authenticated, query, tag]);
+  const navigation = useTvNavigation({
+    enabled: route === "tv",
+    nested: route === "tv" && !isWebRoom,
+    tab,
+    artist,
+    showQR,
+    authenticated,
+    query,
+    tag,
+    setTab,
+    setArtist,
+    setShowQR,
+    setQuery,
+    setTag,
+  });
+  const playerActions = useRef(null);
   async function control(action) {
     await attempt(() =>
       api("/control", { action, entryId: current?.id }, "POST"),
@@ -425,7 +348,9 @@ export function App() {
       />
     );
   return (
-    <div className={`app ${route} ${tab === "stage" ? "stage-home" : ""}`}>
+    <div
+      className={`app ${route} ${tab === "stage" ? "stage-home" : ""} ${navigation.entered ? "tv-content-entered" : ""}`}
+    >
       <aside className="sidebar">
         <a className="brand" href={route === "admin" ? "/admin" : "/tv"}>
           <span className="brandmark">
@@ -554,7 +479,7 @@ export function App() {
           )}
         </div>
       </aside>
-      <main>
+      <main tabIndex={-1} onFocusCapture={navigation.onContentFocus}>
         <header>
           <div className="breadcrumb">
             我的客厅 <span>/</span>{" "}
@@ -828,6 +753,7 @@ export function App() {
                 {artists.map((a) => (
                   <button
                     className="artist-card artist-photo-card"
+                    data-artist={a.artist}
                     key={a.artist}
                     onClick={() => {
                       setArtist(a.artist);
@@ -1003,6 +929,7 @@ export function App() {
       </main>
       {route === "tv" && (
         <Player
+          actionsRef={playerActions}
           playerType={isWebRoom ? "web" : "tv"}
           activePlayer={state.player}
           keyboardLyrics={tab === "stage"}
@@ -1080,6 +1007,16 @@ export function App() {
             <SkipForward size={21} />
             <span>切歌</span>
           </button>
+          {route === "tv" && (
+            <button
+              data-open-fullscreen
+              aria-label="全屏播放"
+              onClick={() => playerActions.current?.fullscreen()}
+            >
+              <Monitor size={21} />
+              <span>全屏</span>
+            </button>
+          )}
         </div>
         <button className="queue-link" onClick={() => setTab("queue")}>
           <ListMusic size={20} />

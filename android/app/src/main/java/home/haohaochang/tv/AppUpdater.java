@@ -60,7 +60,12 @@ final class AppUpdater {
                 if (release.optBoolean("draft") || release.optBoolean("prerelease")) throw new Exception("暂无正式新版");
                 if (!UpdatePolicy.newer(tag, current())) { ui(() -> { progress.dismiss(); if (!cancelled) message("已是最新版本"); }); return; }
                 JSONArray assets = release.getJSONArray("assets"); JSONObject found = null;
-                for (int i=0; i<assets.length(); i++) if ("haohaochang-tv.apk".equals(assets.getJSONObject(i).getString("name"))) found = assets.getJSONObject(i);
+                int priority = 0;
+                for (int i=0; i<assets.length(); i++) {
+                    JSONObject candidate = assets.getJSONObject(i);
+                    int score = UpdatePolicy.assetPriority(candidate.getString("name"), tag);
+                    if (score > priority) { found = candidate; priority = score; }
+                }
                 if (found == null || !UpdatePolicy.allowed(found.getString("browser_download_url"), true) || !found.optString("digest").matches("sha256:[a-f0-9]{64}") || found.getLong("size") <= 0 || found.getLong("size") > 50*1024*1024) throw new Exception("新版缺少有效的 APK 或校验信息");
                 final JSONObject asset = found;
                 ui(() -> { progress.dismiss(); if (!cancelled) new AlertDialog.Builder(activity).setTitle("发现新版 " + tag).setMessage("下载校验后将打开系统安装界面。连接设置会保留。").setPositiveButton("下载更新", (d,w) -> download(asset)).setNegativeButton("稍后", null).show(); });

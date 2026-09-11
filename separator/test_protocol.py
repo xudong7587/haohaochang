@@ -245,16 +245,17 @@ class RouteTests(unittest.TestCase):
         if not ffmpeg or not ffprobe: self.skipTest('FFmpeg and ffprobe required')
         job, _ = self.module.jobs.reserve('video:0:1', 'video preparation')
         folder = self.module.ROOT / job
-        subprocess.run([ffmpeg, '-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=2560x1440:r=5:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', str(folder/'input.mp4')], check=True)
+        subprocess.run([ffmpeg, '-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=3840x2160:r=60:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', str(folder/'input.mp4')], check=True)
         original = (folder/'input.mp4').read_bytes()
-        with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cpu'}):
-            execute_clip(self.module.jobs, job, 0, 1, True)
+        with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cpu', 'KTV_VIDEO_ENCODER': 'cpu'}):
+            execute_clip(self.module.jobs, job, 0, 1, True, 2160, 60)
         self.assertEqual(self.module.jobs.state(job)['status'], 'done')
         info = json.loads(subprocess.check_output([ffprobe, '-v', 'error', '-show_streams', '-of', 'json', str(folder/'clip.mp4')]))
         self.assertEqual([s['codec_type'] for s in info['streams']], ['video'])
         self.assertEqual(info['streams'][0]['codec_name'], 'h264')
-        self.assertEqual(info['streams'][0]['width'], 2560)
-        self.assertEqual(info['streams'][0]['height'], 1440)
+        self.assertEqual(info['streams'][0]['width'], 3840)
+        self.assertEqual(info['streams'][0]['height'], 2160)
+        self.assertEqual(info['streams'][0]['avg_frame_rate'], '60/1')
         self.assertEqual((folder/'input.mp4').read_bytes(), original)
 
     def test_nvenc_failure_falls_back_to_cpu_for_video_only(self):
@@ -262,12 +263,15 @@ class RouteTests(unittest.TestCase):
         from clipping import execute_clip
         job, _ = self.module.jobs.reserve('video:0:1', 'fallback')
         (self.module.ROOT / job / 'clip.mp4').write_bytes(b'validated test output')
-        with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cuda'}), patch('clipping.run_ffmpeg', side_effect=[subprocess.CalledProcessError(1, 'nvenc'), None, None]) as run:
+        with patch.dict(os.environ, {'SEPARATION_DEVICE': 'cpu', 'KTV_VIDEO_ENCODER': 'nvenc'}), patch('clipping.run_ffmpeg', side_effect=[subprocess.CalledProcessError(1, 'cuda decode'), subprocess.CalledProcessError(1, 'nvenc'), None, None]) as run:
             execute_clip(self.module.jobs, job, 0, 1, True)
         self.assertEqual(self.module.jobs.state(job)['status'], 'done')
         self.assertIn('h264_nvenc', run.call_args_list[0].args[0])
-        self.assertIn('libx264', run.call_args_list[1].args[0])
-        self.assertIn('-an', run.call_args_list[1].args[0])
+        self.assertIn('h264_nvenc', run.call_args_list[1].args[0])
+        self.assertNotIn('-hwaccel', run.call_args_list[1].args[0])
+        self.assertIn('libx264', run.call_args_list[2].args[0])
+        self.assertIn('-an', run.call_args_list[2].args[0])
+        self.assertEqual(self.module.jobs.state(job)['encoder'], 'CPU libx264')
 
 
 if __name__ == '__main__':

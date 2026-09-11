@@ -7,6 +7,7 @@ import threading
 import time
 from fastapi import Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from video_encoding import encoder_plans, video_filter
 
 
 def run_ffmpeg(command, jobs, job, stage, duration, log, timeout=1800):
@@ -43,7 +44,7 @@ def run_ffmpeg(command, jobs, job, stage, duration, log, timeout=1800):
             process.wait()
 
 
-def execute_clip(jobs, job, start, end, video_only=False, video_height=1080, video_fps=30):
+def execute_clip(jobs, job, start, end, video_only=False, video_height=1080, video_fps=30, video_transfer=''):
     folder = jobs.root / job
     jobs.write(job, dict(status='running', stage='preparing-video-pc' if video_only else 'clipping'))
     try:
@@ -52,31 +53,31 @@ def execute_clip(jobs, job, start, end, video_only=False, video_height=1080, vid
                 '-ss', str(start), '-i', str(folder / 'input.mp4'), '-t', str(end-start),
                 '-map', '0:v:0']
             if video_only:
-                command += ['-an', '-vf', "scale=w='trunc(iw/2)*2':h=-2", '-pix_fmt', 'yuv420p']
+                command += ['-an', '-vf', video_filter(video_transfer), '-pix_fmt', 'yuv420p']
             else:
                 command += ['-map', '0:a:0', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k']
-            gpu = video_only and os.getenv('SEPARATION_DEVICE') == 'cuda'
-            # Keep source resolution/FPS. Bound H.264 expansion of small HEVC/AV1
-            # files, and favor throughput over expensive encoder search.
-            bitrate = (32 if video_fps > 40 else 24) if video_height > 1440 else (16 if video_height > 1080 else 8)
-            encoders = [(['-c:v', 'h264_nvenc', '-preset', 'p2', '-rc', 'vbr', '-cq', '22',
-                '-b:v', f'{bitrate}M', '-maxrate', f'{bitrate * 1.5:g}M', '-bufsize', f'{bitrate * 3}M'], 'NVIDIA NVENC')] if gpu else []
-            encoders.append((['-c:v', 'libx264', '-preset', 'veryfast' if video_only else 'fast', '-crf', '22' if video_only else '20'], 'CPU libx264'))
-            for index, (encoder, name) in enumerate(encoders):
+                if video_transfer: command += ['-vf', video_filter(video_transfer)]
+            if video_transfer: command += ['-color_trc', 'bt709', '-color_primaries', 'bt709', '-colorspace', 'bt709']
+            encoders = encoder_plans(command[0], video_height, video_fps, video_only)
+            gpu = False
+            for index, (encoder, name, gpu_decode) in enumerate(encoders):
+                if gpu_decode and (not video_only or video_transfer in ('smpte2084', 'arib-std-b67')):
+                    continue
                 log.write(('Video encoder: ' + name + '\n').encode('utf-8')); log.flush()
                 try:
                     selected = list(command)
-                    if name == 'NVIDIA NVENC':
+                    if gpu_decode:
                         selected[1:1] = ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda']
                         selected[selected.index('-vf') + 1] = "scale_cuda=w=iw:h=ih:format=yuv420p"
                         pixel = selected.index('-pix_fmt')
                         del selected[pixel:pixel + 2]
                     run_ffmpeg(selected + encoder + ['-fps_mode', 'passthrough', '-movflags', '+faststart', str(folder / 'clip.mp4')],
                         jobs, job, 'preparing-video-pc' if video_only else 'clipping', end-start, log)
+                    gpu = gpu_decode
                     break
                 except subprocess.CalledProcessError:
                     if index == len(encoders) - 1: raise
-                    log.write(b'NVENC unavailable; retrying video on PC CPU.\n'); log.flush()
+                    log.write(b'Encoder attempt failed; trying the next PC encoder.\n'); log.flush()
             jobs.write(job, dict(status='running', stage='validating-video-pc'))
             validate = [os.getenv('FFMPEG', 'ffmpeg'), '-nostdin', '-v', 'error', '-xerror', '-err_detect', 'explode']
             tail = ['-i', str(folder / 'clip.mp4'), '-map', '0', '-f', 'null', '-']
@@ -89,7 +90,7 @@ def execute_clip(jobs, job, start, end, video_only=False, video_height=1080, vid
         digest = hashlib.sha256()
         with (folder / 'clip.mp4').open('rb') as result:
             while chunk := result.read(1024 * 1024): digest.update(chunk)
-        jobs.write(job, dict(status='done', stage='done', video_url=f'/clip-artifacts/{job}',
+        jobs.write(job, dict(status='done', stage='done', encoder=name, video_url=f'/clip-artifacts/{job}',
             validation=dict(decoded=True, sha256=digest.hexdigest())))
     except (OSError, subprocess.SubprocessError) as error:
         jobs.write(job, dict(status='failed', stage='preparing-video-pc' if video_only else 'clipping', error=str(error)[-600:]))
@@ -99,7 +100,7 @@ def register(app, auth, jobs, pool, job_path):
     @app.post('/clip', dependencies=[Depends(auth)])
     async def submit(file: UploadFile = File(...), start: float = Form(...), end: float = Form(...),
                      title: str = Form(default=''), video_only: bool = Form(default=False), video_height: int = Form(default=1080),
-                     video_fps: float = Form(default=30), idempotency_key: str = Header(default='')):
+                     video_fps: float = Form(default=30), video_transfer: str = Form(default=''), idempotency_key: str = Header(default='')):
         created = False
         job = None
         try:
@@ -107,6 +108,8 @@ def register(app, auth, jobs, pool, job_path):
                 raise HTTPException(400, 'Invalid clip range')
             if not 1 <= video_height <= 16384 or not math.isfinite(video_fps) or not 0 < video_fps <= 1000:
                 raise HTTPException(400, 'Invalid video dimensions or frame rate')
+            if video_transfer not in ('', 'smpte2084', 'arib-std-b67'):
+                raise HTTPException(400, 'Unsupported HDR transfer')
             if len(idempotency_key) > 120 or any(not (c.isascii() and (c.isalnum() or c in '_-')) for c in idempotency_key):
                 raise HTTPException(400, 'Invalid idempotency key')
             try:
@@ -125,14 +128,14 @@ def register(app, auth, jobs, pool, job_path):
             with (folder / 'input.part').open('wb') as target:
                 while chunk := await file.read(1024 * 1024):
                     size += len(chunk)
-                    if size > 1024**3:
-                        raise HTTPException(413, 'Video exceeds 1 GB')
+                    if size > 4 * 1024**3:
+                        raise HTTPException(413, 'Video exceeds 4 GB')
                     target.write(chunk)
             if not size:
                 raise HTTPException(400, 'Empty video')
             (folder / 'input.part').replace(folder / 'input.mp4')
             jobs.write(job, dict(status='queued', stage='clipping'))
-            pool.submit(execute_clip, jobs, job, start, end, video_only, video_height, video_fps)
+            pool.submit(execute_clip, jobs, job, start, end, video_only, video_height, video_fps, video_transfer)
             return dict(id=job, status='queued')
         except BaseException:
             if created:

@@ -17,7 +17,7 @@ import importlib.util
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'separator'))
 from job_store import JobStore
-from updater import UpdateManager, unpack, safe_name, allowed_url, version
+from updater import UpdateManager, unpack, safe_name, allowed_url, version, release_asset
 from update_runner import apply, rollback
 import update_runner
 
@@ -33,6 +33,14 @@ def bundle(files=None):
 
 
 class UpdateTest(unittest.TestCase):
+    def test_versioned_asset_matches_release_and_takes_precedence_over_legacy(self):
+        legacy={'name':'haohaochang-resource-ai.zip'}
+        current={'name':'haohaochang-resource-ai-v0.4.0.zip'}
+        wrong={'name':'haohaochang-resource-ai-v0.4.1.zip'}
+        self.assertEqual(release_asset([wrong, legacy, current], 'v0.4.0'), current)
+        self.assertEqual(release_asset([legacy], '0.3.14'), legacy)
+        self.assertIsNone(release_asset([wrong], '0.4.0'))
+        with self.assertRaises(ValueError): release_asset([current], '0.4.0-beta')
     def test_authenticated_desktop_api_and_busy_exit(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)

@@ -4,13 +4,14 @@ import { Modal } from "./components.jsx";
 import { rankVideos } from "../shared/video-ranking.js";
 import { BiliLogin } from "./bili-login.jsx";
 import { MobileRequests } from "./mobile-requests.jsx";
+import { videoRefreshMode } from "../shared/video-refresh.js";
 
 const time = (n) =>
   `${Math.floor((n || 0) / 60)}:${((n || 0) % 60).toFixed(1).padStart(4, "0")}`;
 const mediaUrl = (url) =>
   url ? `${url}?token=${encodeURIComponent(roomToken)}` : undefined;
 
-function VideoPreview({
+export function VideoPreview({
   selection,
   close,
   notify,
@@ -18,6 +19,8 @@ function VideoPreview({
   mobile = false,
   name = "家人",
   onSubmitted = () => {},
+  onReplace,
+  refreshSource,
 }) {
   const video = useRef(null),
     audio = useRef(null);
@@ -83,27 +86,27 @@ function VideoPreview({
     setBusy(true);
     setError("");
     try {
-      await api(
-        "/online",
-        {
-          url: row.url,
-          title,
-          artist,
-          onlineSelection: true,
-          client: mobile ? "mobile" : "admin",
-          name,
-          previewId: preview?.id,
-          quality,
-          clip: start !== null || end !== null ? { start, end } : null,
-        },
-        "POST",
-      );
+      const input = {
+        url: row.url,
+        title,
+        artist,
+        onlineSelection: true,
+        client: mobile ? "mobile" : "admin",
+        name,
+        previewId: preview?.id,
+        quality,
+        clip: start !== null || end !== null ? { start, end } : null,
+      };
+      if (onReplace) await onReplace(input);
+      else await api("/online", input, "POST");
       setAdded(true);
       onSubmitted();
       notify(
-        mobile
-          ? "已优先安排整理，完成后自动加入已点歌曲；画面下载失败会尝试音频与歌词。"
-          : "已加入整理任务：下载 → PC 裁剪与分离 → 入库。可在后台任务查看进度。",
+        onReplace
+          ? "已提交视频更新，旧资源在新版本验证完成前继续保留。"
+          : mobile
+            ? "已优先安排整理，完成后自动加入已点歌曲；画面下载失败会尝试音频与歌词。"
+            : "已加入整理任务：下载 → PC 裁剪与分离 → 入库。可在后台任务查看进度。",
       );
     } catch (e) {
       setError(e.message);
@@ -112,6 +115,13 @@ function VideoPreview({
     }
   }
   const invalid = (end ?? preview?.duration ?? Infinity) <= (start ?? 0);
+  const updatePlan = onReplace
+    ? videoRefreshMode(
+        refreshSource,
+        row.url,
+        start !== null || end !== null ? { start, end } : null,
+      )
+    : null;
   return (
     <Modal
       title={`${title} · ${artist}`}
@@ -120,6 +130,11 @@ function VideoPreview({
     >
       <div className="song-preview">
         <p className="preview-source-title">{row.title}</p>
+        {updatePlan && (
+          <p className="video-refresh-plan" role="status">
+            {updatePlan.reason}
+          </p>
+        )}
         <label className="preview-quality">
           下载清晰度
           <select
@@ -224,9 +239,13 @@ function VideoPreview({
               ? "已加入整理任务"
               : busy
                 ? "提交中…"
-                : mobile
-                  ? "整理并点歌"
-                  : "加入曲库"}
+                : onReplace
+                  ? updatePlan.mode === "video-only"
+                    ? "仅更新视频"
+                    : "更新视频并重新分离"
+                  : mobile
+                    ? "整理并点歌"
+                    : "加入曲库"}
           </button>
         </div>
         <div className="clip-panel">
@@ -289,17 +308,30 @@ function VideoPreview({
 
 export function OnlineSongs({
   initialTitle = "",
+  initialArtist = "",
+  initialUrl = "",
+  onReplace,
+  refreshSource,
   notify,
   canLogin = false,
   mobile = false,
   name = "家人",
 }) {
   const [title, setTitle] = useState(initialTitle),
-    [artist, setArtist] = useState(""),
+    [artist, setArtist] = useState(initialArtist),
     [data, setData] = useState(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [selection, setSelection] = useState(null);
+    [selection, setSelection] = useState(
+      initialUrl
+        ? {
+            row: { url: initialUrl, title: initialTitle },
+            title: initialTitle,
+            artist: initialArtist,
+          }
+        : null,
+    );
+  const [directUrl, setDirectUrl] = useState("");
   const [audioBusy, setAudioBusy] = useState(false),
     [requestRevision, setRequestRevision] = useState(0);
   async function requestAudio() {
@@ -415,6 +447,31 @@ export function OnlineSongs({
           {busy ? "搜索中…" : "搜索视频"}
         </button>
       </form>
+      {onReplace && (
+        <form
+          className="video-refresh-link"
+          onSubmit={(event) => {
+            event.preventDefault();
+            try {
+              const plan = videoRefreshMode(refreshSource, directUrl, null);
+              setSelection({ row: { url: plan.url, title }, title, artist });
+            } catch (error) {
+              setError(error.message);
+            }
+          }}
+        >
+          <label>
+            或粘贴 B站链接
+            <input
+              aria-label="更新视频链接"
+              value={directUrl}
+              onChange={(event) => setDirectUrl(event.target.value)}
+              placeholder="https://www.bilibili.com/video/BV…"
+            />
+          </label>
+          <button disabled={!directUrl.trim()}>预览链接</button>
+        </form>
+      )}
       {error && <p role="alert">{error}</p>}
       {mobile && (
         <div className="mobile-audio-fallback">
@@ -486,6 +543,8 @@ export function OnlineSongs({
           canLogin={canLogin}
           mobile={mobile}
           name={name}
+          onReplace={onReplace}
+          refreshSource={refreshSource}
           onSubmitted={() => setRequestRevision((v) => v + 1)}
         />
       )}

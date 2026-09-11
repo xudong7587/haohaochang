@@ -5,6 +5,7 @@ import { VideoConfirmation, validOffset } from "./video-confirmation.jsx";
 import { SongArtwork } from "../song-artwork.jsx";
 import { roomToken } from "../api.js";
 import { PosterEditor } from "./poster-editor.jsx";
+import { VideoRefresh } from "./video-refresh.jsx";
 
 const resourceNames = {
   video: "视频画面",
@@ -334,38 +335,10 @@ export function ResourceRow({
             {row.canUpgradeHd && !review && (
               <button
                 disabled={busy || draft.dirty}
-                onClick={() =>
-                  run(async () => {
-                    await request(
-                      "/admin/library/" + row.id + "/upgrade-hd",
-                      { expectedRevision: row.metadataRevision },
-                      "POST",
-                    );
-                    notify(
-                      "已排队升级高清画面：沿用原裁剪区间，保留原唱、伴奏和歌词",
-                    );
-                  })
-                }
+                onClick={() => setPane("video")}
               >
-                升级高清画面
+                更新原链接视频
               </button>
-            )}
-            {row.tier !== "standard" && (
-              <>
-                <button
-                  className="primary"
-                  disabled={busy || draft.conflict}
-                  onClick={organize}
-                >
-                  {row.tier === "audio" ? "整理 / 查找 MV" : "开始整理"}
-                </button>
-                <button
-                  disabled={busy || draft.conflict}
-                  onClick={refreshMetadata}
-                >
-                  刷新歌名 / 歌手
-                </button>
-              </>
             )}
             {!review && row.tier === "standard" && (
               <details>
@@ -554,64 +527,77 @@ export function ResourceRow({
               </div>
             </div>
             <div hidden={pane !== "video"}>
-              <p>
-                {hasDualAudio
-                  ? "补充或替换画面会保留现有原唱、伴奏和歌词。请核对同一录音版本与起始偏移。"
-                  : "尚未具备完整双音轨。更换视频来源后需要重新匹配歌词和准备音轨。"}
-              </p>
-              <label>
-                视频链接（B站支持 ?p= 分集）
-                <input
-                  disabled={busy}
-                  value={form.url}
-                  onChange={(event) => edit({ url: event.target.value })}
-                  placeholder="https://www.bilibili.com/video/BV…"
+              {!review && (
+                <VideoRefresh
+                  row={row}
+                  revision={draft.revision}
+                  request={request}
+                  notify={notify}
+                  busy={busy || draft.conflict}
                 />
-              </label>
-              <div className="actions">
-                <button
-                  disabled={busy || draft.conflict || !form.url}
-                  onClick={() =>
-                    run(async () => {
-                      const info = await request(
-                        "/admin/source-info",
-                        { url: form.url },
-                        "POST",
-                      );
-                      setParsed(info);
-                      edit({
-                        title: info.title || form.title,
-                        artist: info.artist || form.artist,
-                      });
-                      notify(
-                        info.needs_review
-                          ? "已提取标题，请核对歌手、歌名与录音版本"
-                          : "识别资料已放入草稿",
-                      );
-                    })
-                  }
-                >
-                  解析 MV 信息
-                </button>
-              </div>
-              {(parsed?.candidate?.canonicalUrl || form.url) && (
-                <p>
-                  <a
-                    href={parsed?.candidate?.canonicalUrl || form.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    打开视频试听
-                  </a>
-                  {parsed?.candidate?.externalTitle
-                    ? ` · ${parsed.candidate.externalTitle}`
-                    : ""}
-                </p>
               )}
-              {!review && form.url && (
-                <VideoConfirmation
-                  {...{ confirmed, setConfirmed, offset, setOffset, busy }}
-                />
+              {review && (
+                <>
+                  <p>
+                    {hasDualAudio
+                      ? "补充或替换画面会保留现有原唱、伴奏和歌词。请核对同一录音版本与起始偏移。"
+                      : "尚未具备完整双音轨。更换视频来源后需要重新匹配歌词和准备音轨。"}
+                  </p>
+                  <label>
+                    视频链接（B站支持 ?p= 分集）
+                    <input
+                      disabled={busy}
+                      value={form.url}
+                      onChange={(event) => edit({ url: event.target.value })}
+                      placeholder="https://www.bilibili.com/video/BV…"
+                    />
+                  </label>
+                  <div className="actions">
+                    <button
+                      disabled={busy || draft.conflict || !form.url}
+                      onClick={() =>
+                        run(async () => {
+                          const info = await request(
+                            "/admin/source-info",
+                            { url: form.url },
+                            "POST",
+                          );
+                          setParsed(info);
+                          edit({
+                            title: info.title || form.title,
+                            artist: info.artist || form.artist,
+                          });
+                          notify(
+                            info.needs_review
+                              ? "已提取标题，请核对歌手、歌名与录音版本"
+                              : "识别资料已放入草稿",
+                          );
+                        })
+                      }
+                    >
+                      解析 MV 信息
+                    </button>
+                  </div>
+                  {(parsed?.candidate?.canonicalUrl || form.url) && (
+                    <p>
+                      <a
+                        href={parsed?.candidate?.canonicalUrl || form.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        打开视频试听
+                      </a>
+                      {parsed?.candidate?.externalTitle
+                        ? ` · ${parsed.candidate.externalTitle}`
+                        : ""}
+                    </p>
+                  )}
+                  {!review && form.url && (
+                    <VideoConfirmation
+                      {...{ confirmed, setConfirmed, offset, setOffset, busy }}
+                    />
+                  )}
+                </>
               )}
             </div>
             <div hidden={pane !== "lyrics"}>

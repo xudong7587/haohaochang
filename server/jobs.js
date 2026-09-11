@@ -16,8 +16,10 @@ import { standardize } from "./job-handlers/standardize.js";
 import { upgradeHd } from "./job-handlers/upgrade-hd.js";
 import { compatibleVideo } from "./job-handlers/compatible-video.js";
 import { cleanImportedDownloads } from "./download-cleanup.js";
+import { refreshVideo } from "./job-handlers/refresh-video.js";
 
 const handlers = {
+  "refresh-video": refreshVideo,
   lyrics: supplementLyrics,
   poster: (_job, payload, context) =>
     scrapePoster(context.store, payload.id, context.cache, {

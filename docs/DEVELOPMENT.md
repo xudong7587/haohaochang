@@ -31,7 +31,7 @@ APK 使用 Java 21、Gradle 9.4.1、Android SDK 36 构建：
 gradle -p android testDebugUnitTest assembleDebug
 ```
 
-最低 Android 6；前端使用 Vite legacy 兼容构建（Chrome 53 目标）与 AbortController 补丁，仍建议更新 WebView；编译目标不等同于解码器实测。APK 是原生连接外壳加 WebView 终端，播放调用系统媒体解码；没有在 TV 端嵌入 FFmpeg 或 AI。v0.3.10 起正式分发使用持久 PKCS12 签名，CI 从 `TV_KEYSTORE_BASE64` 与 `TV_KEYSTORE_PASSWORD` Secrets 构建固定名称 `haohaochang-tv.apk`；密钥不进入 Git。独立构建 release 时设置 `TV_KEYSTORE_FILE`、`TV_KEYSTORE_PASSWORD` 并运行 `gradle -p android assembleRelease`。PR 只构建 debug 包。旧 CI debug 签名可能不同，迁移说明见用户手册。
+最低 Android 6；前端使用 Vite legacy 兼容构建（Chrome 53 目标）与 AbortController 补丁，仍建议更新 WebView；编译目标不等同于解码器实测。v0.4.0 APK 使用 Media3 1.11.0 原生播放器与 SurfaceView，独立媒体经 MergingMediaSource 使用同一时钟播放；WebView 负责点歌、歌词与菜单；没有在 TV 端嵌入 FFmpeg 或 AI。v0.3.10 起正式分发使用持久 PKCS12 签名，CI 从 `TV_KEYSTORE_BASE64` 与 `TV_KEYSTORE_PASSWORD` Secrets 构建版本化名称 `haohaochang-tv-v<版本>.apk`；密钥不进入 Git。独立构建 release 时设置 `TV_KEYSTORE_FILE`、`TV_KEYSTORE_PASSWORD` 并运行 `gradle -p android assembleRelease`。PR 只构建 debug 包。旧 CI debug 签名可能不同，迁移说明见用户手册。
 
 APK 直接分发给家庭电视，保留现有 `targetSdk 28` 行为。正式构建仅豁免面向 Google Play 的 `ExpiredTargetSdkVersion` 检查，其余 release lint 保留；未来提交应用商店前需要单独迁移 target SDK 并验证平台行为。
 

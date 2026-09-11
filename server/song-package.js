@@ -58,9 +58,15 @@ export async function savePackageInfo(store, song, cache) {
         audioSource: song.path,
         videoSource: store.get("video-source:" + song.id),
         downloadedVideo: store.get("download-quality:" + song.id),
+        recordingSource: store.get("recording-source:" + song.id),
         splitVideoSource: store.get("split-video:" + song.id),
         lyricsSource: store.get("lyrics-match:" + song.id),
-        poster: song.poster ? { ...store.get("poster-source:" + song.id, {}), file: path.relative(dir, song.poster) } : null,
+        poster: song.poster
+          ? {
+              ...store.get("poster-source:" + song.id, {}),
+              file: path.relative(dir, song.poster),
+            }
+          : null,
         files: {
           video: "画面.mp4",
           original: "原唱.m4a",
@@ -203,6 +209,8 @@ export async function encodePackageResource(
             width: media.width,
             height: media.height,
             codec: media.videoCodec,
+            fps: media.videoFps,
+            pixelFormat: media.pixelFormat,
             verification,
           }
         : {}),
@@ -237,6 +245,10 @@ export async function encodePicture(
       reportResourceStage(store, "preparing-video-pc");
       prepared = await prepareVideoOnPc(store, song, source, directory);
       if (prepared) codec = ["-c:v", "copy"];
+      else if (["smpte2084", "arib-std-b67"].includes(info.colorTransfer))
+        throw new Error(
+          "HDR 兼容转换需要连接新版 PC 整理器；原始 HDR 画面保持可用",
+        );
     }
     if (prepared?.validated) {
       // The PC decoded this exact SHA-256 and NAS verified it while streaming.
@@ -255,6 +267,10 @@ export async function encodePicture(
           duration: media.duration,
           width: media.width,
           height: media.height,
+          codec: media.videoCodec,
+          fps: media.videoFps,
+          pixelFormat: media.pixelFormat,
+          verification: "decode-pc",
         },
       });
       store.set(prepared.checkpointKey, null);

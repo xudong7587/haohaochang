@@ -75,6 +75,15 @@ try {
     errors.push(error.message);
     console.error(error.message);
   });
+  await page.route("**/api/online/preview", (route) =>
+    route.fulfill({
+      json: {
+        id: "refresh-preview",
+        duration: 240,
+        qualities: [{ value: "highest", label: "最高画质" }],
+      },
+    }),
+  );
   await page.goto(
     "http://127.0.0.1:" + server.httpServer.address().port + "/library-fixture",
   );
@@ -219,21 +228,27 @@ try {
   );
   await row.getByRole("button", { name: "视频画面", exact: true }).click();
   await row
-    .getByLabel("视频链接（B站支持 ?p= 分集）")
-    .fill("https://www.bilibili.com/video/BV1gF4m1K7Aa?p=14");
-  await row.getByLabel("我已试听核对，这是与当前音轨对应的录音版本").check();
-  await row.getByLabel("视频相对音轨偏移（秒）").fill("1.2");
+    .getByRole("button", { name: "在线寻找新视频", exact: true })
+    .click();
   await row
-    .getByRole("button", { name: "下载并替换当前视频", exact: true })
+    .getByLabel("更新视频链接")
+    .fill("https://www.bilibili.com/video/BV1gF4m1K7Aa?p=14");
+  await row.getByRole("button", { name: "预览链接", exact: true }).click();
+  await page
+    .getByRole("button", { name: "更新视频并重新分离", exact: true })
     .click();
   const source = (
     await page.evaluate(() =>
-      window.calls.find((call) => call.url.endsWith("/source")),
+      window.calls.find((call) => call.url.endsWith("/refresh-video")),
     )
   ).body;
-  assert.equal(source.confirmed, true);
-  assert.equal(source.offset, 1.2);
+  assert.equal(source.url, "https://www.bilibili.com/video/BV1gF4m1K7Aa?p=14");
+  assert.equal(source.clip, null);
   assert.equal(source.expectedRevision, 6);
+  await page
+    .locator(".video-preview-modal")
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
   await row.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
   await page.getByRole("button", { name: /^待整理曲库/ }).click();
   const video = page.locator("article").filter({

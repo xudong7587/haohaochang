@@ -24,3 +24,10 @@ assert.equal(
   version,
 );
 console.log(`Release versions and user documentation agree: v${version}`);
+const releaseGuide = await readFile("docs/USER-GUIDE.md", "utf8");
+for (const asset of [
+  `haohaochang-tv-v${version}.apk`,
+  `haohaochang-resource-ai-v${version}.zip`,
+  `haohaochang-nas-v${version}.zip`,
+  `haohaochang-preprocess-v${version}.zip`,
+]) assert.ok(releaseGuide.includes(asset), `User guide must name ${asset}`);

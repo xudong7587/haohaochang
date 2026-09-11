@@ -3,7 +3,7 @@ import {
   previewDownloadHeight,
 } from "../../shared/video-quality.js";
 import { canonicalVideo, onlineSearch } from "../media.js";
-import { canEnqueue } from "../resource-manifest.js";
+import { canEnqueue, resourceManifest } from "../resource-manifest.js";
 
 import { fail, clean } from "../http-utils.js";
 import { searchSongs } from "../online-search.js";
@@ -11,6 +11,12 @@ import { previewSessions } from "../online-preview.js";
 import { clipRange } from "../clipping.js";
 import { biliLoginStatus } from "../bili-login.js";
 import { requireDownloadHeight } from "../bili-download.js";
+import { assertSongIdle, currentSong, checkRevision } from "../song-writes.js";
+import { recordingSource } from "../recording-source.js";
+import {
+  videoRefreshMode,
+  canonicalBiliRecording,
+} from "../../shared/video-refresh.js";
 
 export function onlineApi({
   app,
@@ -33,6 +39,48 @@ export function onlineApi({
   allowedOrigin,
 }) {
   const previews = previewSessions();
+  app.post("/api/admin/library/:id/refresh-video", admin, (req, res) => {
+    const song = currentSong(store, req.params.id);
+    assertSongIdle(store, song.id);
+    checkRevision(song, req.body.expectedRevision);
+    if (
+      snapshot?.().ambient?.song_id === song.id ||
+      db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
+    )
+      throw fail(409, "请先将歌曲移出播放队列，再更新视频");
+    const url = canonicalBiliRecording(req.body.url),
+      quality = videoQuality(req.body.quality);
+    let clip = null,
+      expectedHeight = 0;
+    if (req.body.previewId) {
+      const selected = previews.lookup(req.body.previewId);
+      if (canonicalBiliRecording(selected.url) !== url)
+        throw fail(400, "预览不属于当前视频");
+      expectedHeight = previewDownloadHeight(selected, quality);
+      if (req.body.clip) clip = clipRange(req.body.clip, selected.duration);
+    } else if (req.body.clip) throw fail(400, "请先预览视频，再标记裁剪区间");
+    const plan = videoRefreshMode(recordingSource(store, song), url, clip);
+    const available = resourceManifest(store, song, cache);
+    if (!available.vocal || !available.backing)
+      Object.assign(plan, {
+        mode: "recording",
+        reason: "双音轨尚未齐全，将重新生成原唱并分离伴奏。",
+      });
+    if (plan.mode === "recording" && !get("ai", {}).enabled)
+      throw fail(400, "本次更新需要重新分离伴奏，请先启用 PC 整理与伴奏分离");
+    res.json({
+      ...plan,
+      id: addJob("refresh-video", {
+        id: song.id,
+        url,
+        clip,
+        quality,
+        expectedHeight,
+        expectedRevision: song.metadataRevision,
+        priority: "online",
+      }),
+    });
+  });
   app.get("/api/requests/status", member, (_req, res) => {
     const rows = db
       .prepare(

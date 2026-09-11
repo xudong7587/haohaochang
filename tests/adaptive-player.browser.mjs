@@ -66,7 +66,7 @@ for (let n = 0; n < 6; n++) {
       "separated",
       "ready",
       120,
-      path.join(folder, "封面.png"),
+      n % 2 ? "" : path.join(folder, "封面.png"),
       Date.now() + n,
     );
   service.store.set("package:" + id, folder);
@@ -204,6 +204,63 @@ try {
   await tv.waitForFunction(() =>
     document.querySelector("video")?._audioTracks?.some((t) => !t.el.paused),
   );
+  await tv.getByRole("button", { name: "歌星点歌", exact: true }).click();
+  await tv.getByRole("button", { name: "歌星点歌", exact: true }).focus();
+  await tv.keyboard.press("ArrowRight");
+  await tv.locator(".tv-content-entered").waitFor();
+  await tv.waitForFunction(() =>
+    document.activeElement?.classList.contains("artist-card"),
+  );
+  await tv.keyboard.press("Enter");
+  await tv.waitForFunction(() =>
+    document.activeElement?.parentElement?.classList.contains(
+      "song-poster-card",
+    ),
+  );
+  const firstSong = await tv.evaluate(() => document.activeElement.textContent);
+  await tv.keyboard.press("ArrowDown");
+  assert.equal(
+    await tv.evaluate(
+      () => !!document.activeElement.closest(".song-poster-grid"),
+    ),
+    true,
+    "down selects the next song row before footer controls",
+  );
+  await tv.keyboard.press("ArrowUp");
+  assert.equal(
+    await tv.evaluate(() => document.activeElement.textContent),
+    firstSong,
+  );
+  assert.equal(
+    await tv.evaluate(
+      () => getComputedStyle(document.activeElement).backgroundColor,
+    ),
+    "rgb(255, 255, 255)",
+  );
+  const heights = await tv
+    .locator(".song-poster-card")
+    .evaluateAll((items) =>
+      items.map((el) => el.getBoundingClientRect().height),
+    );
+  assert.ok(
+    Math.max(...heights) - Math.min(...heights) < 2,
+    "missing posters keep the same card height",
+  );
+  await tv.screenshot({
+    path: "test-results/adaptive/artist-tv-navigation.png",
+  });
+  await tv.keyboard.press("Escape");
+  await tv.locator(".tv-content-entered").waitFor({ state: "detached" });
+  assert.equal(
+    await tv.evaluate(() => !!document.activeElement.closest(".sidebar")),
+    true,
+    "Back restores primary navigation",
+  );
+  assert.equal(
+    await tv.locator(".tv-player:not(.is-full) .lyric-adjust").count(),
+    0,
+  );
+  await tv.locator("[data-open-fullscreen]").focus();
   await tv.getByRole("button", { name: "全屏播放", exact: true }).click();
   await tv.locator(".tv-player.is-full").waitFor();
   assert.equal(
@@ -258,6 +315,13 @@ try {
     .filter({ hasText: "歌曲 01" })
     .waitFor();
   await tv.keyboard.press("Escape");
+  assert.equal(await tv.locator(".tv-player.is-full").count(), 1);
+  await tv.keyboard.press("ArrowDown");
+  await tv.keyboard.press("Escape");
+  await tv.locator('.tv-player[data-controls="hidden"]').waitFor();
+  await tv.keyboard.press("Escape");
+  await tv.locator('.tv-player[data-controls="visible"]').waitFor();
+  await tv.locator("[data-fullscreen]").click();
   assert.equal(await tv.locator(".tv-player.is-full").count(), 0);
   const queueBeforeReload = service.store.db
     .prepare("SELECT id,song_id FROM queue ORDER BY position")

@@ -24,9 +24,10 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Lightweight TV terminal. Media conversion and audio separation stay on the NAS. */
+/** Native media playback with a shared NAS-backed WebView song catalogue. */
 public final class MainActivity extends Activity {
     private WebView web;
+    private NativePlayback nativePlayback;
     private FrameLayout root;
     private View overlay,fullVideo;
     private WebChromeClient.CustomViewCallback fullCallback;
@@ -51,23 +52,25 @@ public final class MainActivity extends Activity {
         server=preferences.getString("server","");if(server.isEmpty())discover();else connect(server);
     }
     private void createWeb() {
-        web=new WebView(this);web.setBackgroundColor(Color.rgb(16,14,25));web.setFocusable(true);web.setFocusableInTouchMode(true);root.addView(web,0,new FrameLayout.LayoutParams(-1,-1));
+        web=new WebView(this);web.setBackgroundColor(Color.TRANSPARENT);web.setFocusable(true);web.setFocusableInTouchMode(true);root.addView(web,0,new FrameLayout.LayoutParams(-1,-1));
         web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setLoadWithOverviewMode(true);web.getSettings().setUseWideViewPort(true);
         web.getSettings().setUserAgentString(web.getSettings().getUserAgentString()+" HaohaochangTV/"+BuildConfig.VERSION_NAME);
+        nativePlayback = new NativePlayback(this, root, web);
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return navigate(request.getUrl().toString(),request.isForMainFrame());}
             @Override public boolean shouldOverrideUrlLoading(WebView view,String url){return navigate(url,true);}
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) {
+                nativePlayback.navigating(url,server);
                 if(!ConnectionPolicy.sameOrigin(url,server))return;
                 loading=true;int current=++generation;showLoading();
                 handler.postDelayed(()->{if(current==generation&&loading)failed("页面加载时间较长","请确认 NAS 已启动、地址正确。也可以重新寻找家庭歌房。");},25000);
             }
-            @Override public void onPageFinished(WebView view,String url){if(loading)checkReady(generation);}
+            @Override public void onPageFinished(WebView view,String url){nativePlayback.installBridge();if(loading)checkReady(generation);}
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame()&&loading)failed("暂时连不上歌房","请检查电视网络与 NAS 地址，然后重新连接。");}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(request.isForMainFrame()&&loading)failed("服务器暂时无法打开页面","服务器返回 HTTP "+response.getStatusCode()+"。请检查 NAS 服务后重试。");}
             @Override public void onReceivedSslError(WebView view,android.webkit.SslErrorHandler callback,android.net.http.SslError error){callback.cancel();if(loading)failed("服务器证书无法验证","请检查 HTTPS 域名与证书，或使用家庭网络中的 NAS 地址。");}
-            @Override public boolean onRenderProcessGone(WebView view,android.webkit.RenderProcessGoneDetail detail){root.removeView(view);view.destroy();createWeb();failed("电视播放页面已停止","可以重新连接。若重复出现，请更新电视系统的 Android System WebView。");return true;}
+            @Override public boolean onRenderProcessGone(WebView view,android.webkit.RenderProcessGoneDetail detail){nativePlayback.destroy();root.removeView(view);view.destroy();createWeb();failed("电视播放页面已停止","可以重新连接。若重复出现，请更新电视系统的 Android System WebView。");return true;}
         });
         web.setWebChromeClient(new WebChromeClient() {
             @Override public void onShowCustomView(View view,CustomViewCallback callback){if(fullVideo!=null){callback.onCustomViewHidden();return;}fullVideo=view;fullCallback=callback;root.addView(view,new FrameLayout.LayoutParams(-1,-1));web.setVisibility(View.GONE);view.setFocusableInTouchMode(true);view.requestFocus();}
@@ -114,8 +117,8 @@ public final class MainActivity extends Activity {
     private void settings(){cancelDiscovery();stopLoading();exitFull();ConnectionScreen screen=screen("连接你的家庭歌房","填入 NAS 地址或 HTTPS 域名。成功连接后会自动记住，下次打开即可进入。");screen.manual(server,!preferences.getString("server","").isEmpty());showOverlay(screen);}
     private void failed(String title,String message){stopLoading();ConnectionScreen screen=screen(title,message);screen.failure(server,webVersion());showOverlay(screen);}
     private String webVersion(){String agent=web.getSettings().getUserAgentString();java.util.regex.Matcher match=java.util.regex.Pattern.compile("Chrome/([0-9.]+)").matcher(agent);return "Android "+Build.VERSION.RELEASE+(match.find()?" · WebView "+match.group(1):"");}
-    private void showOverlay(View view){if(overlay!=null)root.removeView(overlay);overlay=view;web.setVisibility(View.INVISIBLE);root.addView(view,new FrameLayout.LayoutParams(-1,-1));}
-    private void hideOverlay(){if(overlay!=null){root.removeView(overlay);overlay=null;}web.setVisibility(View.VISIBLE);}
+    private void showOverlay(View view){nativePlayback.foreground(false);if(overlay!=null)root.removeView(overlay);overlay=view;web.setVisibility(View.INVISIBLE);root.addView(view,new FrameLayout.LayoutParams(-1,-1));}
+    private void hideOverlay(){nativePlayback.foreground(true);if(overlay!=null){root.removeView(overlay);overlay=null;}web.setVisibility(View.VISIBLE);}
     private void exitFull(){if(fullVideo!=null){root.removeView(fullVideo);fullVideo=null;web.setVisibility(View.VISIBLE);web.requestFocus();if(fullCallback!=null){fullCallback.onCustomViewHidden();fullCallback=null;}}}
     private void reloadInterface(){if(server.isEmpty()){settings();return;}cancelDiscovery();exitFull();web.clearCache(true);web.loadUrl(server+(television?"/tv":"/play")+"?refresh="+System.currentTimeMillis(),java.util.Collections.singletonMap("Cache-Control","no-cache"));}
     @Override public boolean dispatchKeyEvent(KeyEvent event){if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getKeyCode()==KeyEvent.KEYCODE_MENU){new AlertDialog.Builder(this).setTitle("好好唱设置").setItems(new String[]{"热更新网页","连接设置","重新自动发现","检查应用更新"},(d,w)->{if(w==0)reloadInterface();else if(w==1)settings();else if(w==2)discover();else updater.check();}).show();return true;}return super.dispatchKeyEvent(event);}
@@ -125,8 +128,8 @@ public final class MainActivity extends Activity {
         web.evaluateJavascript("typeof window.haohaochangBack === 'function' && window.haohaochangBack()",result->{backPending=false;if(isFinishing()||isDestroyed())return;if("true".equals(result)){exitPressedAt=0;return;}exitOrHint();});
     }
     private void exitOrHint(){long now=SystemClock.elapsedRealtime();if(exitPressedAt!=0&&now-exitPressedAt<2500){finish();return;}exitPressedAt=now;Toast.makeText(this,"再按一次返回退出好好唱",Toast.LENGTH_SHORT).show();}
-    @Override protected void onPause(){super.onPause();web.onPause();}
-    @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();if(updater!=null)updater.resume();}
+    @Override protected void onPause(){super.onPause();nativePlayback.foreground(false);web.onPause();}
+    @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();if(nativePlayback!=null)nativePlayback.foreground(overlay==null);if(updater!=null)updater.resume();}
     @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(overlay!=null){if(loading)showLoading();else if(discovery!=null)discover();else settings();}}
-    @Override protected void onDestroy(){destroyed=true;cancelDiscovery();handler.removeCallbacksAndMessages(null);executor.shutdownNow();updater.destroy();web.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){destroyed=true;cancelDiscovery();handler.removeCallbacksAndMessages(null);executor.shutdownNow();updater.destroy();nativePlayback.destroy();web.destroy();super.onDestroy();}
 }

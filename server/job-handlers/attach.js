@@ -1,8 +1,15 @@
 import { replaceVideo } from "../video-replacement.js";
 import { withBiliCookie } from "../sources.js";
 import { downloadVideo } from "../media.js";
+import { refreshVideo } from "./refresh-video.js";
 
 export async function attach(job, payload, context) {
+  if (job.kind === "attach-video")
+    return refreshVideo(
+      job,
+      { ...payload, clip: null, quality: "highest" },
+      context,
+    );
   const {
     db,
     get,

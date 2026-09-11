@@ -57,6 +57,36 @@ export function useIdleControls({
         return;
       const wasHidden = !shown.current;
       const keydown = event.type === "keydown";
+      // Back toggles this panel, including while paused. Only the explicit
+      // fullscreen button may leave the picture; Android uses this same event.
+      if (
+        immersive &&
+        keydown &&
+        ["Escape", "BrowserBack"].includes(event.key)
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.repeat) return;
+        const inPanel = container.current
+          .querySelector(".video-caption")
+          ?.contains(document.activeElement);
+        if (wasHidden || !inPanel) {
+          shown.current = true;
+          setVisible(true);
+          setFocusRequest((n) => n + 1);
+          arm();
+        } else {
+          clearTimeout(timer);
+          restoringFocus = true;
+          container.current
+            .querySelector(".video-stage")
+            ?.focus({ preventScroll: true });
+          restoringFocus = false;
+          shown.current = false;
+          setVisible(false);
+        }
+        return;
+      }
       const opening =
         immersive &&
         keydown &&

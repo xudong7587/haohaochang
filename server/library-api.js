@@ -29,6 +29,8 @@ import { filesUnder, importKey, metadata } from "./library.js";
 import { enrichSong } from "./enrichment.js";
 import { hdUpgradeSource } from "./split-video.js";
 import { queueMissingLyrics } from "./lyrics-batch.js";
+import { recordingSource } from "./recording-source.js";
+import { canonicalBiliRecording } from "../shared/video-refresh.js";
 export function libraryApi({
   app,
   admin,
@@ -219,6 +221,7 @@ export function libraryApi({
           posterSource: get("poster-source:" + s.id, null),
           posterAttempt: get("poster-attempt:" + s.id, null),
           lyricsSource: get("lyrics-match:" + s.id, null),
+          recordingSource: recordingSource(store, s),
           canUpgradeHd:
             manifest.vocal && manifest.backing && !!hdUpgradeSource(store, s),
           lyricsAlignment:
@@ -226,6 +229,7 @@ export function libraryApi({
               ? { shiftMs: get("lyrics-auto:" + s.id).shiftMs }
               : null,
           sourceUrl:
+            recordingSource(store, s)?.url ||
             get("video-source:" + s.id)?.url ||
             get("source:" + s.id)?.canonicalUrl ||
             get("source:" + s.id)?.url ||
@@ -670,16 +674,18 @@ export function libraryApi({
       .get(req.params.id);
     if (!song) throw new Error("歌曲不存在");
     assertIdle(song.id);
-    const url = canonicalVideo(req.body.url);
+    const url = canonicalBiliRecording(req.body.url);
     if (db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id))
       throw new Error("请先移出播放队列");
     checkRevision(song, req.body.expectedRevision);
     res.json({
-      id: addJob("attach-video", {
+      id: addJob("refresh-video", {
         id: song.id,
         url,
-        confirmed: req.body.confirmed === true,
-        offset: Number(req.body.offset) || 0,
+        clip: null,
+        quality: "highest",
+        expectedRevision: song.metadataRevision,
+        priority: "online",
       }),
     });
   });
@@ -696,8 +702,11 @@ export function libraryApi({
     )
       throw new Error("请先将歌曲移出播放队列");
     res.json({
-      id: addJob("upgrade-hd", {
+      id: addJob("refresh-video", {
         id: song.id,
+        url: hdUpgradeSource(store, song).url,
+        clip: hdUpgradeSource(store, song).clip,
+        quality: "highest",
         expectedRevision: song.metadataRevision,
         priority: "online",
       }),

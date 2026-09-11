@@ -11,6 +11,12 @@ const duration = (value) =>
     : String(value || "")
         .split(":")
         .reduce((total, part) => total * 60 + Number(part), 0) || null;
+const frameRate = (value) => {
+  const [n, d = 1] = String(value || 0)
+    .split("/")
+    .map(Number);
+  return Number.isFinite(n / d) ? n / d : 0;
+};
 
 export const bilibiliProvider = {
   async search(query, cookie = "", fetcher = fetch, page = 1) {
@@ -173,6 +179,8 @@ export const bilibiliProvider = {
       .sort(
         (a, b) =>
           b.height - a.height ||
+          frameRate(b.frameRate || b.frame_rate) -
+            frameRate(a.frameRate || a.frame_rate) ||
           Number(/^avc1/i.test(b.codecs)) - Number(/^avc1/i.test(a.codecs)) ||
           b.bandwidth - a.bandwidth,
       )[0];
@@ -198,6 +206,8 @@ export const bilibiliProvider = {
       quality,
       qualities: qualityChoices(available),
       previewHeight: video.height,
+      previewFps: frameRate(video.frameRate || video.frame_rate),
+      videoCodec: video.codecs,
       downloadHeight: Math.max(
         ...available.filter((v) => v.height <= limit).map((v) => v.height),
       ),

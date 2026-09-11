@@ -17,13 +17,22 @@ from version import VERSION
 
 REPO = 'xudong7587/haohaochang'
 API = 'https://api.github.com/repos/' + REPO + '/releases/latest'
-ASSET = 'haohaochang-resource-ai.zip'
+ASSET = 'haohaochang-resource-ai.zip'  # Older releases remain readable.
 
 
 def version(value):
     if not re.fullmatch(r'v?\d+\.\d+\.\d+', str(value)):
         raise ValueError('版本号无效')
     return tuple(map(int, str(value).lstrip('v').split('.')))
+
+
+def release_asset(assets, latest):
+    version(latest)
+    for name in (f'haohaochang-resource-ai-v{str(latest).lstrip("v")}.zip', ASSET):
+        found = next((asset for asset in assets if asset.get('name') == name), None)
+        if found:
+            return found
+    return None
 
 
 def allowed_url(url, initial=False):
@@ -130,7 +139,7 @@ class UpdateManager:
             version(latest)
             if data.get('draft') or data.get('prerelease'):
                 raise ValueError('不是正式版本')
-            asset = next((a for a in data['assets'] if a['name'] == ASSET), None)
+            asset = release_asset(data['assets'], latest)
             if not asset or not allowed_url(asset['browser_download_url'], True):
                 raise ValueError('此版本没有可用的 PC 更新包')
             digest = asset.get('digest', '')

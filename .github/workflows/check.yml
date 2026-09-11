@@ -35,6 +35,8 @@ jobs:
         timeout-minutes: 3
       - run: node tests/adaptive-player.browser.mjs
         timeout-minutes: 3
+      - run: node tests/native-player.browser.mjs
+        timeout-minutes: 3
       - run: node scripts/player-check.mjs
         timeout-minutes: 3
       - uses: actions/upload-artifact@v4
@@ -84,13 +86,16 @@ jobs:
           export TV_KEYSTORE_FILE="$RUNNER_TEMP/tv-release.p12"
           printf '%s' "$TV_KEYSTORE_BASE64" | base64 --decode > "$TV_KEYSTORE_FILE"
           gradle -p android assembleRelease
-          cp android/app/build/outputs/apk/release/app-release.apk haohaochang-tv.apk
+          version=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" android/app/build.gradle)
+          test -n "$version"
+          echo "TV_VERSION=$version" >> "$GITHUB_ENV"
+          cp android/app/build/outputs/apk/release/app-release.apk "haohaochang-tv-v$version.apk"
           rm -f "$TV_KEYSTORE_FILE"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:
-          name: haohaochang-tv
-          path: haohaochang-tv.apk
+          name: haohaochang-tv-v${{ env.TV_VERSION }}
+          path: haohaochang-tv-v${{ env.TV_VERSION }}.apk
       - uses: actions/upload-artifact@v4
         with:
           name: haohaochang-tv-debug

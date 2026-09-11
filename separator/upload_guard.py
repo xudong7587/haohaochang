@@ -17,7 +17,7 @@ class UploadGuard:
             return await JSONResponse({'detail':'Too many uploads'}, status_code=429,
                 headers={'Retry-After':'3'})(scope, receive, send)
         total = 0
-        max_bytes = 1025 * 1024 * 1024 if scope['path'] == '/clip' else self.max_bytes
+        max_bytes = 4097 * 1024 * 1024 if scope['path'] == '/clip' else self.max_bytes
         async def limited_receive():
             nonlocal total
             message = await receive()

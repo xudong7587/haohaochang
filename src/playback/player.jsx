@@ -4,6 +4,7 @@ import { useMediaPlayback } from "../media-playback.js";
 import { PlayerVisuals } from "./player-visuals.jsx";
 import { usePlayerLease } from "./use-player-lease.js";
 import { useIdleControls } from "./use-idle-controls.js";
+import { PlaybackDiagnostics } from "./playback-diagnostics.jsx";
 
 export function Player({
   current,
@@ -18,6 +19,7 @@ export function Player({
   keyboardLyrics = false,
   playerType = "web",
   activePlayer,
+  actionsRef,
 }) {
   const video = useRef(),
     container = useRef(),
@@ -67,13 +69,10 @@ export function Player({
     [warning, setWarning] = useState(""),
     [pictureError, setPictureError] = useState(false),
     [reload, setReload] = useState(0);
+  const [diagnostics, setDiagnostics] = useState(false);
+  const [lyricsSaved, setLyricsSaved] = useState("");
   const autoHideControls =
-    !!current &&
-    !playback.paused &&
-    !blocked &&
-    !error &&
-    !leaseError &&
-    (full || keyboardLyrics);
+    !!current && !playback.paused && !blocked && !error && !leaseError && full;
   const controlsVisible = useIdleControls({
     container,
     enabled: autoHideControls,
@@ -82,14 +81,20 @@ export function Player({
   });
   function adjustLyrics(deltaMs, reset = false) {
     if (!current) return;
+    setLyricsSaved("正在保存…");
     request(
       "/control",
       { action: "lyrics-offset", entryId: current.id, deltaMs, reset },
       "POST",
-    ).catch((e) => notify(e.message));
+    )
+      .then(() => setLyricsSaved("已保存，下次播放自动应用"))
+      .catch((e) => {
+        setLyricsSaved("保存失败，请重试");
+        notify(e.message);
+      });
   }
   useEffect(() => {
-    if (!current || !lyricsVisible || !(full || keyboardLyrics)) return;
+    if (!current || !lyricsVisible || !full) return;
     let last = 0;
     const key = (e) => {
       if (
@@ -130,7 +135,7 @@ export function Player({
     if ("blocked" in status) setBlocked(status.blocked);
     if ("error" in status) setError(status.error);
     if ("warning" in status) setWarning(status.warning);
-    if (status.pictureError) setPictureError(true);
+    if ("pictureError" in status) setPictureError(!!status.pictureError);
   }
   const manifest = useMediaPlayback({
     video,
@@ -150,11 +155,12 @@ export function Player({
     setBlocked(false);
     setPictureError(false);
     setActualVariant(null);
+    setLyricsSaved("");
   }, [current?.id]);
   // Legacy muxed media is isolated from the v2 controller.
   useEffect(() => {
     const v = video.current;
-    if (!v || !current || manifest?.version !== 1) return;
+    if (!v || !current || manifest?.version !== 1 || manifest.native) return;
     let alive = true;
     const entryId = current.id;
     if (previousEntry.current !== entryId) {
@@ -193,7 +199,7 @@ export function Player({
   }, [current?.id, variant, manifest, token]);
   useEffect(() => {
     const v = video.current;
-    if (!v || manifest?.version !== 1) return;
+    if (!v || manifest?.version !== 1 || manifest.native) return;
     let alive = true;
     if (playback.paused || !lease) v.pause();
     else if (current)
@@ -255,6 +261,10 @@ export function Player({
       fullscreenMode.current = "none";
       setFull(false);
       await exitNativeFullscreen();
+      if (request !== fullscreenRequest.current) return;
+      document
+        .querySelector("[data-open-fullscreen]")
+        ?.focus({ preventScroll: true });
     } else {
       // CSS also fills the TV WebView on devices which reject the native API.
       fullscreenMode.current = "fallback";
@@ -280,27 +290,18 @@ export function Player({
     }
   }
   useEffect(() => {
+    if (!actionsRef) return;
+    actionsRef.current = { fullscreen };
+    return () => {
+      actionsRef.current = null;
+    };
+  });
+  useEffect(() => {
     if (!full) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const key = (event) => {
-      if (
-        !["Escape", "BrowserBack"].includes(event.key) ||
-        document.querySelector("dialog[open]")
-      )
-        return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      fullscreenRequest.current++;
-      fullscreenMode.current = "none";
-      setFull(false);
-      void exitNativeFullscreen();
-      container.current?.querySelector("[data-fullscreen]")?.focus();
-    };
-    document.addEventListener("keydown", key, true);
     return () => {
       document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", key, true);
     };
   }, [full]);
   function retry() {
@@ -334,17 +335,14 @@ export function Player({
       <div
         className="video-stage"
         ref={stage}
-        tabIndex={0}
+        tabIndex={full || keyboardLyrics ? 0 : -1}
         role="group"
         aria-label={
-          full
-            ? "演唱画面，按下键或确认键打开播放控制"
-            : lyricsVisible
-              ? "演唱画面，确认键全屏，左右键微调歌词"
-              : "演唱画面，确认键全屏"
+          full ? "演唱画面，按下键或确认键打开播放控制" : "演唱画面，确认键全屏"
         }
         onKeyDown={(event) => {
           if (
+            !full &&
             event.target === event.currentTarget &&
             ["Enter", " "].includes(event.key)
           ) {
@@ -462,100 +460,124 @@ export function Player({
           ))}
         </div>
       </div>
-      <div
-        className="video-caption"
-        role="group"
-        aria-label={full ? "全屏播放控制" : "播放控制"}
-        aria-hidden={!controlsVisible}
-      >
-        <div className="video-caption-heading">
-          <span data-audio-variant={actualVariant || variant}>
-            <span className={`dot ${lease ? "" : "offline"}`} />
-            {current?.ambient
-              ? "随机原唱 · " + current.title
-              : current
-                ? "正在舞台上 · " +
-                  ((actualVariant || variant) === "vocal" ? "原唱" : "伴奏")
-                : "等待开唱"}
-          </span>
-          <button
-            type="button"
-            onClick={toggleLyrics}
-            aria-pressed={lyricsVisible}
-            aria-label={lyricsVisible ? "隐藏歌词" : "显示歌词"}
-          >
-            {lyricsVisible ? "隐藏歌词" : "显示歌词"}
-          </button>
-          <button
-            data-fullscreen
-            onClick={fullscreen}
-            aria-label={full ? "退出全屏" : "全屏播放"}
-          >
-            <Monitor size={16} />
-            {full ? "退出全屏" : "全屏"}
-          </button>
-        </div>
-        {full && current && (
-          <div className="full-controls">
-            {[
-              ["pause", playback.paused ? "继续" : "暂停"],
-              ...(!current.ambient &&
-              !["original", "instrumental"].includes(current.mode)
-                ? [["vocal", playback.vocal ? "切伴奏" : "切原唱"]]
-                : []),
-              ["next", "切歌"],
-            ].map(([action, label]) => (
+      {(full || !actionsRef) && (
+        <div
+          className="video-caption"
+          role="group"
+          aria-label={full ? "全屏播放控制" : "播放控制"}
+          aria-hidden={!controlsVisible}
+        >
+          {full && (
+            <div className="video-caption-heading">
+              <div>
+                <strong>{current?.title || "等待开唱"}</strong>
+                <span data-audio-variant={actualVariant || variant}>
+                  {current?.artist} ·{" "}
+                  {(actualVariant || variant) === "vocal" ? "原唱" : "伴奏"}
+                </span>
+              </div>
+              <small>返回键收起控制 · 选择「退出全屏」返回点歌</small>
+            </div>
+          )}
+          {full && current && (
+            <div className="full-controls">
+              {[
+                ["pause", playback.paused ? "继续" : "暂停"],
+                ...(!current.ambient &&
+                !["original", "instrumental"].includes(current.mode)
+                  ? [["vocal", playback.vocal ? "切伴奏" : "切原唱"]]
+                  : []),
+                ["next", "切歌"],
+              ].map(([action, label]) => (
+                <button
+                  key={action}
+                  data-player-action={action}
+                  onClick={() =>
+                    request(
+                      "/control",
+                      { action, entryId: current.id },
+                      "POST",
+                    ).catch((e) => notify(e.message))
+                  }
+                >
+                  {label}
+                </button>
+              ))}
               <button
-                key={action}
-                data-player-action={action}
-                onClick={() =>
-                  request(
-                    "/control",
-                    { action, entryId: current.id },
-                    "POST",
-                  ).catch((e) => notify(e.message))
-                }
+                onClick={toggleLyrics}
+                aria-pressed={lyricsVisible}
+                aria-label={lyricsVisible ? "隐藏歌词" : "显示歌词"}
               >
-                {label}
+                {lyricsVisible ? "隐藏歌词" : "显示歌词"}
               </button>
-            ))}
-          </div>
-        )}
-        {current && lyricsVisible && (
-          <div className="lyric-adjust" aria-label="歌词时间微调">
-            {[10, 3, 0.5].map((seconds) => (
               <button
-                key={seconds}
-                aria-label={`歌词提前 ${seconds} 秒`}
-                onClick={() => adjustLyrics(seconds * 1000)}
+                onClick={() => setDiagnostics((value) => !value)}
+                aria-pressed={diagnostics}
               >
-                ← {seconds} 秒
+                播放信息
               </button>
-            ))}
-            <output aria-live="polite">
-              歌词{" "}
-              {playback.lyricsOffsetMs
-                ? `${playback.lyricsOffsetMs > 0 ? "提前" : "延后"} ${(Math.abs(playback.lyricsOffsetMs) / 1000).toFixed(1)} 秒`
-                : "原始时间"}
-            </output>
-            {[0.5, 3, 10].map((seconds) => (
               <button
-                key={seconds}
-                aria-label={`歌词延后 ${seconds} 秒`}
-                onClick={() => adjustLyrics(-seconds * 1000)}
+                data-fullscreen
+                onClick={fullscreen}
+                aria-label="退出全屏"
               >
-                {seconds} 秒 →
+                <Monitor size={18} />
+                退出全屏
               </button>
-            ))}
+            </div>
+          )}
+          {(!full || !current) && (
             <button
-              aria-label="重置歌词微调"
-              onClick={() => adjustLyrics(0, true)}
+              data-fullscreen
+              onClick={fullscreen}
+              aria-label={full ? "退出全屏" : "全屏播放"}
             >
-              复位
+              <Monitor size={18} />
+              {full ? "退出全屏" : "全屏"}
             </button>
-          </div>
-        )}
-      </div>
+          )}
+          {full && current && lyricsVisible && (
+            <div className="lyric-adjust" aria-label="歌词时间微调">
+              {[10, 3, 0.5, 0.1].map((seconds) => (
+                <button
+                  key={seconds}
+                  aria-label={`歌词提前 ${seconds} 秒`}
+                  onClick={() => adjustLyrics(seconds * 1000)}
+                >
+                  ← {seconds} 秒
+                </button>
+              ))}
+              <output aria-live="polite">
+                歌词{" "}
+                {playback.lyricsOffsetMs
+                  ? `${playback.lyricsOffsetMs > 0 ? "提前" : "延后"} ${(Math.abs(playback.lyricsOffsetMs) / 1000).toFixed(1)} 秒`
+                  : "原始时间"}
+              </output>
+              {[0.1, 0.5, 3, 10].map((seconds) => (
+                <button
+                  key={seconds}
+                  aria-label={`歌词延后 ${seconds} 秒`}
+                  onClick={() => adjustLyrics(-seconds * 1000)}
+                >
+                  {seconds} 秒 →
+                </button>
+              ))}
+              <button
+                aria-label="重置歌词微调"
+                onClick={() => adjustLyrics(0, true)}
+              >
+                复位
+              </button>
+            </div>
+          )}
+          {full && lyricsSaved && (
+            <p className="lyrics-save-status" role="status">
+              {lyricsSaved}
+            </p>
+          )}
+          <PlaybackDiagnostics video={video} open={full && diagnostics} />
+        </div>
+      )}
     </section>
   );
 }

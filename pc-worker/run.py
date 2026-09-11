@@ -68,6 +68,7 @@ os.environ['SEPARATION_SEGMENT'] = str(plan['segment'] if device == 'cuda' else 
 os.environ['SEPARATION_DEVICE'] = device
 os.environ['SEPARATION_CONCURRENCY'] = str(max(1, min(3, int(config.get('concurrency', 3 if device == 'cuda' else 1)))))
 os.environ['FFMPEG'] = imageio_ffmpeg.get_ffmpeg_exe()
+os.environ['KTV_VIDEO_ENCODER'] = str(config.get('video_encoder', 'auto')).lower()
 sys.path.insert(0, str(root))
 print('\n=== 好好唱资源 AI 整理器 ===')
 print('Device:', torch.cuda.get_device_name(0) if device == 'cuda' else 'CPU (check NVIDIA driver if GPU was expected)')

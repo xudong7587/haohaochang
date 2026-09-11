@@ -186,6 +186,13 @@ export async function importJob(job, payload, context) {
             });
           }
           if (payload.candidate) set("source:" + id, payload.candidate);
+          if (payload.sourceUrl)
+            set("recording-source:" + id, {
+              url: payload.sourceUrl,
+              // All onlineSelection downloads explicitly carry the clip choice.
+              ...(payload.approved ? { clip: payload.clip || null } : {}),
+              updated: Date.now(),
+            });
           if (meta.lyricsSource) set("lyrics-match:" + id, meta.lyricsSource);
           db.prepare("UPDATE songs SET evidence=?,lyrics=? WHERE id=?").run(
             JSON.stringify(meta.evidence || []),

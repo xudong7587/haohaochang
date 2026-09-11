@@ -6,14 +6,12 @@ import { checkProvider, runProviderJob } from "./separation/protocol.js";
 export async function prepareVideoOnPc(store, song, file, staging) {
   const ai = store.get("ai", {});
   if (!ai.pcEndpoint) return null;
-  // Keep the existing NAS path for sources beyond the PC upload contract.
-  if ((await stat(file)).size > 1024 ** 3) return null;
   const info = await probe(file);
   if (!(info.duration > 0) || info.duration > 21600) return null;
   const config = {
     endpoint: ai.pcEndpoint,
     apiKey: ai.pcApiKey,
-    model: `video:0:${info.duration}`,
+    model: `video:0:${info.duration}:${info.colorTransfer || "sdr"}`,
   };
   let health;
   try {
@@ -23,12 +21,21 @@ export async function prepareVideoOnPc(store, song, file, staging) {
   }
   // Older organizers retain the previous NAS path until the PC is upgraded.
   if (!health.capabilities?.includes("video-prepare-v1")) return null;
+  const maxVideoBytes = Number(health.max_video_upload_bytes) || 1024 ** 3;
+  if ((await stat(file)).size > maxVideoBytes)
+    throw waitingWorker("请更新 PC 整理器以处理超过 1 GB 的高清画面");
+  if (
+    ["smpte2084", "arib-std-b67"].includes(info.colorTransfer) &&
+    !health.capabilities?.includes("video-prepare-v2")
+  )
+    throw waitingWorker("请更新 PC 整理器以正确处理 HDR 兼容转换");
   let result;
   try {
     result = await runProviderJob(store, song, file, staging, config, {
       clip: { start: 0, end: info.duration },
       videoOnly: true,
       videoInfo: info,
+      maxVideoBytes,
     });
   } catch (error) {
     if (
@@ -47,6 +54,7 @@ export async function prepareVideoOnPc(store, song, file, staging) {
     output.audio.length ||
     output.height < info.height ||
     output.width < info.width ||
+    (info.videoFps > 0 && output.videoFps + 0.1 < info.videoFps) ||
     Math.abs(output.duration - (info.videoDuration || info.duration)) > 0.5
   ) {
     store.set(result.checkpointKey, null);

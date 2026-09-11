@@ -9,6 +9,7 @@ export const taskKindNames = {
   "attach-video": "补充视频",
   "upgrade-hd": "升级高清画面",
   "compatible-video": "转换兼容画面",
+  "refresh-video": "更新视频与录音",
   acquire: "自动找歌",
   "find-video": "补充 MTV",
   "favorite-sync": "检查收藏夹",

@@ -53,6 +53,11 @@ export async function clipOnPc(
   }
   if (!health.capabilities?.includes("video-clip-v1"))
     throw new Error("PC 整理器需要升级后才能裁剪视频");
+  if (
+    ["smpte2084", "arib-std-b67"].includes(source.colorTransfer) &&
+    !health.capabilities?.includes("video-prepare-v2")
+  )
+    throw waitingWorker("请更新 PC 整理器以正确处理 HDR 裁剪");
   const staging = path.join(downloads, ".ktv-online", "clips", job.id);
   await mkdir(staging, { recursive: true });
   const target = path.join(staging, "clip.mp4");
@@ -60,6 +65,7 @@ export async function clipOnPc(
     info.hasVideo &&
     (videoOnly ? !info.audio.length : info.audio.length) &&
     (!source.height || info.height >= source.height) &&
+    (!source.videoFps || info.videoFps + 0.1 >= source.videoFps) &&
     Math.abs(
       info.duration -
         ((videoOnly
@@ -78,7 +84,12 @@ export async function clipOnPc(
       file,
       staging,
       config,
-      { clip, videoOnly, videoInfo: source },
+      {
+        clip,
+        videoOnly,
+        videoInfo: source,
+        maxVideoBytes: health.max_video_upload_bytes,
+      },
     );
   } catch (error) {
     if (

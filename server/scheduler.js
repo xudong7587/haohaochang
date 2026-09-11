@@ -233,6 +233,7 @@ export function createScheduler(
             "attach-video",
             "find-video",
             "upgrade-hd",
+            "refresh-video",
           ].includes(job.kind)
         ) {
           const song = db

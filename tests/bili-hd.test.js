@@ -54,7 +54,13 @@ test("Bili signed download rejects expired saved credentials and selects 4K beyo
           video: [
             { height: 480, codecs: "avc1", baseUrl: "low" },
             { height: 1080, codecs: "avc1", baseUrl: "hd" },
-            { height: 2160, codecs: "hev1", baseUrl: "uhd" },
+            { height: 2160, codecs: "avc1", frameRate: "30", baseUrl: "uhd30" },
+            {
+              height: 2160,
+              codecs: "hev1",
+              frameRate: "60000/1001",
+              baseUrl: "uhd",
+            },
           ],
           audio: [{ codecs: "mp4a", baseUrl: "audio" }],
         },
@@ -82,6 +88,7 @@ test("Bili signed download rejects expired saved credentials and selects 4K beyo
   );
   assert.equal(selected.video, "uhd");
   assert.equal(selected.previewHeight, 2160);
+  assert.ok(selected.previewFps > 59.9);
   assert.throws(() => requireDownloadHeight(480, "highest"), /仅返回 480p/);
   assert.throws(() => requireDownloadHeight(1080, "highest", 2160), /未达到/);
   assert.throws(() => requireDownloadHeight(720, "1080"), /未达到/);
@@ -104,7 +111,7 @@ test("real DASH files retain 4K with independent audio through download cache an
     "-f",
     "lavfi",
     "-i",
-    "color=s=3840x2160:r=2:d=4",
+    "color=s=3840x2160:r=60:d=4",
     "-c:v",
     "libx264",
     "-preset",
@@ -176,6 +183,7 @@ test("real DASH files retain 4K with independent audio through download cache an
   const folder = store.get("package:" + id);
   assert.equal(prepared.needs_video, 0);
   assert.equal((await probe(path.join(folder, "画面.mp4"))).height, 2160);
+  assert.equal((await probe(path.join(folder, "画面.mp4"))).videoFps, 60);
   assert.equal((await probe(path.join(folder, "原唱.m4a"))).hasVideo, false);
   const audioBefore = await readFile(path.join(folder, "原唱.m4a"));
   // Simulate a previously prepared 720p picture for the same exact audio.

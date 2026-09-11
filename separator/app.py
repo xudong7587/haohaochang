@@ -41,7 +41,8 @@ def health():
     return dict(protocol='ktv-separation-v1', models=['htdemucs', 'htdemucs_ft'],
         lanEnabled=getattr(app.state, 'lan', {}).get('enabled', False),
         device=os.getenv('SEPARATION_DEVICE', 'cpu'), pending=pending, concurrency=CONCURRENCY, busy=not jobs.accepting or pending >= CONCURRENCY,
-        capabilities=['idempotency-key', 'upload-limit', 'restart-recovery', 'video-clip-v1', 'video-prepare-v1'])
+        max_video_upload_bytes=4 * 1024**3,
+        capabilities=['idempotency-key', 'upload-limit', 'restart-recovery', 'video-clip-v1', 'video-prepare-v1', 'video-prepare-v2'])
 
 
 @app.post('/separate', dependencies=[Depends(auth)])

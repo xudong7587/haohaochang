@@ -4,9 +4,15 @@
 
 NAS 保存资料、任务、队列与资源；PC／云端执行分离；网页、手机和 TV 消费 NAS 状态。第 0 批和第 1 批 T1–T8 已集成，模块按下列边界拆分。
 
+## v0.4.0：原生播放与录音更新
+
+2026-09-11 从 v0.3.14 `13631e4` 开发，按单写入者集成。E 管理 `NativePlayback.java`、`OffsetMediaSource.java`、桥接控制器与 TV 导航；F 管理 `separator/video_encoding.py`、裁剪协议及只产出分离结果的 `server/separation/recording.js`；A 管理 `recording-source.js` 和 `job-handlers/refresh-video.js` 的完整版本暂存／发布；G 集成 `/api/admin/library/:id/refresh-video`、公共 manifest、主界面和任务注册。
+
+用户明确要求更新视频时重新处理录音。唯一保留音轨的例外是可信记录证明同一 B站 canonical URL、同一分 P、前后均未裁剪且双音轨可用；前端提示不作为服务端证据。新录音验证成功后一次发布，失败保留旧版本。普通入库保留 4K／高帧率，手动兼容转换与裁剪也不降低尺寸或帧率。原生播放与网页播放保持同一 NAS 播放租约。Release 附件统一带版本号，新更新器按 tag 匹配附件；旧客户端首次手动迁移。验证及未发布范围见 [开发状态](PROJECT-STATUS.md)。
+
 ## v0.3.10：TV APK 与 PC 整理器应用内更新
 
-2026-09-10 已按后续授权实现，当前实现与验证边界见 [开发状态](PROJECT-STATUS.md)。下文保留最初的设计目标供核对。正式附件固定为 `haohaochang-tv.apk` 和 `haohaochang-resource-ai.zip`，使用 Release asset digest 校验；TV 持久签名已配置。Docker 继续由用户手动拉取镜像、重新部署，不增加自动部署功能。
+2026-09-10 已按后续授权实现，当前实现与验证边界见 [开发状态](PROJECT-STATUS.md)。下文保留最初的设计目标供核对。当时正式附件固定为 `haohaochang-tv.apk` 和 `haohaochang-resource-ai.zip`，使用 Release asset digest 校验；TV 持久签名已配置。Docker 继续由用户手动拉取镜像、重新部署，不增加自动部署功能。
 
 目标流程：检查 GitHub 最新正式 Release → 显示版本与更新说明 → 用户点击更新 → 下载、校验 → 安装或覆盖程序 → 重新打开。无需另建更新服务器。
 

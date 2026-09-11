@@ -130,10 +130,23 @@ export async function runProviderJob(
   vocal,
   staging,
   config,
-  { pollInterval = 3000, clip, videoOnly = false, videoInfo } = {},
+  {
+    pollInterval = 3000,
+    clip,
+    videoOnly = false,
+    videoInfo,
+    maxVideoBytes = 1024 ** 3,
+  } = {},
 ) {
-  if ((await stat(vocal)).size > (clip ? 1024 : 100) * 1024 * 1024)
-    throw new Error(clip ? "待裁剪视频超过 1 GB" : "待分离音频超过 100 MB");
+  const maximum = clip
+    ? Math.min(4 * 1024 ** 3, Math.max(1024 ** 3, Number(maxVideoBytes) || 0))
+    : 100 * 1024 ** 2;
+  if ((await stat(vocal)).size > maximum)
+    throw new Error(
+      clip
+        ? `待处理视频超过整理器的 ${maximum / 1024 ** 3} GB 上限`
+        : "待分离音频超过 100 MB",
+    );
   const signature = await fingerprint(vocal);
   const checkpointKey = checkpointName(song, config);
   let checkpoint = store.get(checkpointKey);
@@ -156,6 +169,8 @@ export async function runProviderJob(
       if (videoInfo) {
         form.set("video_height", String(videoInfo.height || 1080));
         form.set("video_fps", String(videoInfo.videoFps || 30));
+        if (["smpte2084", "arib-std-b67"].includes(videoInfo.colorTransfer))
+          form.set("video_transfer", videoInfo.colorTransfer);
       }
       form.set("start", String(clip.start));
       form.set("end", String(clip.end));

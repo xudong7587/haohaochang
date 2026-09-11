@@ -140,6 +140,8 @@ try {
   await mobile.getByRole("button", { name: "发送 👏", exact: true }).click();
   await page.locator(".reaction-layer").getByText("👏").waitFor();
   // A playing song used to intercept DPAD right globally on the stage page.
+  if (await page.locator(".tv-content-entered").count())
+    await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "音乐现场", exact: true }).click();
   await page.getByRole("button", { name: "音乐现场", exact: true }).focus();
   const lyricsBefore = store.get("lyrics-offset:" + String(1).repeat(24), 0);
@@ -152,13 +154,11 @@ try {
     store.get("lyrics-offset:" + String(1).repeat(24), 0),
     lyricsBefore,
   );
-  await page
-    .getByRole("group", { name: "演唱画面，确认键全屏，左右键微调歌词" })
-    .focus();
+  await page.getByRole("group", { name: "演唱画面，确认键全屏" }).focus();
   await page.keyboard.press("ArrowDown");
   assert.equal(
     await page.evaluate(
-      () => !!document.activeElement.closest(".video-caption"),
+      () => !!document.activeElement.closest(".play-controls"),
     ),
     true,
   );
@@ -166,12 +166,13 @@ try {
   for (
     let n = 0;
     n < 12 &&
-    (await page.locator(":focus").getAttribute("data-fullscreen")) === null;
+    (await page.locator(":focus").getAttribute("data-open-fullscreen")) ===
+      null;
     n++
   )
     await page.keyboard.press("ArrowRight");
   assert.notEqual(
-    await page.locator(":focus").getAttribute("data-fullscreen"),
+    await page.locator(":focus").getAttribute("data-open-fullscreen"),
     null,
   );
   await page.keyboard.press("Enter");
@@ -190,16 +191,17 @@ try {
     store.get("lyrics-offset:" + String(1).repeat(24), 0),
     lyricsBefore,
   );
-  // Force a slow native exit, then immediately ask for CSS fullscreen again.
+  // Footer controls become focusable once the browser leaves its native top layer.
   await page.evaluate(() => {
     const exit = document.exitFullscreen.bind(document);
     document.exitFullscreen = () =>
       new Promise((resolve) => setTimeout(resolve, 350)).then(exit);
-    window.haohaochangBack();
   });
+  await page.getByRole("button", { name: "退出全屏", exact: true }).click();
   await page.waitForFunction(
     () => !document.querySelector(".tv-player.is-full"),
   );
+  await page.waitForFunction(() => document.fullscreenElement === null);
   // Older HTTP WebViews reject the native API; viewport fullscreen must still work.
   await page.locator(".tv-player").evaluate((el) => {
     el.requestFullscreen = () => Promise.reject(new Error("WebView fixture"));
@@ -221,6 +223,9 @@ try {
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     ),
   );
+  assert.equal(await page.locator(".tv-player.is-full").count(), 1);
+  await page.keyboard.press("ArrowDown");
+  await page.getByRole("button", { name: "退出全屏", exact: true }).click();
   await page.waitForFunction(
     () => !document.querySelector(".tv-player.is-full"),
   );

@@ -1,0 +1,341 @@
+/* TV-only surfaces. Keep playback/remote details out of global admin styles. */
+.video-refresh {
+  display: grid;
+  gap: 16px;
+  padding: 8px 0;
+}
+.video-refresh h3,
+.video-refresh p {
+  margin: 0;
+}
+.video-refresh p,
+.video-refresh small {
+  line-height: 1.6;
+  color: #bdb0cb;
+}
+.video-refresh-source {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #ffffff18;
+  border-radius: 14px;
+  background: #ffffff05;
+}
+.video-refresh-source a {
+  overflow-wrap: anywhere;
+}
+.tv.tv-content-entered {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+.app.tv.tv-content-entered > .sidebar {
+  width: 64px;
+  padding: 0;
+  overflow: hidden;
+}
+.tv.tv-content-entered > .sidebar > * {
+  visibility: hidden;
+  pointer-events: none;
+}
+.tv.tv-content-entered > .sidebar::after {
+  content: "返回 · 主菜单";
+  position: absolute;
+  top: 40%;
+  left: 20px;
+  writing-mode: vertical-rl;
+  letter-spacing: 3px;
+  font-size: 15px;
+  color: #b9b0cf;
+}
+.tv.tv-content-entered main {
+  grid-column: 2;
+}
+.tv.tv-content-entered > .tv-player:not(.is-full) {
+  width: 220px;
+}
+.tv main:focus {
+  outline: none;
+}
+
+/* Fixed geometry and row-major ordering also work without CSS aspect-ratio. */
+.tv .artist-song-masonry.song-poster-grid {
+  display: grid;
+  columns: auto;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 22px;
+  align-items: stretch;
+}
+.tv .artist-song-masonry .song-poster-card {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 0;
+  border-radius: 18px;
+  background: #261f32;
+  box-shadow: 0 5px 18px #0002;
+  overflow: visible;
+}
+.tv .artist-song-masonry .song-poster-card > button {
+  border-radius: 18px 18px 0 0;
+  flex: 1;
+  padding-bottom: 12px;
+}
+.tv .artist-song-masonry .song-poster-image {
+  display: block;
+  padding-top: 100%;
+  height: 0;
+  aspect-ratio: auto;
+  background: linear-gradient(135deg, #584574, #2b203e);
+  border-radius: 18px 18px 0 0;
+}
+.tv .artist-song-masonry .song-poster-image > img {
+  position: absolute;
+  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tv .artist-song-masonry .song-poster-image > svg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 56px;
+  height: 56px;
+  color: #d8c5ee;
+}
+.tv .artist-song-masonry .song-poster-card strong {
+  font-size: 19px;
+  line-height: 28px;
+  height: 68px;
+  padding: 12px 14px 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.tv .artist-song-masonry .song-poster-card small {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  height: 26px;
+  font-size: 13px;
+}
+.tv .artist-song-card-footer {
+  min-height: 36px;
+  padding-top: 0;
+  font-size: 13px;
+}
+.tv .artist-detail-hero,
+.tv .artist-hero-content {
+  min-height: 220px;
+}
+.tv .artist-hero-content {
+  padding: 24px 28px;
+  gap: 26px;
+}
+.tv .artist-hero-portrait {
+  width: 120px;
+  height: 158px;
+}
+.tv .artist-hero-copy h1 {
+  font-size: 38px;
+  margin-bottom: 12px;
+}
+.tv .artist-description {
+  margin: 10px 0;
+  max-height: 52px;
+}
+.tv .artist-card-photo {
+  position: relative;
+  height: 0;
+  padding-top: 115%;
+  aspect-ratio: auto;
+}
+.tv .artist-card-photo > * {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+/* A filled, high-contrast focus state, no animated travelling rectangle. */
+.keyboard .tv button:focus,
+.keyboard .tv a:focus,
+.keyboard .tv [role="button"]:focus,
+.keyboard .tv summary:focus {
+  outline: none;
+  background: #fff !important;
+  color: #21182e !important;
+  box-shadow:
+    0 0 0 2px #ffffff55,
+    0 0 24px #dac6ff66;
+  position: relative;
+  z-index: 2;
+}
+.keyboard .tv button:focus strong,
+.keyboard .tv button:focus small,
+.keyboard .tv button:focus span {
+  color: #21182e;
+}
+.keyboard .tv .artist-card:focus .artist-card-caption {
+  background: #fff;
+  color: #21182e;
+  padding-top: 18px;
+}
+.keyboard .tv input:focus,
+.keyboard .tv select:focus {
+  outline: 2px solid #eee5ff;
+  outline-offset: 2px;
+  box-shadow: 0 0 18px #dac6ff44;
+}
+.keyboard .tv .video-stage:focus {
+  outline: none;
+}
+.tv .play-controls > button {
+  min-width: 64px;
+  min-height: 48px;
+  border-radius: 14px;
+}
+
+.tv-player.is-full .video-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+  padding: 24px 4vw 22px;
+  max-height: 55vh;
+  border: 0;
+  background: linear-gradient(180deg, #1b1625f5, #15101dfc);
+  box-shadow: 0 -16px 60px #0006;
+}
+.tv-player.is-full .video-caption-heading {
+  gap: 28px;
+}
+.tv-player.is-full .video-caption-heading strong {
+  display: block;
+  font-size: 22px;
+  color: #fff;
+}
+.tv-player.is-full .video-caption-heading span {
+  display: block;
+  font-size: 14px;
+  margin-top: 5px;
+  color: #b9abc9;
+}
+.tv-player.is-full .video-caption-heading small {
+  font-size: 13px;
+  color: #b9abc9;
+}
+.tv-player.is-full .full-controls {
+  width: 100%;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.tv-player.is-full .video-caption button {
+  min-height: 48px;
+  padding: 10px 18px;
+  border: 1px solid #ffffff16;
+  border-radius: 13px;
+  font-size: 17px;
+}
+.tv-player.is-full .full-controls button {
+  min-width: 106px;
+}
+.tv-player.is-full .full-controls [data-fullscreen] {
+  margin-left: auto;
+}
+.tv-player.is-full .lyric-adjust {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(58px, 1fr)) minmax(124px, 1.8fr)
+    repeat(4, minmax(58px, 1fr)) minmax(58px, 1fr);
+  gap: 10px;
+  border-top: 1px solid #ffffff15;
+  padding-top: 18px;
+}
+.tv-player.is-full .lyric-adjust button {
+  min-width: 0;
+  font-size: 15px;
+  padding: 8px;
+}
+.tv-player.is-full .lyric-adjust output {
+  font-size: 14px;
+  color: #ded0ef;
+  align-self: center;
+}
+.lyrics-save-status {
+  margin: -8px 0 0;
+  text-align: right;
+  font-size: 12px;
+  color: #b9d7c7;
+}
+.playback-diagnostics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  font-size: 13px;
+  color: #c5b8d4;
+}
+.playback-diagnostics strong {
+  color: #eee5ff;
+}
+
+/* A transparent DOM aperture over the native SurfaceView. All menus and
+   lyrics remain in the WebView above it. Native bounds track the same rect. */
+.has-native-picture,
+.has-native-picture body,
+.has-native-picture #root,
+.has-native-picture .app.tv {
+  background: transparent;
+}
+.tv .native-picture-player,
+.tv .tv-player.native-picture-player.is-full,
+.tv .native-picture {
+  background: transparent;
+}
+.native-picture > video {
+  visibility: hidden;
+}
+
+@media (max-width: 950px) {
+  .tv-player.is-full .video-caption {
+    padding: 16px 20px;
+    gap: 12px;
+  }
+  .tv-player.is-full .video-caption-heading small {
+    display: none;
+  }
+  .tv-player.is-full .video-caption button {
+    font-size: 14px;
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+  .tv-player.is-full .full-controls {
+    gap: 8px;
+  }
+  .tv-player.is-full .full-controls button {
+    min-width: 76px;
+  }
+  .tv-player.is-full .lyric-adjust {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .tv-player.is-full .lyric-adjust output {
+    grid-column: 5;
+    grid-row: 1;
+    min-width: 0;
+    font-size: 12px;
+  }
+  .tv-player.is-full .lyric-adjust button {
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-player .video-caption,
+  .tv .sidebar,
+  .tv button {
+    transition: none;
+  }
+}

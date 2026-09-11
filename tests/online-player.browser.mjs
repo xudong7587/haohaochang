@@ -260,6 +260,14 @@ try {
   );
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(origin + "/lyrics");
+  const enterFull = async () => {
+    await page.locator(".tv-player").evaluate((el) => {
+      el.requestFullscreen = () => Promise.reject(new Error("WebView fixture"));
+    });
+    await page.getByRole("button", { name: "全屏播放", exact: true }).click();
+    await page.locator(".tv-player.is-full").waitFor();
+  };
+  await enterFull();
   await page.waitForSelector(".lyric-countdown");
   assert.match(
     await page.locator(".lyric-current").textContent(),
@@ -273,6 +281,7 @@ try {
   await page.keyboard.press("ArrowLeft");
   assert.equal(await page.evaluate(() => window.controlCalls.length), 0);
   await page.reload();
+  await enterFull();
   await page.getByRole("button", { name: "显示歌词", exact: true }).waitFor();
   assert.equal(await page.locator(".lyrics-scene").count(), 0);
   await page.getByRole("button", { name: "显示歌词", exact: true }).click();
@@ -321,6 +330,7 @@ try {
   await page.locator(".tv-player").evaluate((el) => {
     el.requestFullscreen = () => Promise.reject(new Error("WebView fixture"));
   });
+  await page.getByRole("button", { name: "退出全屏", exact: true }).click();
   await page.getByRole("button", { name: "全屏播放", exact: true }).click();
   await page.waitForSelector(".tv-player.is-full");
   await page.evaluate(() =>
@@ -332,6 +342,9 @@ try {
   await page.getByRole("button", { name: "显示歌词", exact: true }).click();
   await page.waitForSelector(".lyrics-scene");
   await page.keyboard.press("Escape");
+  assert.equal(await page.locator(".tv-player.is-full").count(), 1);
+  await page.keyboard.press("ArrowDown");
+  await page.getByRole("button", { name: "退出全屏", exact: true }).click();
   await page.waitForFunction(
     () => !document.querySelector(".tv-player.is-full"),
   );

@@ -2,6 +2,13 @@ package home.haohaochang.tv;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class UpdatePolicyTest {
+    @Test public void versionedAssetsMatchTheSelectedReleaseAndExcludeDebug() {
+        assertEquals(2, UpdatePolicy.assetPriority("haohaochang-tv-v0.4.0.apk", "v0.4.0"));
+        assertEquals(1, UpdatePolicy.assetPriority("haohaochang-tv.apk", "v0.4.0"));
+        assertEquals(0, UpdatePolicy.assetPriority("haohaochang-tv-v0.4.1.apk", "v0.4.0"));
+        assertEquals(0, UpdatePolicy.assetPriority("haohaochang-tv-v0.4.0-debug.apk", "v0.4.0"));
+        assertEquals(0, UpdatePolicy.assetPriority("haohaochang-tv.apk", "v0.4.0-beta"));
+    }
     @Test public void versions() {
         assertTrue(UpdatePolicy.newer("v0.3.10","0.3.9"));
         assertFalse(UpdatePolicy.newer("v0.3.9","0.3.10"));

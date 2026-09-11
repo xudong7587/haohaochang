@@ -4,6 +4,11 @@ import java.net.URI;
 
 final class UpdatePolicy {
     static final String REPO = "xudong7587/haohaochang";
+    static int assetPriority(String name, String tag) {
+        if (!tag.matches("v?\\d+\\.\\d+\\.\\d+")) return 0;
+        if (("haohaochang-tv-v" + tag.replaceFirst("^v", "") + ".apk").equals(name)) return 2;
+        return "haohaochang-tv.apk".equals(name) ? 1 : 0;
+    }
     static boolean allowed(String value, boolean initial) {
         try {
             URI u = new URI(value);

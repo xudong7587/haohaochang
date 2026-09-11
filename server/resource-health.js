@@ -84,6 +84,8 @@ export async function inspectPackage(store, song, directory) {
                 width: media.width,
                 height: media.height,
                 codec: media.videoCodec,
+                fps: media.videoFps,
+                pixelFormat: media.pixelFormat,
                 verification: "packets",
               }
             : {}),

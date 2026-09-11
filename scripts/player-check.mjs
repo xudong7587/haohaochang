@@ -179,6 +179,10 @@ try {
     (await read()).tracks.find((t) => t.kind === "vocal").paused,
     false,
   );
+  await page.locator(".tv-player").evaluate((el) => {
+    el.requestFullscreen = () => Promise.reject(new Error("WebView fixture"));
+  });
+  await page.getByRole("button", { name: "全屏播放", exact: true }).click();
   assert.equal(
     await page
       .locator(".video-caption [data-audio-variant]")
@@ -219,6 +223,7 @@ try {
     window.lyricsToggleTracks = window.lyricsToggleVideo._audioTracks;
     window.lyricsToggleTime = window.lyricsToggleVideo._playback.getTime();
   });
+  await page.keyboard.press("ArrowDown");
   await page.getByRole("button", { name: "隐藏歌词", exact: true }).click();
   assert.equal(await page.locator(".lyrics-scene").count(), 0);
   await page.waitForFunction(

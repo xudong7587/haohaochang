@@ -4,11 +4,13 @@ import { realpath as callbackRealpath } from "node:fs";
 import { promisify } from "node:util";
 const portableRealpath = promisify(callbackRealpath);
 async function realpath(file) {
-  try { return await nativeRealpath(file); }
-  catch (error) {
+  try {
+    return await nativeRealpath(file);
+  } catch (error) {
     // Windows mapped SMB drives can reject the native final-path lookup.
     // The JS resolver still follows links before the same containment check.
-    if (process.platform === "win32" && error.code === "UNKNOWN") return portableRealpath(file);
+    if (process.platform === "win32" && error.code === "UNKNOWN")
+      return portableRealpath(file);
     throw error;
   }
 }
@@ -79,6 +81,9 @@ export async function probe(file) {
     pixelFormat: data.streams.find(
       (s) => s.codec_type === "video" && !s.disposition?.attached_pic,
     )?.pix_fmt,
+    colorTransfer: data.streams.find(
+      (s) => s.codec_type === "video" && !s.disposition?.attached_pic,
+    )?.color_transfer,
     duration: Number(data.format?.duration || 0),
     audio: data.streams
       .filter((s) => s.codec_type === "audio")

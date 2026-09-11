@@ -5,6 +5,7 @@ import { App } from "./app.jsx";
 import { PcDashboard } from "./pc-dashboard.jsx";
 import "./style.css";
 import "./player-adaptive.css";
+import "./playback/tv-experience.css";
 function BootReady({ children }) {
   React.useEffect(() => {
     if (window.haohaochangBoot) window.haohaochangBoot.ready();
