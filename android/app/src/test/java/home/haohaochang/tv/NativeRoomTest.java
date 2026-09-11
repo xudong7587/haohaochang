@@ -35,6 +35,8 @@ public class NativeRoomTest {
   private NativeRoom room;
   private LocalNas server;
   private final List<JSONObject> commands = new CopyOnWriteArrayList<>();
+  private volatile String songsFixture =
+      "[{\"id\":\"song-1\",\"title\":\"测试歌曲\",\"artist\":\"测试歌手\"}]";
   private final JSONObject song =
       RoomApi.object(
           "id",
@@ -56,11 +58,7 @@ public class NativeRoomTest {
         new LocalNas(
             (path, headers, body) -> {
               if (path.equals("/api/control")) commands.add(new JSONObject(body));
-              return new LocalNas.Reply(
-                  200,
-                  path.startsWith("/api/songs")
-                      ? "[{\"id\":\"song-1\",\"title\":\"测试歌曲\",\"artist\":\"测试歌手\"}]"
-                      : "{}");
+              return new LocalNas.Reply(200, path.startsWith("/api/songs") ? songsFixture : "{}");
             });
     activity = Robolectric.buildActivity(Activity.class).setup().get();
     room =
@@ -83,6 +81,7 @@ public class NativeRoomTest {
             "playback",
             RoomApi.object("paused", false, "vocal", false, "lyricsOffsetMs", 0)));
     layout(960, 540);
+    room.focusInitial();
   }
 
   @After
@@ -119,8 +118,127 @@ public class NativeRoomTest {
   }
 
   private void press(int key) {
-    room.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, key));
-    room.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, key));
+    activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, key));
+    activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, key));
+  }
+
+  @Test
+  public void remoteMovesAcrossSidebarContentAndFooterWithoutTouch() throws Exception {
+    assertTrue(find("音乐现场").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    assertTrue(find("歌名点歌").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    assertTrue(find("歌星点歌").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_UP);
+    assertTrue(find("歌名点歌").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_CENTER);
+    drain();
+    layout(960, 540);
+    assertTrue(find("歌名点歌").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    assertTrue(find("歌曲卡片").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_UP);
+    assertTrue(find("搜索歌名或歌手").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    assertTrue(find("搜索").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    assertTrue(find("搜索歌名或歌手").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    assertTrue(find("歌曲卡片").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    assertTrue(find("歌名点歌").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    assertTrue(find("暂停").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    assertTrue(find("切歌").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    assertTrue(find("暂停").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_UP);
+    assertTrue(find("歌曲卡片").hasFocus());
+    assertEquals(0, commands.size());
+  }
+
+  @Test
+  public void remoteConfirmActivatesOnceAndFullControlsStayNavigable() throws Exception {
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    assertTrue(find("暂停").hasFocus());
+    activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER));
+    activity.dispatchKeyEvent(
+        new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER, 3));
+    activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER));
+    drain();
+    assertEquals(1, commands.size());
+    assertEquals("pause", commands.get(0).optString("action"));
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    assertTrue(find("全屏播放").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_CENTER);
+    layout(960, 540);
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    assertTrue(find("暂停").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    assertTrue(find("切换原唱伴奏").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    assertTrue(find("歌词延后 0.5 秒").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_UP);
+    assertTrue(find("重置歌词微调").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    assertTrue(find("暂停").hasFocus());
+  }
+
+  @Test
+  public void catalogueLeavesVideoVisibleAndCapturesNativeStyle() throws Exception {
+    JSONArray fixtures = new JSONArray();
+    for (int i = 0; i < 16; i++)
+      fixtures.put(
+          RoomApi.object("id", "song-" + i, "title", "合成测试曲 · " + (i + 1), "artist", "测试歌手"));
+    songsFixture = fixtures.toString();
+    find("歌名点歌").performClick();
+    drain();
+    layout(960, 540);
+    NativeCatalogue catalogue =
+        (NativeCatalogue)
+            descendants(room).stream().filter(v -> v instanceof NativeCatalogue).findFirst().get();
+    assertTrue("Keep a clear video strip at the right", catalogue.getRight() <= 800);
+    assertEquals(144, catalogue.getLeft());
+    assertFalse(find("隐藏歌词").isShown());
+    assertFalse(
+        descendants(room).stream().anyMatch(v -> v.getClass().getName().contains("WebView")));
+    capture("native-tv-catalogue.png");
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    layout(960, 540);
+    capture("native-tv-catalogue-focused.png");
+    GridView grid = (GridView) find("歌曲卡片");
+    assertTrue(grid.getChildAt(0).isActivated());
+    int columns = grid.getNumColumns();
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    layout(960, 540);
+    assertEquals(2, grid.getSelectedItemPosition());
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    layout(960, 540);
+    assertEquals(2 + columns, grid.getSelectedItemPosition());
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    layout(960, 540);
+    assertTrue("Remote scroll reveals offscreen cards", grid.getFirstVisiblePosition() > 0);
+    press(KeyEvent.KEYCODE_DPAD_UP);
+    layout(960, 540);
+    assertEquals(2 + columns * 2, grid.getSelectedItemPosition());
+  }
+
+  private void capture(String name) throws Exception {
+    java.io.File folder = new java.io.File("build/test-screenshots");
+    folder.mkdirs();
+    Bitmap image = Bitmap.createBitmap(960, 540, Bitmap.Config.ARGB_8888);
+    room.draw(new Canvas(image));
+    try (java.io.FileOutputStream out =
+        new java.io.FileOutputStream(new java.io.File(folder, name))) {
+      image.compress(Bitmap.CompressFormat.PNG, 100, out);
+    }
+    image.recycle();
   }
 
   private void drain() throws Exception {
@@ -167,7 +285,9 @@ public class NativeRoomTest {
   @Test
   public void pausedControlsStayHiddenAcrossRepeatedStateUpdates() {
     find("全屏播放").performClick();
-    JSONObject pausedState = RoomApi.object("queue",new JSONArray().put(song),"playback",RoomApi.object("paused",true));
+    JSONObject pausedState =
+        RoomApi.object(
+            "queue", new JSONArray().put(song), "playback", RoomApi.object("paused", true));
     room.state(pausedState);
     find("播放").requestFocus();
     room.back();
@@ -183,6 +303,10 @@ public class NativeRoomTest {
   public void lyricButtonsHaveReversedDirectionsAndStayConditional() throws Exception {
     find("全屏播放").performClick();
     layout(960, 540);
+    assertEquals("0.5", ((Button) find("歌词延后 0.5 秒")).getText().toString());
+    assertFalse(
+        descendants(room).stream()
+            .anyMatch(v -> String.valueOf(v.getContentDescription()).contains("0.1 秒")));
     find("歌词延后 0.5 秒").performClick();
     find("歌词提前 3 秒").performClick();
     drain();
@@ -197,6 +321,21 @@ public class NativeRoomTest {
     find("重置歌词微调").performClick();
     drain();
     assertTrue(commands.get(2).getBoolean("reset"));
+  }
+
+  @Test
+  public void pictureArrowsAdjustByHalfASecondAndDoNotStealControlNavigation() throws Exception {
+    find("全屏播放").performClick();
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    drain();
+    assertEquals(-500, commands.get(0).optInt("deltaMs"));
+    assertEquals(500, commands.get(1).optInt("deltaMs"));
+    press(KeyEvent.KEYCODE_DPAD_DOWN);
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    drain();
+    assertTrue(find("切换原唱伴奏").hasFocus());
+    assertEquals(2, commands.size());
   }
 
   @Test

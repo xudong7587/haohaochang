@@ -160,7 +160,7 @@ public final class MainActivity extends Activity {
             });
     root.addView(room, new FrameLayout.LayoutParams(-1, -1));
     room.foreground(resumed);
-    room.requestFocus();
+    room.post(room::focusInitial);
   }
 
   private void pair() {

@@ -2,13 +2,17 @@ package home.haohaochang.tv;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.util.LruCache;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -28,7 +32,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   private final Activity activity;
   private final RoomSession session;
   private final GridView grid;
-  private final TextView heading, empty;
+  private final TextView heading, empty, description;
   private final EditText search;
   private final Cards adapter = new Cards();
   private final Handler main = new Handler(Looper.getMainLooper());
@@ -51,17 +55,25 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   private int generation, onlinePage = 1;
   private boolean closed;
   private final Button more;
+  private final Button find;
+  private final LinearLayout query;
+  private int selectedPosition;
 
   NativeCatalogue(Activity activity, RoomSession session) {
     super(activity);
     this.activity = activity;
     this.session = session;
     setOrientation(VERTICAL);
-    setBackgroundColor(0xb315101e);
-    setPadding(dp(22), dp(16), dp(22), dp(12));
-    heading = TvStyle.text(activity, "歌名点歌", 24, TvStyle.INK);
+    setBackgroundColor(0xbb12101b);
+    setPadding(dp(24), dp(16), dp(20), dp(12));
+    TextView breadcrumb = TvStyle.text(activity, "我的客厅    /    家庭 KTV", 9, TvStyle.MUTED);
+    addView(breadcrumb, new LayoutParams(-1, dp(24)));
+    heading = TvStyle.text(activity, "今晚，唱点开心的。", 26, TvStyle.INK);
+    heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
     addView(heading, new LayoutParams(-1, dp(42)));
-    LinearLayout query = new LinearLayout(activity);
+    description = TvStyle.text(activity, "一首熟悉的旋律，一屋子喜欢的人。", 12, TvStyle.MUTED);
+    addView(description, new LayoutParams(-1, dp(28)));
+    query = new LinearLayout(activity);
     query.setGravity(Gravity.CENTER_VERTICAL);
     addView(query, new LayoutParams(-1, dp(46)));
     search = new EditText(activity);
@@ -70,11 +82,12 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     search.setTextColor(TvStyle.INK);
     search.setHintTextColor(TvStyle.MUTED);
     search.setHint("歌名 / 歌手 / 拼音首字母");
-    search.setBackground(TvStyle.shape(activity, TvStyle.SURFACE, 10));
+    search.setBackground(TvStyle.focus(activity));
+    search.setContentDescription("搜索歌名或歌手");
     search.setPadding(dp(12), 0, dp(12), 0);
     search.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
     query.addView(search, new LayoutParams(0, -1, 1));
-    Button find = TvStyle.button(activity, "搜索", "搜索", this::search);
+    find = TvStyle.button(activity, "搜索", "搜索", this::search);
     LayoutParams findParams = new LayoutParams(dp(72), -1);
     findParams.leftMargin = dp(10);
     query.addView(find, findParams);
@@ -88,6 +101,9 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
         });
     grid = new GridView(activity);
     grid.setId(View.generateViewId());
+    grid.setFocusable(true);
+    grid.setFocusableInTouchMode(true);
+    grid.setContentDescription("歌曲卡片");
     grid.setNumColumns(GridView.AUTO_FIT);
     grid.setColumnWidth(dp(132));
     grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
@@ -95,10 +111,14 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     grid.setVerticalSpacing(dp(12));
     grid.setClipToPadding(false);
     grid.setPadding(dp(3), dp(14), dp(3), dp(5));
-    grid.setSelector(TvStyle.focus(activity));
+    grid.setSelector(android.R.color.transparent);
     grid.setAdapter(adapter);
+    grid.setOnFocusChangeListener((view, focused) -> highlightCards());
     grid.setOnItemClickListener(
-        (parent, view, position, id) -> select(rows.optJSONObject(position)));
+        (parent, view, position, id) -> {
+          selectedPosition = position;
+          select(rows.optJSONObject(position));
+        });
     addView(grid, new LayoutParams(-1, 0, 1));
     empty = TvStyle.text(activity, "正在读取…", 16, TvStyle.MUTED);
     empty.setGravity(Gravity.CENTER);
@@ -133,15 +153,68 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   boolean back() {
     if (!artist.isEmpty() || !tag.isEmpty()) {
       show(!artist.isEmpty() ? "artists" : "playlists");
-      grid.requestFocus();
+      grid.requestFocusFromTouch();
       return true;
     }
     return false;
   }
 
   void focusGrid() {
-    if (rows.length() > 0) grid.requestFocus();
-    else search.requestFocus();
+    if (rows.length() > 0) focusCard(selectedPosition);
+    else search.requestFocusFromTouch();
+  }
+
+  private void focusCard(int position) {
+    selectedPosition = Math.max(0, Math.min(rows.length() - 1, position));
+    grid.requestFocusFromTouch();
+    grid.setSelection(selectedPosition);
+    highlightCards();
+  }
+
+  private void highlightCards() {
+    for (int i = 0; i < grid.getChildCount(); i++)
+      grid.getChildAt(i)
+          .setActivated(grid.hasFocus() && grid.getFirstVisiblePosition() + i == selectedPosition);
+  }
+
+  boolean activate(View target) {
+    if (target != grid) return false;
+    select(rows.optJSONObject(selectedPosition));
+    return true;
+  }
+
+  /** GridView scrolling and selection are explicit even when the TV starts in touch mode. */
+  boolean move(int key) {
+    if (grid.hasFocus()) {
+      int position = selectedPosition;
+      int columns = Math.max(1, grid.getNumColumns());
+      if (key == KeyEvent.KEYCODE_DPAD_LEFT) {
+        if (position % columns == 0) return false;
+        focusCard(position - 1);
+      } else if (key == KeyEvent.KEYCODE_DPAD_RIGHT) {
+        if (position % columns < columns - 1 && position + 1 < rows.length())
+          focusCard(position + 1);
+      } else if (key == KeyEvent.KEYCODE_DPAD_UP) {
+        if (position < columns) search.requestFocusFromTouch();
+        else focusCard(position - columns);
+      } else if (key == KeyEvent.KEYCODE_DPAD_DOWN) {
+        if (position + columns >= rows.length()) {
+          if (more.isShown()) more.requestFocusFromTouch();
+          else return false;
+        } else focusCard(position + columns);
+      }
+      return true;
+    }
+    if (key == KeyEvent.KEYCODE_DPAD_DOWN) {
+      if (rows.length() == 0 || more.hasFocus()) return false;
+      focusCard(0);
+    } else if (key == KeyEvent.KEYCODE_DPAD_UP && more.hasFocus()) focusCard(rows.length() - 1);
+    else if (key == KeyEvent.KEYCODE_DPAD_LEFT) {
+      if (find.hasFocus()) search.requestFocusFromTouch();
+      else return false;
+    } else if (key == KeyEvent.KEYCODE_DPAD_RIGHT && search.hasFocus())
+      find.requestFocusFromTouch();
+    return true;
   }
 
   private void search() {
@@ -155,6 +228,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
 
   private void load() {
     int request = ++generation;
+    selectedPosition = 0;
     queueKey = "";
     more.setVisibility(GONE);
     rows = new JSONArray();
@@ -169,7 +243,17 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                     ? "歌星点歌"
                     : page.equals("playlists")
                         ? "分类歌单"
-                        : page.equals("queue") ? "已点歌曲" : page.equals("online") ? "在线找歌" : "歌名点歌");
+                        : page.equals("queue")
+                            ? "已点歌曲"
+                            : page.equals("online") ? "在线找歌" : "今晚，唱点开心的。");
+    description.setText(
+        page.equals("artists")
+            ? "从喜欢的歌手，找到想唱的那一首。"
+            : page.equals("queue")
+                ? "今晚的歌单，按你的顺序唱。"
+                : page.equals("online")
+                    ? "找一首喜欢的歌，交给歌房准备。"
+                    : page.equals("playlists") ? "换一种心情，发现下一首。" : "一首熟悉的旋律，一屋子喜欢的人。");
     search.setHint(page.equals("online") ? "输入歌名，搜索在线资源" : "歌名 / 歌手 / 拼音首字母");
     if (page.equals("queue")) {
       session.read(
@@ -255,8 +339,10 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   }
 
   private void setRows(JSONArray value) {
+    boolean focused = grid.hasFocus();
     rows = value;
     adapter.notifyDataSetChanged();
+    if (focused && rows.length() > 0) focusCard(selectedPosition);
     empty.setText(rows.length() == 0 ? "暂无歌曲，可在 NAS 管理端导入或整理。" : "");
   }
 
@@ -398,40 +484,63 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     public View getView(int position, View convert, ViewGroup parent) {
       LinearLayout card;
       ImageView image;
-      TextView title, detail;
+      TextView title, detail, action;
       if (convert == null) {
         card = new LinearLayout(activity);
         card.setOrientation(VERTICAL);
-        card.setPadding(dp(6), dp(6), dp(6), dp(8));
+        card.setPadding(dp(5), dp(5), dp(5), dp(7));
         card.setBackground(TvStyle.focus(activity));
         image = new ImageView(activity);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setBackgroundColor(0xff40314f);
-        card.addView(image, new LayoutParams(-1, dp(114)));
-        title = TvStyle.text(activity, "", 15, TvStyle.INK);
+        image.setClipToOutline(true);
+        card.addView(image, new LayoutParams(-1, dp(102)));
+        title = TvStyle.text(activity, "", 13, TvStyle.INK);
         title.setMaxLines(1);
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setPadding(dp(5), dp(8), dp(5), 0);
-        card.addView(title, new LayoutParams(-1, dp(32)));
-        detail = TvStyle.text(activity, "", 12, TvStyle.MUTED);
+        card.addView(title, new LayoutParams(-1, dp(30)));
+        detail = TvStyle.text(activity, "", 10, TvStyle.MUTED);
         detail.setSingleLine();
         detail.setEllipsize(TextUtils.TruncateAt.END);
         detail.setPadding(dp(5), 0, dp(5), 0);
-        card.addView(detail, new LayoutParams(-1, dp(24)));
-        card.setTag(new Object[] {image, title, detail});
+        card.addView(detail, new LayoutParams(-1, dp(22)));
+        action = TvStyle.text(activity, "＋ 点歌", 10, TvStyle.ACCENT);
+        action.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        action.setPadding(dp(5), 0, dp(6), 0);
+        card.addView(action, new LayoutParams(-1, dp(22)));
+        card.setTag(new Object[] {image, title, detail, action});
         title.setDuplicateParentStateEnabled(true);
         detail.setDuplicateParentStateEnabled(true);
+        action.setDuplicateParentStateEnabled(true);
         title.setTextColor(TvStyle.ink());
         detail.setTextColor(TvStyle.ink());
+        action.setTextColor(TvStyle.ink());
       } else {
         card = (LinearLayout) convert;
         Object[] views = (Object[]) card.getTag();
         image = (ImageView) views[0];
         title = (TextView) views[1];
         detail = (TextView) views[2];
+        action = (TextView) views[3];
       }
       JSONObject row = rows.optJSONObject(position);
+      card.setActivated(grid.hasFocus() && position == selectedPosition);
       boolean artistCard = page.equals("artists") && artist.isEmpty();
+      action.setText(
+          artistCard
+              ? "查看歌曲  ›"
+              : row.has("tag") ? "打开歌单  ›" : page.equals("queue") ? "管理歌曲  ›" : "＋ 点歌");
+      LayoutParams imageParams =
+          new LayoutParams(artistCard ? dp(84) : -1, artistCard ? dp(84) : dp(102));
+      imageParams.gravity = Gravity.CENTER_HORIZONTAL;
+      imageParams.topMargin = artistCard ? dp(9) : 0;
+      imageParams.bottomMargin = artistCard ? dp(9) : 0;
+      image.setLayoutParams(imageParams);
+      GradientDrawable cover =
+          new GradientDrawable(
+              GradientDrawable.Orientation.TL_BR, new int[] {0xff44345d, 0xff241e31});
+      cover.setCornerRadius(dp(artistCard ? 48 : 8));
+      image.setBackground(cover);
       title.setText(artistCard ? row.optString("artist") : row.optString("title"));
       detail.setText(
           artistCard
@@ -455,11 +564,16 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                       + RoomApi.encode(row.optString("posterVersion"))
                   : "";
       image.setTag(path);
-      image.setImageDrawable(null);
+      image.setImageDrawable(
+          new TvIcon(
+              activity, artistCard ? "users" : "record", ColorStateList.valueOf(0xffac9cbe), 38));
+      image.setScaleType(ImageView.ScaleType.CENTER);
       if (!path.isEmpty()) {
         Bitmap found = cache.get(path);
-        if (found != null) image.setImageBitmap(found);
-        else {
+        if (found != null) {
+          image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+          image.setImageBitmap(found);
+        } else {
           final ImageView target = image;
           images.execute(
               () -> {
@@ -477,8 +591,10 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                     cache.put(path, bitmap);
                     main.post(
                         () -> {
-                          if (!closed && path.equals(target.getTag()))
+                          if (!closed && path.equals(target.getTag())) {
+                            target.setScaleType(ImageView.ScaleType.CENTER_CROP);
                             target.setImageBitmap(bitmap);
+                          }
                         });
                   }
                 } catch (Exception ignored) {

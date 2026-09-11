@@ -3,19 +3,26 @@ package home.haohaochang.tv;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -36,8 +43,10 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private final RoomSession session;
   private final NativePlayback player;
   private final NativeLyricsView lyrics;
-  private final FrameLayout stage;
-  private final LinearLayout sidebar, footer, controls, leftAdjust, rightAdjust;
+  private final FrameLayout stage, footer;
+  private final LinearLayout sidebar, controls, leftAdjust, rightAdjust, nowPlaying, lyricInfo;
+  private final Map<String, Button> navigation = new LinkedHashMap<>();
+  private final TextView subtitle;
   private final NativeCatalogue catalogue;
   private final TextView title, status, offsetLabel, stageTitle;
   private final Button pause, vocal, next, fullscreen, lyricToggle, queueButton, reset;
@@ -58,6 +67,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private boolean lastPaused = true;
   private int wakeKey = -1;
   private String pageBeforeFull = "stage";
+  private View confirmTarget;
 
   NativeRoom(Activity activity, RoomApi api, Actions actions) {
     this(activity, api, actions, true);
@@ -70,8 +80,8 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     preferences = activity.getSharedPreferences("native-room", Activity.MODE_PRIVATE);
     lyricsVisible = preferences.getBoolean("lyrics", true);
     setBackgroundColor(TvStyle.BACKGROUND);
-    setFocusable(true);
-    setFocusableInTouchMode(true);
+    setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
+    setFocusable(false);
     session = new RoomSession(api, this);
     stage = new FrameLayout(activity);
     stage.setBackgroundColor(Color.BLACK);
@@ -104,11 +114,35 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
         });
     sidebar = new LinearLayout(activity);
     sidebar.setOrientation(LinearLayout.VERTICAL);
-    sidebar.setPadding(dp(12), dp(20), dp(12), dp(12));
-    sidebar.setBackgroundColor(0xff1e1729);
+    sidebar.setPadding(dp(12), dp(18), dp(12), dp(10));
+    sidebar.setBackgroundColor(TvStyle.PANEL);
     addView(sidebar);
-    TextView brand = TvStyle.text(activity, "好好唱", 26, TvStyle.ACCENT);
-    sidebar.addView(brand, new LinearLayout.LayoutParams(-1, dp(52)));
+    LinearLayout brand = new LinearLayout(activity);
+    brand.setGravity(Gravity.CENTER_VERTICAL);
+    ImageView mark = new ImageView(activity);
+    mark.setImageDrawable(new TvIcon(activity, "mic", ColorStateList.valueOf(Color.WHITE), 22));
+    mark.setPadding(dp(6), dp(6), dp(6), dp(6));
+    mark.setBackground(TvStyle.shape(activity, TvStyle.PURPLE, 10));
+    brand.addView(mark, new LinearLayout.LayoutParams(dp(34), dp(34)));
+    LinearLayout wordmark = new LinearLayout(activity);
+    wordmark.setOrientation(LinearLayout.VERTICAL);
+    wordmark.setPadding(dp(8), 0, 0, 0);
+    wordmark.addView(TvStyle.text(activity, "好好唱", 21, TvStyle.INK));
+    TextView english = TvStyle.text(activity, "HOME KARAOKE", 6, TvStyle.MUTED);
+    english.setLetterSpacing(.16f);
+    wordmark.addView(english);
+    brand.addView(wordmark);
+    sidebar.addView(brand, new LinearLayout.LayoutParams(-1, dp(46)));
+    TextView roomBadge = TvStyle.text(activity, "我的客厅\n已连接 · NAS", 10, TvStyle.MUTED);
+    roomBadge.setGravity(Gravity.CENTER_VERTICAL);
+    roomBadge.setPadding(dp(10), 0, dp(8), 0);
+    roomBadge.setLineSpacing(dp(5), 1);
+    roomBadge.setBackground(TvStyle.shape(activity, TvStyle.SURFACE, 9));
+    sidebar.addView(roomBadge, new LinearLayout.LayoutParams(-1, dp(43)));
+    TextView label = TvStyle.text(activity, "发现你的下一首", 9, TvStyle.MUTED);
+    label.setGravity(Gravity.CENTER_VERTICAL);
+    label.setPadding(dp(6), 0, 0, 0);
+    sidebar.addView(label, new LinearLayout.LayoutParams(-1, dp(28)));
     nav("音乐现场", "stage");
     nav("歌名点歌", "songs");
     nav("歌星点歌", "artists");
@@ -117,42 +151,66 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     nav("在线找歌", "online");
     sidebar.addView(new View(activity), new LinearLayout.LayoutParams(1, 0, 1));
     Button join = TvStyle.button(activity, "扫码点歌", "手机扫码加入歌房", this::join);
-    sidebar.addView(join, new LinearLayout.LayoutParams(-1, dp(42)));
+    TvStyle.icon(join, "qr");
+    sidebar.addView(join, new LinearLayout.LayoutParams(-1, dp(34)));
     Button settings = TvStyle.button(activity, "设置", "设置", actions::settings);
-    LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(-1, dp(40));
+    TvStyle.icon(settings, "settings");
+    LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(-1, dp(32));
     settingsParams.topMargin = dp(8);
     sidebar.addView(settings, settingsParams);
     catalogue = new NativeCatalogue(activity, session);
     addView(catalogue);
     catalogue.setVisibility(GONE);
-    footer = new LinearLayout(activity);
-    footer.setOrientation(LinearLayout.VERTICAL);
-    footer.setPadding(dp(12), dp(6), dp(12), dp(8));
-    footer.setBackgroundColor(0xf51e1729);
+    footer = new FrameLayout(activity);
+    footer.setBackgroundColor(TvStyle.PANEL);
     addView(footer);
-    LinearLayout info = new LinearLayout(activity);
-    info.setGravity(Gravity.CENTER_VERTICAL);
-    footer.addView(info, new LinearLayout.LayoutParams(-1, dp(24)));
+    nowPlaying = new LinearLayout(activity);
+    nowPlaying.setGravity(Gravity.CENTER_VERTICAL);
+    footer.addView(nowPlaying);
+    ImageView record = new ImageView(activity);
+    record.setImageDrawable(
+        new TvIcon(activity, "record", ColorStateList.valueOf(TvStyle.ACCENT), 24));
+    record.setPadding(dp(8), dp(8), dp(8), dp(8));
+    record.setBackground(TvStyle.shape(activity, 0xff333240, 24));
+    nowPlaying.addView(record, new LinearLayout.LayoutParams(dp(40), dp(40)));
+    LinearLayout track = new LinearLayout(activity);
+    track.setOrientation(LinearLayout.VERTICAL);
+    track.setPadding(dp(10), 0, 0, 0);
+    nowPlaying.addView(track, new LinearLayout.LayoutParams(0, -2, 1));
     title = TvStyle.text(activity, "下一首，就唱你喜欢的", 14, TvStyle.INK);
+    title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
     title.setSingleLine();
     title.setEllipsize(android.text.TextUtils.TruncateAt.END);
     title.setOnClickListener(v -> show("stage"));
-    info.addView(title, new LinearLayout.LayoutParams(0, -1, 1));
+    track.addView(title);
+    subtitle = TvStyle.text(activity, "点一首歌，开启今晚的好时光", 10, TvStyle.MUTED);
+    subtitle.setSingleLine();
+    subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    subtitle.setPadding(0, dp(5), 0, 0);
+    track.addView(subtitle);
+    lyricInfo = new LinearLayout(activity);
+    lyricInfo.setGravity(Gravity.CENTER_VERTICAL);
+    footer.addView(lyricInfo);
     offsetLabel = TvStyle.text(activity, "歌词原始时间", 12, TvStyle.MUTED);
-    info.addView(offsetLabel);
+    lyricInfo.addView(offsetLabel);
     reset = TvStyle.button(activity, "复位", "重置歌词微调", () -> adjust(0, true));
-    info.addView(reset, new LinearLayout.LayoutParams(dp(44), dp(24)));
+    lyricInfo.addView(reset, new LinearLayout.LayoutParams(dp(44), dp(28)));
     controls = new LinearLayout(activity);
     controls.setGravity(Gravity.CENTER_VERTICAL);
-    footer.addView(controls, new LinearLayout.LayoutParams(-1, dp(46)));
+    footer.addView(controls);
     lyricToggle = TvStyle.button(activity, "歌词", "隐藏歌词", this::toggleLyrics);
-    controls.addView(lyricToggle, new LinearLayout.LayoutParams(dp(54), -1));
-    leftAdjust = adjustGroup(new double[] {10, 3, .5, .1}, false);
+    TvStyle.icon(lyricToggle, "lyrics");
+    controls.addView(lyricToggle, new LinearLayout.LayoutParams(dp(74), -1));
+    leftAdjust = adjustGroup(new double[] {10, 3, .5}, false);
     controls.addView(leftAdjust, new LinearLayout.LayoutParams(0, -1, 1));
     LinearLayout mainControls = new LinearLayout(activity);
     mainControls.setGravity(Gravity.CENTER);
-    controls.addView(mainControls, new LinearLayout.LayoutParams(dp(200), -1));
-    vocal = TvStyle.button(activity, "♫ 伴奏", "切换原唱伴奏", () -> control("vocal"));
+    LinearLayout.LayoutParams centerParams = new LinearLayout.LayoutParams(dp(200), -1);
+    centerParams.leftMargin = dp(8);
+    centerParams.rightMargin = dp(8);
+    controls.addView(mainControls, centerParams);
+    vocal = TvStyle.button(activity, "伴奏", "切换原唱伴奏", () -> control("vocal"));
+    TvStyle.icon(vocal, "mic");
     mainControls.addView(vocal, new LinearLayout.LayoutParams(dp(68), -1));
     pause = TvStyle.button(activity, "Ⅱ", "暂停", () -> control("pause"));
     LinearLayout.LayoutParams pauseParams = new LinearLayout.LayoutParams(dp(48), -1);
@@ -160,14 +218,17 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     pauseParams.rightMargin = dp(8);
     mainControls.addView(pause, pauseParams);
     pause.setTextSize(22);
-    next = TvStyle.button(activity, "▶| 切歌", "切歌", () -> control("next"));
+    TvStyle.primary(pause);
+    next = TvStyle.button(activity, "切歌", "切歌", () -> control("next"));
+    TvStyle.icon(next, "next");
     mainControls.addView(next, new LinearLayout.LayoutParams(dp(68), -1));
-    rightAdjust = adjustGroup(new double[] {.1, .5, 3, 10}, true);
+    rightAdjust = adjustGroup(new double[] {.5, 3, 10}, true);
     controls.addView(rightAdjust, new LinearLayout.LayoutParams(0, -1, 1));
-    fullscreen = TvStyle.button(activity, "⛶ 全屏", "全屏播放", () -> setFull(!full));
+    fullscreen = TvStyle.button(activity, "全屏", "全屏播放", () -> setFull(!full));
+    TvStyle.icon(fullscreen, "screen");
     controls.addView(fullscreen, new LinearLayout.LayoutParams(dp(90), -1));
     status = TvStyle.text(activity, "正在连接播放会话…", 13, TvStyle.INK);
-    status.setBackground(TvStyle.shape(activity, 0xdd392b47, 8));
+    status.setBackground(TvStyle.shape(activity, 0xee252031, 8));
     status.setPadding(dp(12), dp(8), dp(12), dp(8));
     FrameLayout.LayoutParams statusParams =
         new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
@@ -185,8 +246,19 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
 
   private Button nav(String text, String page) {
     Button button = TvStyle.button(activity, text, text, () -> show(page));
-    LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(43));
-    p.bottomMargin = dp(7);
+    button.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+    button.setTextSize(12);
+    button.setPadding(dp(9), 0, dp(6), 0);
+    TvStyle.icon(
+        button,
+        page.equals("stage")
+            ? "play"
+            : page.equals("artists")
+                ? "users"
+                : page.equals("online") ? "globe" : page.equals("songs") ? "music" : "list");
+    navigation.put(page, button);
+    LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(34));
+    p.bottomMargin = dp(5);
     sidebar.addView(button, p);
     return button;
   }
@@ -199,10 +271,11 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
       Button b =
           TvStyle.button(
               activity,
-              advance ? number + " →" : "← " + number,
+              number,
               "歌词" + (advance ? "提前 " : "延后 ") + number + " 秒",
               () -> adjust((int) (seconds * 1000) * (advance ? 1 : -1), false));
-      b.setTextSize(12);
+      b.setTextSize(14);
+      TvStyle.subtle(b);
       b.setPadding(0, 0, 0, 0);
       LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(40), 1);
       p.leftMargin = dp(2);
@@ -222,15 +295,46 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     sidebar.setLayoutParams(navParams);
     FrameLayout.LayoutParams libraryParams = new FrameLayout.LayoutParams(-1, -1);
     libraryParams.leftMargin = nav;
+    // Leave the right fifth of the main stage uncovered while browsing songs.
+    libraryParams.rightMargin = Math.max(dp(120), Math.round((getWidth() - nav) * .22f));
     libraryParams.bottomMargin = bar;
     catalogue.setLayoutParams(libraryParams);
     footer.setLayoutParams(new FrameLayout.LayoutParams(-1, bar, Gravity.BOTTOM));
+    FrameLayout.LayoutParams trackParams =
+        new FrameLayout.LayoutParams(
+            full ? dp(360) : dp(268),
+            full ? dp(30) : dp(56),
+            full ? Gravity.TOP | Gravity.LEFT : Gravity.CENTER_VERTICAL | Gravity.LEFT);
+    trackParams.leftMargin = dp(18);
+    trackParams.topMargin = full ? dp(3) : 0;
+    nowPlaying.setLayoutParams(trackParams);
+    nowPlaying.getChildAt(0).setVisibility(full ? GONE : VISIBLE);
+    subtitle.setVisibility(full ? GONE : VISIBLE);
+    FrameLayout.LayoutParams adjustmentParams =
+        new FrameLayout.LayoutParams(-2, dp(28), Gravity.TOP | Gravity.RIGHT);
+    adjustmentParams.rightMargin = dp(16);
+    adjustmentParams.topMargin = dp(3);
+    lyricInfo.setLayoutParams(adjustmentParams);
+    FrameLayout.LayoutParams controlsParams =
+        new FrameLayout.LayoutParams(-1, dp(44), full ? Gravity.BOTTOM : Gravity.CENTER_VERTICAL);
+    controlsParams.leftMargin = full ? dp(16) : dp(284);
+    controlsParams.rightMargin = dp(16);
+    controlsParams.bottomMargin = full ? dp(7) : 0;
+    controls.setLayoutParams(controlsParams);
     sidebar.setVisibility(full ? GONE : VISIBLE);
     catalogue.setVisibility(!full && !tab.equals("stage") ? VISIBLE : GONE);
     lyrics.setVisibility(lyricsVisible && full ? VISIBLE : GONE);
-    lyricToggle.setVisibility(full ? VISIBLE : INVISIBLE);
+    lyricToggle.setVisibility(full ? VISIBLE : GONE);
     stage.setContentDescription(full ? "演唱画面，按下键打开控制，左右键微调歌词" : "演唱画面，确认键全屏");
     updateAdjustmentVisibility();
+  }
+
+  @Override
+  protected void onMeasure(int widthSpec, int heightSpec) {
+    FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) catalogue.getLayoutParams();
+    p.rightMargin =
+        Math.max(dp(120), Math.round((MeasureSpec.getSize(widthSpec) - dp(144)) * .22f));
+    super.onMeasure(widthSpec, heightSpec);
   }
 
   private void updateAdjustmentVisibility() {
@@ -239,6 +343,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     rightAdjust.setVisibility(full && lyricsVisible && current != null ? VISIBLE : INVISIBLE);
     offsetLabel.setVisibility(full && lyricsVisible && current != null ? VISIBLE : GONE);
     reset.setVisibility(offsetLabel.getVisibility());
+    lyricInfo.setVisibility(offsetLabel.getVisibility());
   }
 
   private void show(String value) {
@@ -246,9 +351,24 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     catalogue.setVisibility(tab.equals("stage") ? GONE : VISIBLE);
     if (!tab.equals("stage")) catalogue.show(tab);
     layoutRoom();
-    // Native focus traversal remains in the selected surface; no hidden DOM targets.
-    if (tab.equals("stage")) stage.requestFocus();
-    else catalogue.focusGrid();
+    for (Map.Entry<String, Button> item : navigation.entrySet())
+      item.getValue().setSelected(item.getKey().equals(tab));
+    focusInitial();
+  }
+
+  void focusInitial() {
+    Button selected = navigation.get(tab);
+    if (full) focusPlayback();
+    else if (selected != null) selected.requestFocusFromTouch();
+  }
+
+  private void focusPlayback() {
+    if (!pause.requestFocusFromTouch()) fullscreen.requestFocusFromTouch();
+  }
+
+  private void focusContent() {
+    if (catalogue.getVisibility() == VISIBLE) catalogue.focusGrid();
+    else stage.requestFocusFromTouch();
   }
 
   private void setFull(boolean value) {
@@ -256,18 +376,19 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     if (value) pageBeforeFull = tab;
     full = value;
     controlsVisible = true;
-    fullscreen.setText(full ? "⛶ 退出" : "⛶ 全屏");
+    fullscreen.setText(full ? "退出" : "全屏");
+    TvStyle.icon(fullscreen, full ? "exit" : "screen");
     fullscreen.setContentDescription(full ? "退出全屏" : "全屏播放");
     layoutRoom();
     footer.setVisibility(VISIBLE);
     if (full) {
-      stage.requestFocus();
+      stage.requestFocusFromTouch();
       armHide();
     } else {
       handler.removeCallbacks(hideControls);
       tab = pageBeforeFull;
       layoutRoom();
-      fullscreen.requestFocus();
+      fullscreen.requestFocusFromTouch();
     }
   }
 
@@ -276,7 +397,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private void hidePanel() {
     if (!full || paused() || dialogOpen || !error.isEmpty()) return;
     controlsVisible = false;
-    stage.requestFocus();
+    stage.requestFocusFromTouch();
     footer.setVisibility(GONE);
   }
 
@@ -288,7 +409,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private void reveal(boolean focus) {
     controlsVisible = true;
     footer.setVisibility(VISIBLE);
-    if (focus) pause.requestFocus();
+    if (focus) focusPlayback();
     armHide();
   }
 
@@ -299,12 +420,16 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
       } else if (footer.hasFocus()) {
         controlsVisible = false;
         handler.removeCallbacks(hideControls);
-        stage.requestFocus();
+        stage.requestFocusFromTouch();
         footer.setVisibility(GONE);
       } else reveal(true);
       return true;
     }
     if (catalogue.getVisibility() == VISIBLE && catalogue.back()) return true;
+    if (catalogue.hasFocus() || footer.hasFocus() || stage.hasFocus()) {
+      focusInitial();
+      return true;
+    }
     if (!tab.equals("stage")) {
       show("stage");
       return true;
@@ -318,8 +443,21 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
       if (event.getAction() == KeyEvent.ACTION_UP) wakeKey = -1;
       return true;
     }
-    if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
     int key = event.getKeyCode();
+    boolean confirm =
+        key == KeyEvent.KEYCODE_DPAD_CENTER
+            || key == KeyEvent.KEYCODE_ENTER
+            || key == KeyEvent.KEYCODE_NUMPAD_ENTER;
+    if (event.getAction() == KeyEvent.ACTION_UP && confirm && confirmTarget != null) {
+      View target = confirmTarget;
+      confirmTarget = null;
+      target.setPressed(false);
+      if (!event.isCanceled() && target == findFocus() && target.isShown() && target.isEnabled()) {
+        if (!catalogue.activate(target)) target.performClick();
+      }
+      return true;
+    }
+    if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
     if (key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
       control("pause");
       return true;
@@ -352,12 +490,96 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
           && lyricsVisible
           && (key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT)) {
         if (event.getRepeatCount() == 0)
-          adjust(key == KeyEvent.KEYCODE_DPAD_LEFT ? -100 : 100, false);
+          adjust(key == KeyEvent.KEYCODE_DPAD_LEFT ? -500 : 500, false);
         return true;
       }
       armHide();
     }
+    if (key >= KeyEvent.KEYCODE_DPAD_UP && key <= KeyEvent.KEYCODE_DPAD_RIGHT) {
+      if (findFocus() instanceof android.widget.EditText
+          && ((android.widget.EditText) findFocus()).length() > 0
+          && (key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT))
+        return super.dispatchKeyEvent(event);
+      navigate(key);
+      return true;
+    }
+    if (confirm && !(findFocus() instanceof android.widget.EditText)) {
+      if (event.getRepeatCount() == 0) {
+        View target = findFocus();
+        if (target == null || target == this) {
+          focusInitial();
+          target = findFocus();
+        }
+        confirmTarget = target;
+        if (target != null) target.setPressed(true);
+      }
+      return true;
+    }
     return super.dispatchKeyEvent(event);
+  }
+
+  /** Explicit TV zones: never depend on a vendor's focus search or touch-mode transition. */
+  private void navigate(int key) {
+    View focused = findFocus();
+    if (focused == null || focused == this || !focused.isShown()) {
+      focusInitial();
+      return;
+    }
+    if (sidebar.hasFocus()) {
+      if (key == KeyEvent.KEYCODE_DPAD_RIGHT) {
+        for (Map.Entry<String, Button> item : navigation.entrySet()) {
+          if (item.getValue() == focused && !item.getKey().equals(tab)) {
+            show(item.getKey());
+            break;
+          }
+        }
+        focusContent();
+      } else if (key == KeyEvent.KEYCODE_DPAD_DOWN || key == KeyEvent.KEYCODE_DPAD_UP) {
+        List<View> buttons = new ArrayList<>();
+        collectButtons(sidebar, buttons);
+        int index = buttons.indexOf(focused) + (key == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1);
+        if (index >= buttons.size()) focusPlayback();
+        else if (index >= 0) buttons.get(index).requestFocusFromTouch();
+      }
+      return;
+    }
+    if (catalogue.hasFocus()) {
+      if (!catalogue.move(key)) {
+        if (key == KeyEvent.KEYCODE_DPAD_LEFT) focusInitial();
+        else if (key == KeyEvent.KEYCODE_DPAD_DOWN) focusPlayback();
+      }
+      return;
+    }
+    if (footer.hasFocus()) {
+      if (key == KeyEvent.KEYCODE_DPAD_UP) {
+        if (full && reset.isShown() && focused != reset) reset.requestFocusFromTouch();
+        else if (full) stage.requestFocusFromTouch();
+        else focusContent();
+      } else if (key == KeyEvent.KEYCODE_DPAD_DOWN && focused == reset) focusPlayback();
+      else if (key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT) {
+        List<View> buttons = new ArrayList<>();
+        collectButtons(controls, buttons);
+        int index = buttons.indexOf(focused) + (key == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+        if (index >= 0 && index < buttons.size()) buttons.get(index).requestFocusFromTouch();
+        else if (!full && key == KeyEvent.KEYCODE_DPAD_LEFT) focusInitial();
+      }
+      return;
+    }
+    if (stage.hasFocus()) {
+      if (!full && (key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_UP))
+        focusInitial();
+      else if (!full && key == KeyEvent.KEYCODE_DPAD_RIGHT) fullscreen.requestFocusFromTouch();
+      else reveal(true);
+    }
+  }
+
+  private static void collectButtons(View root, List<View> result) {
+    if (!root.isShown() || !root.isEnabled()) return;
+    if (root instanceof Button) result.add(root);
+    else if (root instanceof ViewGroup) {
+      ViewGroup group = (ViewGroup) root;
+      for (int i = 0; i < group.getChildCount(); i++) collectButtons(group.getChildAt(i), result);
+    }
   }
 
   private boolean paused() {
@@ -424,15 +646,24 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
         has && current.optString("mode").equals("original")
             ? "原始音频"
             : variant().equals("vocal") ? "原唱" : "伴奏";
-    vocal.setText("♫ " + voice);
-    pause.setText(paused() ? "▶" : "Ⅱ");
+    vocal.setText(voice);
+    pause.setText("");
+    pause.setCompoundDrawables(null, null, null, null);
+    pause.setForeground(
+        new TvIcon(activity, paused() ? "play" : "pause", ColorStateList.valueOf(Color.WHITE), 23));
+    pause.setForegroundGravity(Gravity.CENTER);
     pause.setContentDescription(paused() ? "播放" : "暂停");
-    lyricToggle.setText(lyricsVisible ? "歌词 ●" : "歌词 ○");
+    lyricToggle.setText("歌词");
+    lyricToggle.setSelected(lyricsVisible);
     lyricToggle.setContentDescription(lyricsVisible ? "隐藏歌词" : "显示歌词");
-    title.setText(
+    title.setText(has ? current.optString("title") : "下一首，就唱你喜欢的");
+    subtitle.setText(
         has
-            ? current.optString("title") + "  ·  " + current.optString("artist") + "  ·  " + voice
-            : "下一首，就唱你喜欢的");
+            ? current.optString("artist")
+                + " · "
+                + (current.optBoolean("ambient") ? "随机播放 · " : "")
+                + voice
+            : "点一首歌，开启今晚的好时光");
     int offset = playback.optInt("lyricsOffsetMs");
     offsetLabel.setText(
         offset == 0

@@ -12,11 +12,14 @@ import android.widget.Button;
 import android.widget.TextView;
 
 final class TvStyle {
-  static final int BACKGROUND = 0xff15101e,
-      SURFACE = 0xff282033,
-      INK = 0xfff5efff,
-      MUTED = 0xffb6a9c7,
-      ACCENT = 0xffd0b9ff;
+  static final int BACKGROUND = 0xff12101b,
+      PANEL = 0xff191623,
+      SURFACE = 0xff252031,
+      INK = 0xfff5f2ff,
+      MUTED = 0xffa7a1bb,
+      ACCENT = 0xffc3b2ff,
+      PURPLE = 0xff6558db,
+      BORDER = 0xff393244;
 
   static int dp(Context context, float n) {
     return Math.round(n * context.getResources().getDisplayMetrics().density);
@@ -31,10 +34,15 @@ final class TvStyle {
 
   static StateListDrawable focus(Context c) {
     StateListDrawable d = new StateListDrawable();
-    d.addState(new int[] {android.R.attr.state_focused}, shape(c, Color.WHITE, 10));
+    GradientDrawable focused = shape(c, 0xff453957, 10);
+    focused.setStroke(dp(c, 2), 0xffe1c8ff);
+    d.addState(new int[] {android.R.attr.state_focused}, focused);
+    d.addState(new int[] {android.R.attr.state_activated}, focused);
     d.addState(new int[] {android.R.attr.state_pressed}, shape(c, ACCENT, 10));
-    d.addState(new int[] {android.R.attr.state_selected}, shape(c, Color.WHITE, 10));
-    d.addState(new int[] {}, shape(c, SURFACE, 10));
+    d.addState(new int[] {android.R.attr.state_selected}, shape(c, ACCENT, 10));
+    GradientDrawable normal = shape(c, SURFACE, 10);
+    normal.setStroke(dp(c, 1), BORDER);
+    d.addState(new int[] {}, normal);
     return d;
   }
 
@@ -43,11 +51,12 @@ final class TvStyle {
         new int[][] {
           new int[] {-android.R.attr.state_enabled},
           new int[] {android.R.attr.state_focused},
+          new int[] {android.R.attr.state_activated},
           new int[] {android.R.attr.state_pressed},
           new int[] {android.R.attr.state_selected},
           new int[] {}
         },
-        new int[] {0xff766a84, BACKGROUND, BACKGROUND, BACKGROUND, INK});
+        new int[] {0xff766a84, INK, INK, BACKGROUND, BACKGROUND, INK});
   }
 
   static TextView text(Context c, String value, int size, int color) {
@@ -64,9 +73,10 @@ final class TvStyle {
     b.setText(text);
     b.setContentDescription(label);
     b.setAllCaps(false);
+    b.setFocusable(true);
     b.setFocusableInTouchMode(true);
     b.setTextSize(14);
-    b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+    b.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
     b.setGravity(Gravity.CENTER);
     b.setTextColor(ink());
     b.setBackground(focus(c));
@@ -78,5 +88,35 @@ final class TvStyle {
     b.setStateListAnimator(null);
     b.setOnClickListener(v -> action.run());
     return b;
+  }
+
+  static void icon(Button button, String name) {
+    TvIcon icon = new TvIcon(button.getContext(), name, ink(), 19);
+    button.setCompoundDrawablesRelative(icon, null, null, null);
+    button.setCompoundDrawablePadding(dp(button.getContext(), 7));
+  }
+
+  static void primary(Button button) {
+    Context c = button.getContext();
+    StateListDrawable states = new StateListDrawable();
+    GradientDrawable focused = shape(c, PURPLE, 24);
+    focused.setStroke(dp(c, 3), 0xffe1c8ff);
+    states.addState(new int[] {android.R.attr.state_focused}, focused);
+    states.addState(new int[] {android.R.attr.state_pressed}, shape(c, 0xff8879ec, 24));
+    states.addState(new int[] {}, shape(c, PURPLE, 24));
+    button.setBackground(states);
+    button.setTextColor(Color.WHITE);
+  }
+
+  static void subtle(Button button) {
+    Context c = button.getContext();
+    StateListDrawable states = new StateListDrawable();
+    GradientDrawable focused = shape(c, 0x224d3b68, 8);
+    focused.setStroke(dp(c, 2), 0xffe1c8ff);
+    states.addState(new int[] {android.R.attr.state_focused}, focused);
+    states.addState(new int[] {android.R.attr.state_pressed}, shape(c, 0xff453957, 8));
+    states.addState(new int[] {}, shape(c, Color.TRANSPARENT, 8));
+    button.setBackground(states);
+    button.setTextColor(INK);
   }
 }
