@@ -1,6 +1,8 @@
-# 好好唱使用手册 · v0.4.3
+# 好好唱使用手册 · v0.4.4
 
-从 v0.4.0 升级到 v0.4.3，只需更新 NAS，再刷新管理页或在 TV 上点“热更新网页”。TV APK 与 PC 整理器可继续使用 v0.4.0；本页的 v0.4.3 客户端附件用于新安装或可选更新。
+v0.4.4 修复 PC 整理器检查更新被 GitHub 限流的问题，本次更新 PC 即可；已使用 v0.4.3 的 NAS 和 TV 可继续使用。新版优先从 Release 附件读取更新清单，五分钟内重复检查复用结果；后备 API 限流时会提示下次可重试时间。
+
+旧 PC 如果提示 `HTTP Error 403: rate limit exceeded`，反复点击不会解除限流。先从本版 Release 下载 `haohaochang-resource-ai-v0.4.4.zip`，等待任务结束并点击“退出整理器”，将 ZIP 解压覆盖到原安装目录，再运行 `start.cmd`。保留 `worker.json`、`runtime`、`.venv` 和 `data`，无需重新下载模型。只关闭窗口会隐藏到托盘，不等于退出。
 
 若仍使用 v0.3.x，启用原生播放需要更新 NAS 并安装最新 APK，PC 整理器也升级。旧版更新器只识别固定文件名，请从 Release 手动下载安装一次。v0.4.0 起更新器支持版本化附件。正式 APK 沿用已有签名，PC 覆盖时保留配置、环境与数据。
 
@@ -8,7 +10,7 @@ NAS 更新后，TV／网页歌房顶部“热更新”或遥控器菜单键 → 
 
 按第一次安装、准备歌曲、开唱和日常维护的顺序使用本手册。[最新安装包](https://github.com/xudong7587/haohaochang/releases/latest)中包含 NAS 部署文件、TV 应用和 Windows 资源整理器。
 
-单独使用 Windows 文件重命名工具时，下载 `haohaochang-preprocess-v0.4.3.zip`；需要核对下载完整性时，使用 `SHA256SUMS-v0.4.3.txt`。
+单独使用 Windows 文件重命名工具时，下载 `haohaochang-preprocess-v0.4.4.zip`；需要核对下载完整性时，使用 `SHA256SUMS-v0.4.4.txt`。
 
 ## 1. 安装 NAS
 
@@ -26,7 +28,7 @@ LAN 与普通配置二选一。LAN 使用 host 网络，通过 `PORT` 修改端�
 
 ### 修改配置并启动
 
-从 `haohaochang-nas-v0.4.3.zip` 解压配置，在 NAS Docker 管理器创建 Compose 项目，检查：
+从 `haohaochang-nas-v0.4.4.zip` 解压配置，在 NAS Docker 管理器创建 Compose 项目，检查：
 
 | 配置 | 怎么填写 |
 | --- | --- |
@@ -46,7 +48,7 @@ LAN 与普通配置二选一。LAN 使用 host 网络，通过 `PORT` 修改端�
 
 ### Android 电视
 
-安装 `haohaochang-tv-v0.4.3.apk`，首次启动约用 8 秒寻找同一局域网中的歌房。找到一个直接连接，多个则让你选择；没有找到可手动输入 NAS 根地址，例如 `http://192.168.1.20:43210` 或 `https://ktv.example.com`。粘贴带 `/admin`、`/tv` 的地址也会自动去掉页面路径。
+安装 `haohaochang-tv-v0.4.4.apk`，首次启动约用 8 秒寻找同一局域网中的歌房。找到一个直接连接，多个则让你选择；没有找到可手动输入 NAS 根地址，例如 `http://192.168.1.20:43210` 或 `https://ktv.example.com`。粘贴带 `/admin`、`/tv` 的地址也会自动去掉页面路径。
 
 自动发现使用 UDP 43212，NAS 的 LAN 配置已启用；已有 LAN 部署的 `KTV_DISCOVERY_ENABLED=1` 也会启用电视发现。普通 Docker 桥接、访客 Wi-Fi 或跨网段可能收不到广播，此时手动输入地址。只升级 APK 无法给旧 NAS 增加发现服务，需要同时升级 NAS。
 
@@ -80,7 +82,7 @@ LAN 与普通配置二选一。LAN 使用 host 网络，通过 `PORT` 修改端�
 
 整理器让 PC 执行裁剪、视频兼容转换和音频分离。完成的资源由 NAS 收回并保存，PC 不是曲库主机。
 
-1. 在 Windows 10／11 x64 下载 `haohaochang-resource-ai-v0.4.3.zip`，解压到固定位置。
+1. 在 Windows 10／11 x64 下载 `haohaochang-resource-ai-v0.4.4.zip`，解压到固定位置。
 2. 双击 `start.cmd`。首次下载 Python、PyTorch 等环境，可能占用数 GB 并耗时较长；后续复用环境和模型。
 3. 启动成功后出现整理器窗口和右下角托盘图标。重复启动会复用已有服务。
 4. 在 NAS 后台启用 PC 整理与伴奏分离。使用 LAN 部署时保持自动发现开启，等待 NAS 连接。

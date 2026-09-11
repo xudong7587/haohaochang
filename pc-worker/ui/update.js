@@ -13,6 +13,16 @@ const updateLabels = {
   failed: "更新失败",
   cancelled: "已取消更新",
 };
+function updateCheckBlocked() {
+  return (
+    updating ||
+    ["checking", "downloading", "waiting", "installing", "restarting"].includes(
+      updateState.phase,
+    ) ||
+    (updateState.phase === "failed" &&
+      Number(updateState.nextCheck) > Date.now() / 1000)
+  );
+}
 function renderUpdate(s) {
   updateState = s.update || {};
   text("appVersion", "v" + s.version);
@@ -25,11 +35,7 @@ function renderUpdate(s) {
         : "") +
       (updateState.error ? " · " + updateState.error : ""),
   );
-  $("checkUpdate").disabled =
-    updating ||
-    ["checking", "downloading", "waiting", "installing", "restarting"].includes(
-      updateState.phase,
-    );
+  $("checkUpdate").disabled = updateCheckBlocked();
   $("installUpdate").hidden = updateState.phase !== "available";
   $("cancelUpdate").hidden = !["downloading", "waiting"].includes(
     updateState.phase,
@@ -54,7 +60,7 @@ async function updateAction(action) {
     text("updateStatus", e.message);
   } finally {
     updating = false;
-    $("checkUpdate").disabled = false;
+    $("checkUpdate").disabled = updateCheckBlocked();
   }
 }
 $("checkUpdate").onclick = () => updateAction("check");

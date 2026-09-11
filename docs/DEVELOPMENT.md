@@ -35,7 +35,7 @@ gradle -p android testDebugUnitTest assembleDebug
 
 APK 直接分发给家庭电视，保留现有 `targetSdk 28` 行为。正式构建仅豁免面向 Google Play 的 `ExpiredTargetSdkVersion` 检查，其余 release lint 保留；未来提交应用商店前需要单独迁移 target SDK 并验证平台行为。
 
-PC 更新器协议验证：安装 `psutil==7.0.0` 后执行 `python -m unittest discover -s pc-worker -p test_update.py`。打包脚本 `scripts/package-release.py` 生成带逐文件 SHA-256 清单的更新 ZIP；发布前需放入同提交的正式 APK。`node scripts/check-release-version.mjs` 校验前端、PC、Android、README 与用户手册版本。
+PC 更新器协议验证：安装 `psutil==7.0.0` 后执行 `python -m unittest discover -s pc-worker -p 'test_update*.py'`。打包脚本 `scripts/package-release.py` 生成带逐文件 SHA-256 清单的更新 ZIP；发布前需放入同提交的正式 APK。`node scripts/check-release-version.mjs` 校验前端、PC、Android、README 与用户手册版本。
 
 本地 NAS 预览仅放行 `POST /api/admin/find-lyrics` 作为读取远程歌词操作，其他管理写入继续拒绝；查得内容只是编辑草稿，不能保存到正式媒体。自动歌词匹配保留 120 秒时差限制，手动查找可展示超时差候选并提示核对。Live 后缀和合唱顺序在 `shared/lyrics-identity.js` 统一处理。
 
@@ -112,3 +112,5 @@ TV配对由 `/api/tv-pairing` 创建三分钟内存会话，二维码只携带�
 新增 `tests/adaptive-player.browser.mjs` 检查歌星编辑、公共点歌、深色队列、闲置按钮、手机横竖屏、真实 legacy bundle 与启动恢复。`scripts/check-poster-runtime.mjs` 在实际 Docker FFmpeg 上执行 API 保存 PNG／JPEG、方形尺寸／白底和音轨不变检查，并检查启动脚本与图标；CI 和发布晋升 latest 前均执行。歌星资料存储于 `artist-profile:<hash>` KV 和 `/data/artists`，按歌手串行写入与修订检查；自动补图不覆盖已有照片。
 
 播放器资源由 `/api/playback-assets/:id` 给出，`/api/assets/:id/:kind` 使用 sendFile 直接提供范围请求，无播放时转码。v0.3.13 删除 controller 的 100ms 校时定时器；不得重新引入持续比较音画差／周期 seek。保持显式状态切换、拖动、错误后备的时间对齐，以及租约撤销后的立即静音。PlayerVisuals 只读音频时钟，不设置 currentTime；UI 的空闲菜单计时与播放租约心跳仍保留。APK UA 使用 CSS 全屏以保留 DOM 控件，浏览器继续原生全屏加 CSS 后备。
+
+PC 更新器优先读取 Release 固定名附件 `haohaochang-pc-update.json`（schema=1），包地址固定到对应 tag。运行 `python scripts/package-release.py` 或 `--pc-only` 会生成该清单；发布时必须与版本化 PC ZIP 一起上传，缺少清单时客户端回退 REST API。对清单格式、版本、下载域名、大小和 SHA-256 的校验失败不会静默回退。

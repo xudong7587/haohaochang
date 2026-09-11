@@ -21,7 +21,7 @@ guide = guide.replace('(../pc-worker/README.md)', '(https://github.com/xudong758
 bundles = {
     f'haohaochang-nas-v{version}.zip': ['docker-compose.yaml', 'docker-compose.lan.yaml', 'docker-compose.ai.yaml', f'release/haohaochang-tv-v{version}.apk', 'release/实机测试说明.md'],
     f'haohaochang-resource-ai-v{version}.zip': ['pc-worker/open.vbs', 'pc-worker/open.ps1', 'pc-worker/start.cmd', 'pc-worker/start.ps1', 'pc-worker/run.py', 'pc-worker/hardware.py',
-        'pc-worker/download_runtime.py', 'pc-worker/desktop.py', 'pc-worker/lan.py', 'pc-worker/version.py', 'pc-worker/updater.py', 'pc-worker/update_runner.py', 'pc-worker/tray.ps1', 'pc-worker/README.md', 'separator/app.py', 'separator/clipping.py', 'separator/job_store.py', 'separator/inference.py', 'separator/upload_guard.py', 'separator/requirements.txt',
+        'pc-worker/download_runtime.py', 'pc-worker/desktop.py', 'pc-worker/lan.py', 'pc-worker/version.py', 'pc-worker/updater.py', 'pc-worker/update_source.py', 'pc-worker/update_runner.py', 'pc-worker/tray.ps1', 'pc-worker/README.md', 'separator/app.py', 'separator/clipping.py', 'separator/job_store.py', 'separator/inference.py', 'separator/upload_guard.py', 'separator/requirements.txt',
         'separator/video_encoding.py', 'pc-worker/ui/index.html', 'pc-worker/ui/update.js', 'pc-worker/ui/icon.svg', 'pc-worker/ui/icon.png', 'pc-worker/ui/icon.ico'],
 }
 for name, files in bundles.items():
@@ -41,6 +41,16 @@ for name, files in bundles.items():
         assert archive.testzip() is None
         assert not any('worker.json' in item or 'settings.json' in item or '.venv' in item for item in archive.namelist())
     print(name, (release / name).stat().st_size)
+
+# A fixed-name Release attachment lets clients discover a version without the
+# unauthenticated REST API. Its package URL is pinned to this exact release.
+pc_archive = release / f'haohaochang-resource-ai-v{version}.zip'
+notes_file = release / f'RELEASE-NOTES-v{version}.md'
+index = dict(schema=1, version=version,
+             notes=notes_file.read_text(encoding='utf-8')[:3000] if notes_file.exists() else '',
+             pc=dict(url=f'https://github.com/xudong7587/haohaochang/releases/download/v{version}/{pc_archive.name}',
+                     size=pc_archive.stat().st_size, sha256=hashlib.sha256(pc_archive.read_bytes()).hexdigest()))
+(release / 'haohaochang-pc-update.json').write_text(json.dumps(index, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 # Standalone Windows rename tool uses the same layout as the installed NAS share.
 if args.pc_only:

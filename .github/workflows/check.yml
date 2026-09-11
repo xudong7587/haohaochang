@@ -67,7 +67,7 @@ jobs:
       - run: python -m unittest discover -s separator -p test_protocol.py
       - run: python -m unittest discover -s separator -p test_concurrency.py
       - run: python -m unittest discover -s pc-worker -p test_lan.py
-      - run: python -m unittest discover -s pc-worker -p test_update.py
+      - run: python -m unittest discover -s pc-worker -p 'test_update*.py'
   apk:
     runs-on: ubuntu-latest
     steps:

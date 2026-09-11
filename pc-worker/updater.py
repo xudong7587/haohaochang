@@ -9,49 +9,12 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.request
-from urllib.parse import urlsplit
 import uuid
 import zipfile
 from version import VERSION
 
-REPO = 'xudong7587/haohaochang'
-API = 'https://api.github.com/repos/' + REPO + '/releases/latest'
-ASSET = 'haohaochang-resource-ai.zip'  # Older releases remain readable.
-
-
-def version(value):
-    if not re.fullmatch(r'v?\d+\.\d+\.\d+', str(value)):
-        raise ValueError('版本号无效')
-    return tuple(map(int, str(value).lstrip('v').split('.')))
-
-
-def release_asset(assets, latest):
-    version(latest)
-    for name in (f'haohaochang-resource-ai-v{str(latest).lstrip("v")}.zip', ASSET):
-        found = next((asset for asset in assets if asset.get('name') == name), None)
-        if found:
-            return found
-    return None
-
-
-def allowed_url(url, initial=False):
-    u = urlsplit(url)
-    return (u.scheme == 'https' and not u.username and not u.password and u.port in (None, 443)
-            and ((u.hostname == 'github.com' and u.path.startswith('/' + REPO + '/releases/download/'))
-                 or (not initial and u.hostname in ('release-assets.githubusercontent.com', 'objects.githubusercontent.com'))))
-
-
-class Redirects(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        if not allowed_url(newurl):
-            raise ValueError('更新下载地址无效')
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-def open_url(url):
-    return urllib.request.build_opener(Redirects()).open(
-        urllib.request.Request(url, headers={'User-Agent': 'haohaochang-updater', 'Accept': 'application/vnd.github+json'}), timeout=30)
+from update_source import (API, ASSET, REPO, INDEX_URL, open_url, allowed_url,
+                           version, release_asset, fetch_release, check_failure, CHECK_INTERVAL)
 
 
 def safe_name(name):
@@ -90,9 +53,10 @@ def unpack(archive, target, expected):
 
 
 class UpdateManager:
-    def __init__(self, root, jobs, config, stop, transport=open_url):
+    def __init__(self, root, jobs, config, stop, transport=open_url, clock=time.time):
         self.root, self.jobs, self.config, self.stop = Path(root).resolve(), jobs, config, stop
         self.transport = transport
+        self.clock = clock
         self.lock = threading.RLock()
         self.cancelled = threading.Event()
         self.release = None
@@ -131,25 +95,22 @@ class UpdateManager:
         with self.lock:
             if self.state['phase'] in ('checking', 'downloading', 'waiting', 'installing', 'restarting'):
                 return self.snapshot()
+            if self.clock() < self.state.get('nextCheck', 0):
+                return self.snapshot()
+            self.release = None
             self.set_state(phase='checking', error='')
         try:
-            with self.transport(API) as response:
-                data = json.loads(response.read(2 * 1024 * 1024))
-            latest = str(data['tag_name']).lstrip('v')
-            version(latest)
-            if data.get('draft') or data.get('prerelease'):
-                raise ValueError('不是正式版本')
-            asset = release_asset(data['assets'], latest)
-            if not asset or not allowed_url(asset['browser_download_url'], True):
-                raise ValueError('此版本没有可用的 PC 更新包')
-            digest = asset.get('digest', '')
-            if not re.fullmatch(r'sha256:[a-f0-9]{64}', digest) or not 0 < asset['size'] <= 32 * 1024 * 1024:
-                raise ValueError('更新包缺少有效的 SHA-256 校验')
-            self.release = dict(version=latest, url=asset['browser_download_url'], digest=digest[7:], size=asset['size'])
-            self.set_state(phase='available' if version(latest) > version(VERSION) else 'current', latest=latest,
-                           notes=str(data.get('body') or '')[:3000], error='')
+            release, notes = fetch_release(self.transport)
+            latest = release['version']
+            with self.lock:
+                self.release = release
+                now = self.clock()
+                self.set_state(phase='available' if version(latest) > version(VERSION) else 'current',
+                               latest=latest, notes=notes, error='', checkedAt=now, nextCheck=now + CHECK_INTERVAL)
         except Exception as error:
-            self.set_state(phase='failed', error=str(error)[:400])
+            now = self.clock()
+            message, retry_at = check_failure(error, now)
+            self.set_state(phase='failed', error=message, checkedAt=now, nextCheck=retry_at)
         return self.snapshot()
 
     def install(self, requested):
@@ -215,4 +176,4 @@ class UpdateManager:
                 self.stop()
         except Exception as error:
             self.jobs.resume()
-            self.set_state(phase='cancelled' if isinstance(error, InterruptedError) else 'failed', error=str(error)[:400])
+            self.set_state(phase='cancelled' if isinstance(error, InterruptedError) else 'failed', error=str(error)[:400], nextCheck=0)

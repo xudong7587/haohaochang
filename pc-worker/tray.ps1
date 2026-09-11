@@ -13,7 +13,7 @@ $client.DefaultRequestHeaders.Authorization = New-Object Net.Http.Headers.Authen
 $base = "http://127.0.0.1:$($config.port)"
 $form = New-Object Windows.Forms.Form
 $form.Text = '好好唱资源 AI 整理器'
-$form.Size = New-Object Drawing.Size(640, 470)
+$form.Size = New-Object Drawing.Size(640, 495)
 $form.MinimumSize = $form.Size
 $form.StartPosition = 'CenterScreen'
 $form.BackColor = [Drawing.Color]::FromArgb(246,245,249)
@@ -32,6 +32,10 @@ $tasks.Multiline = $true; $tasks.ReadOnly = $true; $tasks.ScrollBars = 'Vertical
 $tasks.BorderStyle = 'None'; $tasks.BackColor = $form.BackColor
 $updateLabel = New-Object Windows.Forms.Label
 $updateLabel.SetBounds(24,305,570,48)
+$downloadLink = New-Object Windows.Forms.LinkLabel
+$downloadLink.Text = '手动下载更新包'
+$downloadLink.SetBounds(24,410,570,24)
+$downloadLink.Add_LinkClicked({ Start-Process 'https://github.com/xudong7587/haohaochang/releases/latest' })
 $buttons = @()
 foreach ($spec in @(@('查看详细任务',24,145), @('检查更新',182,128), @('退出整理器',324,128), @('隐藏窗口',465,128))) {
   $button = New-Object Windows.Forms.Button
@@ -39,7 +43,7 @@ foreach ($spec in @(@('查看详细任务',24,145), @('检查更新',182,128), @
   $buttons += $button
   $form.Controls.Add($button)
 }
-$form.Controls.AddRange(@($heading,$metrics,$tasks,$updateLabel))
+$form.Controls.AddRange(@($heading,$metrics,$tasks,$updateLabel,$downloadLink))
 $tray = New-Object Windows.Forms.NotifyIcon
 $tray.Icon = $form.Icon; $tray.Text = '好好唱资源 AI 整理器'; $tray.Visible = $true
 $menu = New-Object Windows.Forms.ContextMenuStrip
@@ -47,7 +51,7 @@ $showItem = $menu.Items.Add('显示整理器')
 $updateItem = $menu.Items.Add('检查更新')
 $exitItem = $menu.Items.Add('退出整理器')
 $tray.ContextMenuStrip = $menu
-$script:firstTick = $true; $script:queuedAction = $null; $script:leaving = $false; $script:request = $null; $script:action = ''; $script:latest = ''; $script:phase = ''; $script:failures = 0
+$script:firstTick = $true; $script:queuedAction = $null; $script:leaving = $false; $script:request = $null; $script:action = ''; $script:latest = ''; $script:phase = ''; $script:failures = 0; $script:retryAt = 0
 function Show-Organizer { $form.Show(); $form.WindowState = 'Normal'; $form.Activate() }
 function Request-Action($action, $body = '{}') {
   if ($script:request) { $script:queuedAction = @($action,$body); $updateLabel.Text = '等待当前状态请求完成…'; return }
@@ -58,6 +62,7 @@ function Request-Action($action, $body = '{}') {
 }
 function Update-Organizer {
   Show-Organizer
+  if ($script:phase -eq 'failed' -and $script:retryAt -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { return }
   if ($script:phase -eq 'available') {
     Request-Action 'update/install' ('{"version":"' + $script:latest + '"}')
   } elseif ($script:phase -in @('downloading','waiting')) {
@@ -94,10 +99,12 @@ $timer.Add_Tick({
         $value = $value.update
       }
       $script:phase = $value.phase; $script:latest = $value.latest
+      $script:retryAt = [double]$value.nextCheck
       $updateLabel.Text = "$($labels[$value.phase]) $($value.latest) $($value.error)"
       if ($value.phase -eq 'downloading') { $updateLabel.Text += " $($value.progress)%" }
       $buttons[1].Text = if ($value.phase -eq 'available') { '安装新版' } elseif ($value.phase -in @('downloading','waiting')) { '取消更新' } else { '检查更新' }
-      $buttons[1].Enabled = $value.phase -notin @('checking','installing','restarting')
+      $buttons[1].Enabled = ($value.phase -notin @('checking','installing','restarting')) -and !($value.phase -eq 'failed' -and $script:retryAt -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+      $updateItem.Enabled = $buttons[1].Enabled
     } catch {
       $script:failures++
       $updateLabel.Text = if ($script:action -eq 'status') { '服务暂不可用；更新期间会自动重连。' } else { [string]$_ }

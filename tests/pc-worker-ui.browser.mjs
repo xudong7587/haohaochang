@@ -29,6 +29,8 @@ for (let i = 0; i < 80; i++)
     created: Date.now() / 1000,
   });
 let update = { phase: "idle", current: "0.3.10" };
+let rateLimited = false;
+let checks = 0;
 app.use(express.json());
 app.get("/update.js", (q, r) =>
   r.sendFile(path.resolve("pc-worker/ui/update.js")),
@@ -41,6 +43,15 @@ app.post("/desktop/update/:action", (q, r) => {
       : q.params.action === "install"
         ? { phase: "waiting", latest: "0.3.11" }
         : { phase: "cancelled" };
+  if (q.params.action === "check") {
+    checks++;
+    if (rateLimited)
+      update = {
+        phase: "failed",
+        nextCheck: Date.now() / 1000 + 120,
+        error: "GitHub 暂时限制更新请求，请稍后重试，或点击“手动下载更新包”。",
+      };
+  }
   r.json(update);
 });
 app.get("/desktop/status", (req, res) =>
@@ -80,6 +91,29 @@ try {
   await page.getByRole("button", { name: "取消更新", exact: true }).waitFor();
   await page.getByRole("button", { name: "取消更新", exact: true }).click();
   await page.getByRole("status").filter({ hasText: "已取消更新" }).waitFor();
+  rateLimited = true;
+  await page.getByRole("button", { name: "检查更新", exact: true }).click();
+  await page
+    .getByRole("status")
+    .filter({ hasText: "GitHub 暂时限制更新请求" })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "检查更新", exact: true })
+      .isDisabled(),
+    true,
+  );
+  assert.equal(checks, 2);
+  assert.equal(
+    await page
+      .getByRole("link", { name: "手动下载更新包" })
+      .getAttribute("href"),
+    "https://github.com/xudong7587/haohaochang/releases/latest",
+  );
+  update.nextCheck = Date.now() / 1000 - 1;
+  await page.waitForFunction(
+    () => !document.getElementById("checkUpdate").disabled,
+  );
   assert.equal(await page.locator(".task-item").count(), 1);
   await page.getByRole("button", { name: /排队等待 · 75 项/ }).click();
   assert.equal(await page.locator(".task-item").count(), 11);
