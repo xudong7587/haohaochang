@@ -58,7 +58,9 @@ export function nfoIdentity(xml, filename) {
   const parsed = identifyTitle(cleaned);
   // Prefer an explicit performer over uploader, director or the original singer of a cover.
   const explicit = field("artist") || field("performer");
-  const pair = cleaned.match(/^(.{1,50}?)\s+[-–—]\s+(.+)$/);
+  const pair =
+    cleaned.match(/^(.{1,50}?)\s+[-–—]\s+(.+)$/) ||
+    cleaned.match(/^([\p{Script=Han}·、]{2,30})\s*[-–—]\s*(.+)$/u);
   const artist =
     explicit ||
     (pair ? pair[1] : parsed.needs_review ? "未知歌手" : parsed.artist);

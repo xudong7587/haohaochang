@@ -12,7 +12,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {LibraryManager} from '/src/library-manager.jsx';
 window.songs=[{id:'song-a',title:'初始歌名',artist:'测试歌手',lyrics:'[00:01]测试歌词',metadataRevision:1,tier:'standard',status:'ready',sourceUrl:'',manifest:{vocal:true,backing:true}}];
-window.hiddenSongs=[];window.inbox=[];window.calls=[];window.failSave=false;
+window.hiddenSongs=[];window.bundles=[];window.inbox=[];window.calls=[];window.failSave=false;
 window.videoReview={id:'video-review',kind:'find-video',title:'视频候选',artist:'测试歌手',candidatePath:'isolated/candidate.mp4',expectedRevision:7,candidate:{canonicalUrl:'https://www.bilibili.com/video/BV1gF4m1K7Aa?p=14',provider:'bilibili',externalTitle:'第14P',duration:240}};
 window.request=async(url,body,method)=>{
  window.calls.push({url,body,method});
@@ -20,6 +20,8 @@ window.request=async(url,body,method)=>{
  if(url==='/admin/library?hidden=true')return structuredClone(window.hiddenSongs);
  if(url==='/admin/reviews')return [structuredClone(window.videoReview)];
  if(url==='/admin/inbox')return structuredClone(window.inbox);
+ if(url==='/admin/favorite-bundles')return structuredClone(window.bundles);
+ if(url.endsWith('/confirm')&&url.includes('/favorite-bundles/')){window.bundles=[];return {ok:true};}
  if(url==='/admin/inbox/complete-metadata'){Object.assign(window.inbox.find(row=>row.file===body.file),{intakeStage:'staged',tier:'audio',title:'已补齐歌名',artist:body.artistOverride||'测试歌手'});return {id:'local-task'};}
  if(url==='/admin/lyrics-batch')return {results:(body.all?window.songs.filter(row=>!row.lyrics):body.items.map(item=>window.songs.find(row=>row.id===item.id))).map(row=>({id:row.id,title:row.title,status:'success',message:'已加入歌词补充任务'}))};
  if(url==='/admin/organize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已加入整理队列'}))};
@@ -672,6 +674,60 @@ try {
     path: "test-results/library-bulk-artist.png",
     fullPage: true,
   });
+  await page.evaluate(() => {
+    window.bundles = [
+      {
+        id: "album-review",
+        title: "经典歌曲MV合集~值得收藏",
+        status: "review",
+        total: 2,
+        downloaded: 2,
+        parts: [
+          {
+            cid: "101",
+            page: 1,
+            title: "短发",
+            artist: "未知歌手",
+            downloaded: true,
+          },
+          {
+            cid: "102",
+            page: 2,
+            title: "COVER GIRL（TVB）",
+            artist: "未知歌手",
+            downloaded: true,
+          },
+        ],
+      },
+    ];
+  });
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await page.getByRole("button", { name: /^待整理曲库/ }).click();
+  const bundle = page.locator('[data-bundle-id="album-review"]');
+  await bundle.getByText("查看各首歌名与识别结果", { exact: true }).click();
+  assert.equal(await bundle.getByRole("listitem").count(), 2);
+  const confirmBundle = bundle.getByRole("button", {
+    name: "确认并逐首处理",
+    exact: true,
+  });
+  assert.equal(await confirmBundle.isDisabled(), true);
+  await bundle.getByLabel("合集歌手：经典歌曲MV合集~值得收藏").fill("梁咏琪");
+  await page.screenshot({
+    path: "test-results/library-favorite-bundle.png",
+    fullPage: true,
+  });
+  await confirmBundle.click();
+  await bundle.waitFor({ state: "detached" });
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.calls
+        .filter((c) => c.url === "/admin/favorite-bundles/album-review/confirm")
+        .map((c) => c.body),
+    ),
+    [{ artist: "梁咏琪" }],
+  );
+  await page.getByRole("button", { name: /^标准曲库/ }).click();
+  assert.equal(await page.locator("[data-bundle-id]").count(), 0);
   assert.deepEqual(errors, []);
   console.log(
     "Library component browser contracts passed: drafts, candidates, lyrics, hide/restore/permanent delete, six sorting orders with persistence, and SD/HD video labels.",

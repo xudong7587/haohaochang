@@ -45,3 +45,5 @@
 .collection-selection > span {
   white-space: nowrap;
 }
+
+.favorite-bundles{display:grid;gap:12px;margin:16px 0}.favorite-bundle{border:1px solid var(--border);background:#fff;border-radius:12px;padding:20px}.favorite-bundle p{font-size:13px;margin:8px 0}.favorite-bundle details{font-size:13px;margin:12px 0}.favorite-bundle ol{max-height:240px;overflow:auto;line-height:1.8}.favorite-bundle form{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.favorite-bundle form label{margin:0;flex:1;min-width:180px}.favorite-bundle form small{flex-basis:100%}

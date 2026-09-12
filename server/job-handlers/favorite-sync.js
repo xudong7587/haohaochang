@@ -1,3 +1,4 @@
+import { registerFavoriteBundle } from "../favorite-bundles.js";
 import { favoritePage, favoriteParts } from "../favorites.js";
 export async function favorite_sync(job, payload, context) {
   const { db, get, set, addJob, fail } = context;
@@ -10,27 +11,7 @@ export async function favorite_sync(job, payload, context) {
     for (const item of result.items) {
       try {
         const parts = await favoriteParts(item, config, context.favoriteFetch);
-        const old = get("favorite-seen:" + config.favoriteId + ":" + item.bvid);
-        for (const part of parts) {
-          const key = `favorite-part:${config.favoriteId}:${part.bvid}:${part.cid}`;
-          if (get(key)) continue;
-          if (part.page === 1 && old) {
-            // Previous releases downloaded only P1. Preserve its job/seen marker.
-            const previous = db
-              .prepare("SELECT * FROM jobs WHERE id=?")
-              .get(old);
-            if (
-              previous &&
-              previous.kind === "favorite-download" &&
-              ["queued", "failed", "waiting-worker"].includes(previous.status)
-            )
-              db.prepare("UPDATE jobs SET payload=? WHERE id=?").run(
-                JSON.stringify({ ...JSON.parse(previous.payload), ...part }),
-                old,
-              );
-            set(key, old);
-          } else set(key, addJob("favorite-download", part));
-        }
+        await registerFavoriteBundle(parts, context);
       } catch (error) {
         errors.push(`${item.bvid}: ${error.message}`);
       }

@@ -1,3 +1,4 @@
+import { favoriteBundles } from "../server/favorite-bundles.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -104,7 +105,7 @@ test("invalid video does not block other favorites, malformed part lists are rej
     /分 P 信息无效/,
   );
 });
-test("download resolves reordered CID, writes each NFO, and stages for review without direct import", async (t) => {
+test("download resolves reordered CID, writes each NFO, and waits for the rest of the bundle without direct import", async (t) => {
   const f = await fixture(t);
   f.set("favorites", {});
   f.favoriteFetch = async () =>
@@ -124,24 +125,24 @@ test("download resolves reordered CID, writes each NFO, and stages for review wi
   const payload = { bvid, cid: "102", page: 2 },
     id = f.addJob("favorite-download", payload);
   await favorite_download({ id }, payload, f);
-  const child = f.jobs.at(-1);
-  assert.equal(child.kind, "local-intake");
-  assert.match(child.payload.file, /Season 1/);
-  const xml = await readFile(
-    child.payload.file.replace(/\.mp4$/, ".nfo"),
-    "utf8",
-  );
+  const group = favoriteBundles(f.store)[0];
+  const received = group.parts.find((p) => p.cid === "102");
+  assert.match(received.file, /Season 1/);
+  const xml = await readFile(received.file.replace(/\.mp4$/, ".nfo"), "utf8");
   assert.equal(nfoIdentity(xml, "unused").title, "第二首");
   assert.equal(nfoIdentity(xml, "unused").albumHint, "歌手《专辑》");
-  await stageLocalFile(child, child.payload, {
-    ...f,
-    localMetadataSearch: async () => [],
-  });
-  const plan = f.get(intakeKey(child.payload.file));
-  assert.equal(plan.status, "staged");
-  assert.equal(plan.metadata.artist, "未知歌手");
-  assert.equal(await readFile(plan.file, "utf8"), "independent part recording");
-  await assert.rejects(stat(child.payload.file), { code: "ENOENT" });
+  assert.equal(group.status, "downloading");
+  assert.equal(
+    f.jobs.some((j) =>
+      [
+        "import",
+        "local-intake",
+        "favorite-process",
+        "favorite-analyze",
+      ].includes(j.kind),
+    ),
+    false,
+  );
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM songs").get().n, 0);
   await assert.rejects(
     favorite_download({ id }, { bvid, cid: "999" }, f),

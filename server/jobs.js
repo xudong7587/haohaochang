@@ -1,3 +1,7 @@
+import {
+  analyzeFavoriteBundle,
+  processFavoritePart,
+} from "./favorite-bundles.js";
 import { scrapePoster } from "./song-poster.js";
 import { supplementLyrics } from "./lyrics-batch.js";
 import { migrateSongAssets } from "./assets.js";
@@ -20,6 +24,8 @@ import { refreshVideo } from "./job-handlers/refresh-video.js";
 import { stageLocalFile } from "./local-intake.js";
 
 const handlers = {
+  "favorite-analyze": analyzeFavoriteBundle,
+  "favorite-process": processFavoritePart,
   "local-intake": stageLocalFile,
   "refresh-video": refreshVideo,
   lyrics: supplementLyrics,

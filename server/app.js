@@ -1,3 +1,4 @@
+import { favoriteBundlesApi } from "./favorite-bundles.js";
 import { libraryPreviewApi } from "./library-preview.js";
 import { posterApi } from "./poster-api.js";
 import { artistApi } from "./artist-api.js";
@@ -172,6 +173,7 @@ export function createApp(options = {}) {
   const resolveReview = reviewsApi(routeContext);
   tvPairingApi(routeContext);
   libraryApi({ ...routeContext, resolveReview });
+  favoriteBundlesApi(routeContext);
   libraryDeleteApi(routeContext);
   const posterCatalog = posterApi({
     ...routeContext,
@@ -247,7 +249,7 @@ export function createApp(options = {}) {
       clearInterval(heartbeat);
       events.close();
       discovery.stop();
-      backgroundTasks.stop();
+      await backgroundTasks.stop();
       clients.forEach((c) => c.end());
       await artistProfiles.stop();
       return scheduler.stop();

@@ -1,3 +1,4 @@
+import { favoriteBundles } from "./favorite-bundles.js";
 import { normalizeLyricsStyle } from "../shared/lyrics-style.js";
 import { randomUUID } from "node:crypto";
 import { inspectPackage } from "./resource-health.js";
@@ -343,8 +344,14 @@ export function libraryApi({
       )
       .all()
       .map((j) => ({ ...j, payload: JSON.parse(j.payload) }));
+    const groupedFiles = new Set(
+      favoriteBundles(store).flatMap((g) =>
+        g.parts.map((p) => p.file).filter(Boolean),
+      ),
+    );
     const rows = [];
     for (const file of await filesUnder(downloads)) {
+      if (groupedFiles.has(file)) continue;
       try {
         const info = await stat(file);
         const job = handled.find((j) => j.payload.file === file);

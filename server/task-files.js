@@ -60,7 +60,7 @@ export async function cleanTaskFiles(store, downloads, id) {
         .map((r) => JSON.parse(r.payload)),
       ...store.db
         .prepare(
-          "SELECT value FROM settings WHERE key LIKE 'package:%' OR key LIKE 'video-source:%' OR key LIKE 'split-video:%'",
+          "SELECT value FROM settings WHERE key LIKE 'package:%' OR key LIKE 'video-source:%' OR key LIKE 'split-video:%' OR key LIKE 'favorite-bundle:%'",
         )
         .all()
         .map((r) => JSON.parse(r.value)),

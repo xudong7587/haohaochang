@@ -1,3 +1,7 @@
+import {
+  registerFavoriteBundle,
+  finishFavoritePart,
+} from "../favorite-bundles.js";
 import { prepareTaskDirectory } from "../task-files.js";
 import { checkTaskCancellation, taskFetch } from "../task-cancellation.js";
 import { favoriteParts, favoriteNfo } from "../favorites.js";
@@ -23,6 +27,13 @@ export async function favorite_download(job, payload, context) {
     ? parts.find((p) => p.cid === String(payload.cid))
     : parts.find((p) => p.page === 1);
   if (!part) throw new Error("原分 P 已移除，已停止下载，避免取得其他歌曲");
+  if (!payload.bundleId) {
+    const group = await registerFavoriteBundle(parts, {
+      ...context,
+      currentDownload: job.id,
+    });
+    part.bundleId = group.id;
+  }
   checkTaskCancellation();
   db.prepare("UPDATE jobs SET payload=? WHERE id=?").run(
     JSON.stringify({ ...payload, ...part }),
@@ -57,10 +68,12 @@ export async function favorite_download(job, payload, context) {
     info.size + ":" + info.mtimeMs,
   );
   checkTaskCancellation();
-  const moved = await stat(target);
-  addJob("local-intake", {
-    file: target,
-    signature: moved.size + ":" + moved.mtimeMs,
-    sourceUrl: part.url,
-  });
+  const fresh = JSON.parse(
+    db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id).payload,
+  );
+  await finishFavoritePart(
+    { ...part, bundleId: fresh.bundleId || part.bundleId },
+    target,
+    context,
+  );
 }

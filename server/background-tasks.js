@@ -1,3 +1,8 @@
+import {
+  resumeFavoriteBundles,
+  favoriteBundles,
+  discoverLocalFavoriteBundles,
+} from "./favorite-bundles.js";
 import { stat } from "node:fs/promises";
 import { queueMissingPosters } from "./poster-backfill.js";
 import { filesUnder, importKey } from "./library.js";
@@ -33,7 +38,19 @@ export function startBackgroundTasks({
   setImmediate(scheduleCleanup);
   const cleanupTimer = setInterval(scheduleCleanup, 15 * 60 * 1000);
   cleanupTimer.unref();
+  let recoveryPromise = null;
+  const recoverFavorites = () => {
+    if (stopped || !enabled || recoveryPromise) return;
+    recoveryPromise = resumeFavoriteBundles({ store, addJob })
+      .catch((error) => console.error("收藏夹任务恢复失败:", error.message))
+      .finally(() => {
+        recoveryPromise = null;
+      });
+    return recoveryPromise;
+  };
+  setImmediate(recoverFavorites);
   const favoritesTimer = setInterval(() => {
+    void recoverFavorites();
     const c = get("favorites", {});
     if (stopped || !enabled || !c.enabled) return;
     const recent = db
@@ -51,7 +68,36 @@ export function startBackgroundTasks({
     if (checking || stopped || !enabled || !get("autoImport", true)) return;
     checking = true;
     try {
-      for (const file of await filesUnder(downloads)) {
+      const files = await filesUnder(downloads),
+        settled = new Set();
+      for (const file of files) {
+        const info = await stat(file),
+          signature = info.size + ":" + info.mtimeMs;
+        if (
+          observed.get(file) === signature &&
+          Date.now() - info.mtimeMs >= 60000
+        )
+          settled.add(file);
+        observed.set(file, signature);
+      }
+      const grouped = await discoverLocalFavoriteBundles(
+        files.filter(
+          (file) =>
+            !inside(intakeRoot(downloads), file) &&
+            !inside(cache, file) &&
+            !roots.some((root) => inside(root, file)),
+        ),
+        settled,
+        {
+          store,
+          downloads,
+          addJob,
+        },
+      );
+      for (const group of favoriteBundles(store))
+        for (const part of group.parts) if (part.file) grouped.add(part.file);
+      for (const file of files) {
+        if (grouped.has(file)) continue;
         if (
           inside(intakeRoot(downloads), file) ||
           get(intakeKey(file))?.status === "moving"
@@ -61,10 +107,8 @@ export function startBackgroundTasks({
           continue;
         const info = await stat(file),
           signature = info.size + ":" + info.mtimeMs,
-          previous = observed.get(file);
-        observed.set(file, signature);
-        if (previous !== signature || Date.now() - info.mtimeMs < 60000)
-          continue;
+          previous = settled.has(file);
+        if (!previous) continue;
         if (get(importKey(file, info))) continue;
         const handled = db
           .prepare(
@@ -91,6 +135,7 @@ export function startBackgroundTasks({
       clearInterval(favoritesTimer);
       clearInterval(cleanupTimer);
       clearInterval(posterTimer);
+      return recoveryPromise;
     },
   };
 }

@@ -4,6 +4,8 @@ import { Pagination } from "./workbench-controls.jsx";
 export const completedTask = (job) =>
   ["done", "cancelled"].includes(job.status);
 export const taskKindNames = {
+  "favorite-analyze": "识别收藏夹歌曲资料",
+  "favorite-process": "整理收藏夹独立歌曲",
   "local-intake": "补齐本地歌曲元数据",
   lyrics: "补充歌词",
   poster: "刮削歌曲封面",

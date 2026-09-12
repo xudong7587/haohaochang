@@ -1,3 +1,4 @@
+import { FavoriteBundles } from "./library/favorite-bundles.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Search,
@@ -37,6 +38,7 @@ export function LibraryManager({ request, notify, onEdit }) {
     [tasks, setTasks] = useState([]),
     [hiddenSongs, setHiddenSongs] = useState([]),
     [reviews, setReviews] = useState([]);
+  const [bundles, setBundles] = useState([]);
   const [batchArtist, setBatchArtist] = useState("");
   const [tab, setTab] = useState("pending"),
     [query, setQuery] = useState(""),
@@ -71,13 +73,15 @@ export function LibraryManager({ request, notify, onEdit }) {
   const [resolution, setResolution] = useState("");
   const allCheckbox = useRef(null);
   async function refresh() {
-    const [library, pending, inbox, hidden, jobs] = await Promise.all([
+    const [library, pending, inbox, hidden, jobs, groups] = await Promise.all([
       request("/admin/library"),
       request("/admin/reviews"),
       request("/admin/inbox"),
       request("/admin/library?hidden=true"),
       request("/admin/tasks").catch(() => []),
+      request("/admin/favorite-bundles").catch(() => []),
     ]);
+    setBundles(Array.isArray(groups) ? groups : []);
     setSongs(library);
     setTasks(Array.isArray(jobs) ? jobs : []);
     setReviews([...pending, ...inbox]);
@@ -261,10 +265,20 @@ export function LibraryManager({ request, notify, onEdit }) {
             aria-pressed={tab === id}
             onClick={() => changeTab(id)}
           >
-            {label} · {entries.filter((e) => e.tier === id).length}
+            {label} ·{" "}
+            {entries.filter((e) => e.tier === id).length +
+              (id === "pending" ? bundles.length : 0)}
           </button>
         ))}
       </div>
+      {tab === "pending" && (
+        <FavoriteBundles
+          bundles={bundles}
+          request={request}
+          refresh={refresh}
+          notify={notify}
+        />
+      )}
       <div className="library-collection">
         <div className="list-toolbar">
           <label className="list-search">
