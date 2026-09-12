@@ -32,7 +32,7 @@ public final class MainActivity extends Activity {
   private NativeRoom room;
   private RoomApi connectionApi;
   private SharedPreferences preferences;
-  private AppUpdater updater;
+
   private LanDiscovery discovery;
   private String server = "";
   private boolean destroyed, resumed;
@@ -44,7 +44,7 @@ public final class MainActivity extends Activity {
   @Override
   public void onCreate(Bundle state) {
     super.onCreate(state);
-    updater = new AppUpdater(this);
+
     setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     if (Build.VERSION.SDK_INT >= 33)
       getOnBackInvokedDispatcher()
@@ -377,15 +377,14 @@ public final class MainActivity extends Activity {
     new AlertDialog.Builder(this)
         .setTitle("好好唱设置 · " + BuildConfig.VERSION_NAME)
         .setItems(
-            new String[] {"重试当前播放", "播放信息", "重新连接歌房", "连接设置", "重新自动发现", "检查应用更新", "退出歌房登录"},
+            new String[] {"重试当前播放", "播放信息", "重新连接歌房", "连接设置", "重新自动发现", "退出歌房登录"},
             (d, w) -> {
               if (w == 0 && room != null) room.retry();
               else if (w == 1 && room != null) room.diagnostics();
               else if (w == 2) connect(server);
               else if (w == 3) settings();
               else if (w == 4) discover();
-              else if (w == 5) updater.check();
-              else if (w == 6) {
+              else if (w == 5) {
                 preferences.edit().remove("token:" + server).apply();
                 connect(server);
               }
@@ -428,7 +427,6 @@ public final class MainActivity extends Activity {
     resumed = true;
     immersive();
     if (room != null) room.foreground(true);
-    if (updater != null) updater.resume();
   }
 
   @Override
@@ -443,7 +441,7 @@ public final class MainActivity extends Activity {
     destroyed = true;
     reset();
     executor.shutdownNow();
-    updater.destroy();
+
     super.onDestroy();
   }
 

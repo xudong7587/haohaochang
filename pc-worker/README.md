@@ -1,12 +1,10 @@
-# 好好唱资源 AI 整理器 · v0.4.4
+# 好好唱资源 AI 整理器 · v0.4.5
 
 让电脑替 NAS 裁剪视频片段、生成人声分离伴奏。NAS 负责曲库与播放，整理器负责执行任务，网页显示当前模型、任务、CPU/内存/GPU 占用与日志。
 
-v0.4.4 修复检查更新时的 GitHub 限流。新版优先读取 Release 附件中的更新清单，API 作为后备；五分钟内复用检查结果，失败时按重试时间等待。校验、空闲安装与失败回滚仍保留，视频和音频处理逻辑不变。
+v0.4.5 暂停应用内更新，隐藏窗口、托盘、详细页面与 NAS 的更新按钮。视频和音频处理逻辑保留。
 
-旧版若提示 `HTTP Error 403: rate limit exceeded`，请手动下载本版 PC ZIP，退出整理器后解压覆盖到原目录，再启动 `start.cmd`。保留 `worker.json`、`runtime`、`.venv` 和 `data`。窗口与详细页面均提供“手动下载更新包”入口；无需填写 GitHub 令牌。
-
-从 v0.3.x 升级，需要手动下载 `haohaochang-resource-ai-v0.4.4.zip` 一次。等待任务结束并退出整理器，再覆盖程序文件，保留 `worker.json`、`runtime`、`.venv` 和 `data`。新版更新器会识别以后带版本号的附件。
+请手动下载 `haohaochang-resource-ai-v0.4.5.zip`，等待任务结束，退出整理器后解压覆盖原目录，再运行 `start.cmd`。保留 `worker.json`、`runtime`、`.venv` 和 `data`，无需重新下载模型。关闭窗口只是隐藏到托盘，需点击“退出整理器”。
 
 ## 启动
 

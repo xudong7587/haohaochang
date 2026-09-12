@@ -1,3 +1,4 @@
+import { InitialPicker } from "./initial-picker.jsx";
 import { ArtistLibrary } from "./artist-library.jsx";
 import { ArtistArtwork } from "./artist-artwork.jsx";
 import { SongArtwork } from "./song-artwork.jsx";
@@ -15,7 +16,6 @@ import {
 } from "./api.js";
 import { TvLoginQr, PhonePairing } from "./tv-pairing.jsx";
 import { useTvNavigation } from "./playback/tv-navigation.js";
-import { reloadInterface } from "./reload-interface.js";
 import { modeNames, statusNames } from "./view-constants.js";
 import { SearchBox, Empty, Modal } from "./components.jsx";
 import { Settings } from "./admin-settings.jsx";
@@ -112,6 +112,8 @@ export function App() {
     [query, setQuery] = useState(""),
     [artist, setArtist] = useState("");
   const [tag, setTag] = useState("");
+  const [initialQuery, setInitialQuery] = useState("");
+  useEffect(() => setInitialQuery(""), [tab]);
   const [join, setJoin] = useState(null),
     [showQR, setShowQR] = useState(false),
     [message, setMessage] = useState(""),
@@ -192,9 +194,12 @@ export function App() {
       () =>
         Promise.all([
           api(
-            `/songs?q=${encodeURIComponent(query)}&artist=${encodeURIComponent(artist)}&tag=${encodeURIComponent(tag)}`,
+            `/songs?q=${encodeURIComponent(query)}&artist=${encodeURIComponent(artist)}&tag=${encodeURIComponent(tag)}&initials=${encodeURIComponent(tab === "songs" ? initialQuery : "")}`,
           ),
-          api("/artists"),
+          api(
+            "/artists?initials=" +
+              encodeURIComponent(tab === "artists" ? initialQuery : ""),
+          ),
         ])
           .then(([s, a]) => {
             if (alive) {
@@ -209,7 +214,7 @@ export function App() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [authenticated, query, artist, tag, refresh]);
+  }, [authenticated, query, artist, tag, refresh, initialQuery, tab]);
   useEffect(() => {
     let live = true;
     if (authenticated && route === "admin")
@@ -492,14 +497,6 @@ export function App() {
                   : "家庭 KTV"}
           </div>
           <div className="header-right">
-            {route === "tv" && (
-              <button
-                onClick={reloadInterface}
-                title="重新加载 NAS 最新界面，保留登录与已点列表；播放会短暂中断"
-              >
-                <RefreshCw size={18} /> 热更新
-              </button>
-            )}
             {route === "admin" && (
               <a
                 className="web-room-link"
@@ -672,40 +669,59 @@ export function App() {
                   返回歌手
                 </button>
               )}
-              <div className="song-poster-grid song-search-grid">
-                {songs.map((song) => {
-                  const added = state.queue.some((q) => q.song_id === song.id);
-                  return (
-                    <article className="song-poster-card" key={song.id}>
-                      <div className="song-poster-image">
-                        <SongArtwork song={song} token={roomToken} size={52} />
-                        <span className="poster-duration">
-                          {duration(song.duration)}
-                        </span>
-                      </div>
-                      <div className="poster-song-info">
-                        <strong>{song.title}</strong>
-                        <small>{song.artist}</small>
-                      </div>
-                      <div className="poster-song-actions">
-                        <small>
-                          {song.status !== "ready"
-                            ? statusNames[song.status]
-                            : modeNames[song.mode]}
-                        </small>
+              <div className="initial-results-layout">
+                <InitialPicker
+                  value={initialQuery}
+                  onChange={setInitialQuery}
+                />
+                <div className="song-poster-grid song-search-grid">
+                  {songs.map((song) => {
+                    const added = state.queue.some(
+                      (q) => q.song_id === song.id,
+                    );
+                    return (
+                      <article className="song-poster-card" key={song.id}>
                         <button
-                          className={added ? "added" : "add-song"}
+                          className="song-poster-select"
                           disabled={song.status === "preparing" || added}
                           onClick={() => add(song)}
-                          aria-label={`点歌 ${song.title}`}
+                          aria-label={`选择歌曲 ${song.title}`}
                         >
-                          {added ? <Check size={18} /> : <Plus size={18} />}
-                          <span>{added ? "已点" : "点歌"}</span>
+                          <div className="song-poster-image">
+                            <SongArtwork
+                              song={song}
+                              token={roomToken}
+                              size={52}
+                            />
+                            <span className="poster-duration">
+                              {duration(song.duration)}
+                            </span>
+                          </div>
+                          <div className="poster-song-info">
+                            <strong>{song.title}</strong>
+                            <small>{song.artist}</small>
+                          </div>
                         </button>
-                      </div>
-                    </article>
-                  );
-                })}
+                        <div className="poster-song-actions">
+                          <small>
+                            {song.status !== "ready"
+                              ? statusNames[song.status]
+                              : modeNames[song.mode]}
+                          </small>
+                          <button
+                            className={added ? "added" : "add-song"}
+                            disabled={song.status === "preparing" || added}
+                            onClick={() => add(song)}
+                            aria-label={`点歌 ${song.title}`}
+                          >
+                            {added ? <Check size={18} /> : <Plus size={18} />}
+                            <span>{added ? "已点" : "点歌"}</span>
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
               {!songs.length && (
                 <Empty
@@ -749,30 +765,36 @@ export function App() {
                 </div>
                 <Users size={30} />
               </div>
-              <div className="artist-grid">
-                {artists.map((a) => (
-                  <button
-                    className="artist-card artist-photo-card"
-                    data-artist={a.artist}
-                    key={a.artist}
-                    onClick={() => {
-                      setArtist(a.artist);
-                      setQuery("");
-                      setTab("artist-library");
-                    }}
-                  >
-                    <span className="artist-card-photo">
-                      <ArtistArtwork
-                        profile={a}
-                        token={route === "admin" ? adminToken : roomToken}
-                      />
-                    </span>
-                    <span className="artist-card-caption">
-                      <strong>{a.artist}</strong>
-                      <small>{a.count} 首歌曲</small>
-                    </span>
-                  </button>
-                ))}
+              <div className="initial-results-layout">
+                <InitialPicker
+                  value={initialQuery}
+                  onChange={setInitialQuery}
+                />
+                <div className="artist-grid">
+                  {artists.map((a) => (
+                    <button
+                      className="artist-card artist-photo-card"
+                      data-artist={a.artist}
+                      key={a.artist}
+                      onClick={() => {
+                        setArtist(a.artist);
+                        setQuery("");
+                        setTab("artist-library");
+                      }}
+                    >
+                      <span className="artist-card-photo">
+                        <ArtistArtwork
+                          profile={a}
+                          token={route === "admin" ? adminToken : roomToken}
+                        />
+                      </span>
+                      <span className="artist-card-caption">
+                        <strong>{a.artist}</strong>
+                        <small>{a.count} 首歌曲</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
               {!artists.length && (
                 <Empty

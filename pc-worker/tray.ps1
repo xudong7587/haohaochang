@@ -43,12 +43,14 @@ foreach ($spec in @(@('查看详细任务',24,145), @('检查更新',182,128), @
   $buttons += $button
   $form.Controls.Add($button)
 }
+$buttons[1].Visible = $false
 $form.Controls.AddRange(@($heading,$metrics,$tasks,$updateLabel,$downloadLink))
 $tray = New-Object Windows.Forms.NotifyIcon
 $tray.Icon = $form.Icon; $tray.Text = '好好唱资源 AI 整理器'; $tray.Visible = $true
 $menu = New-Object Windows.Forms.ContextMenuStrip
 $showItem = $menu.Items.Add('显示整理器')
 $updateItem = $menu.Items.Add('检查更新')
+$updateItem.Visible = $false
 $exitItem = $menu.Items.Add('退出整理器')
 $tray.ContextMenuStrip = $menu
 $script:firstTick = $true; $script:queuedAction = $null; $script:leaving = $false; $script:request = $null; $script:action = ''; $script:latest = ''; $script:phase = ''; $script:failures = 0; $script:retryAt = 0
@@ -75,7 +77,7 @@ $buttons[2].Add_Click({ Request-Action 'shutdown' })
 $buttons[3].Add_Click({ $form.Hide() })
 $showItem.Add_Click({ Show-Organizer }); $tray.Add_DoubleClick({ Show-Organizer })
 $updateItem.Add_Click({ Update-Organizer }); $exitItem.Add_Click({ Request-Action 'shutdown' })
-$form.Add_FormClosing({ param($sender,$eventArgs) if (!$script:leaving) { $eventArgs.Cancel = $true; $form.Hide(); $tray.ShowBalloonTip(2500,'好好唱仍在运行','右下角图标可以查看任务、更新或退出。',[Windows.Forms.ToolTipIcon]::Info) } })
+$form.Add_FormClosing({ param($sender,$eventArgs) if (!$script:leaving) { $eventArgs.Cancel = $true; $form.Hide(); $tray.ShowBalloonTip(2500,'好好唱仍在运行','右下角图标可以查看任务或退出。',[Windows.Forms.ToolTipIcon]::Info) } })
 $labels = @{idle='可以检查新版';checking='正在检查新版';available='发现新版';current='已是最新版本';downloading='正在下载';waiting='等待当前任务完成';installing='正在安装';restarting='正在重新启动';complete='更新完成';failed='更新失败';cancelled='已取消更新'}
 $timer = New-Object Windows.Forms.Timer
 $timer.Interval = 500
@@ -100,8 +102,8 @@ $timer.Add_Tick({
       }
       $script:phase = $value.phase; $script:latest = $value.latest
       $script:retryAt = [double]$value.nextCheck
-      $updateLabel.Text = "$($labels[$value.phase]) $($value.latest) $($value.error)"
-      if ($value.phase -eq 'downloading') { $updateLabel.Text += " $($value.progress)%" }
+      $updateLabel.Text = '应用内更新已暂停，请手动下载覆盖安装。'
+
       $buttons[1].Text = if ($value.phase -eq 'available') { '安装新版' } elseif ($value.phase -in @('downloading','waiting')) { '取消更新' } else { '检查更新' }
       $buttons[1].Enabled = ($value.phase -notin @('checking','installing','restarting')) -and !($value.phase -eq 'failed' -and $script:retryAt -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
       $updateItem.Enabled = $buttons[1].Enabled

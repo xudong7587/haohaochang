@@ -58,13 +58,17 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   private final Button find;
   private final LinearLayout query;
   private int selectedPosition;
+  private final LinearLayout initialsPanel;
+  private final TextView initialLabel;
+  private final java.util.List<Button> initialButtons = new java.util.ArrayList<>();
+  private String initialQuery = "";
 
   NativeCatalogue(Activity activity, RoomSession session) {
     super(activity);
     this.activity = activity;
     this.session = session;
     setOrientation(VERTICAL);
-    setBackgroundColor(0xbb12101b);
+    setBackgroundColor(TvStyle.BACKGROUND);
     setPadding(dp(24), dp(16), dp(20), dp(12));
     TextView breadcrumb = TvStyle.text(activity, "我的客厅    /    家庭 KTV", 9, TvStyle.MUTED);
     addView(breadcrumb, new LayoutParams(-1, dp(24)));
@@ -119,7 +123,49 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
           selectedPosition = position;
           select(rows.optJSONObject(position));
         });
-    addView(grid, new LayoutParams(-1, 0, 1));
+    grid.setOnItemLongClickListener(
+        (parent, view, position, id) -> {
+          selectedPosition = position;
+          return deleteSelection();
+        });
+    LinearLayout results = new LinearLayout(activity);
+    addView(results, new LayoutParams(-1, 0, 1));
+    initialsPanel = new LinearLayout(activity);
+    initialsPanel.setOrientation(VERTICAL);
+    initialsPanel.setPadding(0, dp(14), dp(14), 0);
+    results.addView(initialsPanel, new LayoutParams(dp(150), -1));
+    initialLabel = TvStyle.text(activity, "拼音首字母", 12, TvStyle.MUTED);
+    initialLabel.setSingleLine();
+    initialsPanel.addView(initialLabel, new LayoutParams(-1, dp(28)));
+    for (int row = 0; row < 7; row++) {
+      LinearLayout line = new LinearLayout(activity);
+      initialsPanel.addView(line, new LayoutParams(-1, dp(30)));
+      for (int col = 0; col < 4; col++) {
+        int index = row * 4 + col;
+        String text = index < 26 ? String.valueOf((char) ('A' + index)) : index == 26 ? "←" : "清";
+        Button button =
+            TvStyle.button(
+                activity,
+                text,
+                index < 26 ? "首字母 " + text : index == 26 ? "退格" : "清空",
+                () -> {
+                  initialQuery =
+                      index < 26
+                          ? (initialQuery + text)
+                              .substring(0, Math.min(24, initialQuery.length() + 1))
+                          : index == 26
+                              ? initialQuery.substring(0, Math.max(0, initialQuery.length() - 1))
+                              : "";
+                  search.setText("");
+                  load();
+                });
+        button.setTextSize(12);
+        button.setPadding(0, 0, 0, 0);
+        initialButtons.add(button);
+        line.addView(button, new LayoutParams(0, -1, 1));
+      }
+    }
+    results.addView(grid, new LayoutParams(0, -1, 1));
     empty = TvStyle.text(activity, "正在读取…", 16, TvStyle.MUTED);
     empty.setGravity(Gravity.CENTER);
     addView(empty, new LayoutParams(-1, dp(28)));
@@ -145,6 +191,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     this.page = page;
     artist = "";
     tag = "";
+    initialQuery = "";
     search.setText("");
     onlinePage = 1;
     load();
@@ -185,11 +232,39 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
 
   /** GridView scrolling and selection are explicit even when the TV starts in touch mode. */
   boolean move(int key) {
+    if (initialsPanel.hasFocus()) {
+      int index = initialButtons.indexOf(findFocus());
+      if (key == KeyEvent.KEYCODE_DPAD_LEFT && index % 4 == 0) return false;
+      if (key == KeyEvent.KEYCODE_DPAD_RIGHT && index % 4 == 3) {
+        focusGrid();
+        return true;
+      }
+      if (key == KeyEvent.KEYCODE_DPAD_UP && index < 4) {
+        search.requestFocusFromTouch();
+        return true;
+      }
+      int next =
+          index
+              + (key == KeyEvent.KEYCODE_DPAD_LEFT
+                  ? -1
+                  : key == KeyEvent.KEYCODE_DPAD_RIGHT
+                      ? 1
+                      : key == KeyEvent.KEYCODE_DPAD_UP ? -4 : 4);
+      if (next >= initialButtons.size()) return false;
+      if (next >= 0) initialButtons.get(next).requestFocusFromTouch();
+      return true;
+    }
     if (grid.hasFocus()) {
       int position = selectedPosition;
       int columns = Math.max(1, grid.getNumColumns());
       if (key == KeyEvent.KEYCODE_DPAD_LEFT) {
-        if (position % columns == 0) return false;
+        if (position % columns == 0) {
+          if (initialsPanel.isShown()) {
+            initialButtons.get(3).requestFocusFromTouch();
+            return true;
+          }
+          return false;
+        }
         focusCard(position - 1);
       } else if (key == KeyEvent.KEYCODE_DPAD_RIGHT) {
         if (position % columns < columns - 1 && position + 1 < rows.length())
@@ -218,6 +293,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   }
 
   private void search() {
+    initialQuery = "";
     onlinePage = 1;
     load();
     android.view.inputmethod.InputMethodManager keyboard =
@@ -227,6 +303,9 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   }
 
   private void load() {
+    initialsPanel.setVisibility(page.equals("songs") || page.equals("artists") ? VISIBLE : GONE);
+    query.setVisibility(page.equals("queue") ? GONE : VISIBLE);
+    initialLabel.setText(initialQuery.isEmpty() ? "拼音首字母" : initialQuery);
     int request = ++generation;
     selectedPosition = 0;
     queueKey = "";
@@ -280,7 +359,10 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     }
     String path =
         page.equals("artists") && artist.isEmpty()
-            ? "/api/artists"
+            ? "/api/artists?q="
+                + RoomApi.encode(search.getText().toString())
+                + "&initials="
+                + RoomApi.encode(initialQuery)
             : page.equals("online")
                 ? "/api/online/songs?title="
                     + RoomApi.encode(search.getText().toString())
@@ -291,7 +373,9 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                     + "&artist="
                     + RoomApi.encode(artist)
                     + "&tag="
-                    + RoomApi.encode(tag);
+                    + RoomApi.encode(tag)
+                    + "&initials="
+                    + RoomApi.encode(initialQuery);
     session.read(
         path,
         value -> {
@@ -303,19 +387,6 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
           if (result == null && value instanceof JSONObject)
             result = ((JSONObject) value).optJSONArray("results");
           if (result == null) result = new JSONArray();
-          if (page.equals("artists")
-              && artist.isEmpty()
-              && !search.getText().toString().isEmpty()) {
-            JSONArray filtered = new JSONArray();
-            String q = search.getText().toString().toLowerCase(java.util.Locale.ROOT);
-            for (int i = 0; i < result.length(); i++)
-              if (result
-                  .optJSONObject(i)
-                  .optString("artist")
-                  .toLowerCase(java.util.Locale.ROOT)
-                  .contains(q)) filtered.put(result.optJSONObject(i));
-            result = filtered;
-          }
           setRows(result);
           more.setVisibility(
               page.equals("online")
@@ -355,37 +426,17 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     }
     if (page.equals("artists") && artist.isEmpty()) {
       artist = row.optString("artist");
+      initialQuery = "";
+      search.setText("");
       load();
       return;
     }
     if (page.equals("queue")) {
-      if (rows.optJSONObject(0) == row) {
-        new AlertDialog.Builder(activity)
-            .setTitle(row.optString("title"))
-            .setItems(
-                new String[] {"切歌"},
-                (d, w) ->
-                    session.command(
-                        "/api/control",
-                        "POST",
-                        RoomApi.object("action", "next", "entryId", row.optString("id")),
-                        null))
-            .setNegativeButton("取消", null)
-            .show();
-        return;
-      }
-      new AlertDialog.Builder(activity)
-          .setTitle(row.optString("title"))
-          .setItems(
-              new String[] {"下一首唱", "移出队列"},
-              (d, w) ->
-                  session.command(
-                      "/api/queue/" + RoomApi.encode(row.optString("id")) + (w == 0 ? "/top" : ""),
-                      w == 0 ? "POST" : "DELETE",
-                      w == 0 ? new JSONObject() : null,
-                      null))
-          .setNegativeButton("取消", null)
-          .show();
+      session.command(
+          "/api/queue/" + RoomApi.encode(row.optString("id")) + "/first",
+          "POST",
+          new JSONObject(),
+          null);
       return;
     }
     if (page.equals("online")) {
@@ -404,6 +455,31 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                   android.widget.Toast.LENGTH_SHORT)
               .show();
         });
+  }
+
+  boolean longActivate(View target) {
+    return target == grid && deleteSelection();
+  }
+
+  private boolean deleteSelection() {
+    if (!page.equals("queue")) return false;
+    JSONObject row = rows.optJSONObject(selectedPosition);
+    if (row == null) return false;
+    String id = row.optString("id");
+    boolean current = selectedPosition == 0;
+    new AlertDialog.Builder(activity)
+        .setTitle(row.optString("title"))
+        .setItems(
+            new String[] {current ? "删除并切歌" : "删除歌曲"},
+            (dialog, which) -> {
+              if (current)
+                session.command(
+                    "/api/control", "POST", RoomApi.object("action", "next", "entryId", id), null);
+              else session.command("/api/queue/" + RoomApi.encode(id), "DELETE", null, null);
+            })
+        .setNegativeButton("取消", null)
+        .show();
+    return true;
   }
 
   private void online(JSONObject row) {
@@ -529,7 +605,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
       action.setText(
           artistCard
               ? "查看歌曲  ›"
-              : row.has("tag") ? "打开歌单  ›" : page.equals("queue") ? "管理歌曲  ›" : "＋ 点歌");
+              : row.has("tag") ? "打开歌单  ›" : page.equals("queue") ? "点击优先" : "＋ 点歌");
       LayoutParams imageParams =
           new LayoutParams(artistCard ? dp(84) : -1, artistCard ? dp(84) : dp(102));
       imageParams.gravity = Gravity.CENTER_HORIZONTAL;

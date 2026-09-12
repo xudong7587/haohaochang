@@ -1,3 +1,4 @@
+import { normalizeLyricsStyle } from "../shared/lyrics-style.js";
 import { randomUUID } from "node:crypto";
 import { inspectPackage } from "./resource-health.js";
 import { createSourceCandidate } from "../shared/source-candidate.js";
@@ -590,25 +591,10 @@ export function libraryApi({
     ),
   );
   app.get("/api/lyrics-style", member, (req, res) =>
-    res.json(
-      get("lyricsStyle", {
-        font: "sans-serif",
-        size: 48,
-        color: "#ffd66e",
-        offset: 0,
-      }),
-    ),
+    res.json(normalizeLyricsStyle(get("lyricsStyle", {}))),
   );
   app.post("/api/admin/lyrics-style", admin, (req, res) => {
-    const v = req.body;
-    const value = {
-      font: String(v.font || "sans-serif")
-        .replace(/[^\p{L}\p{N}\s,_-]/gu, "")
-        .slice(0, 120),
-      size: Math.max(24, Math.min(90, Number(v.size) || 48)),
-      color: /^#[a-f0-9]{6}$/i.test(v.color) ? v.color : "#ffd66e",
-      offset: Math.max(-10, Math.min(10, Number(v.offset) || 0)),
-    };
+    const value = normalizeLyricsStyle(req.body);
     set("lyricsStyle", value);
     res.json(value);
   });

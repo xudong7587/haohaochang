@@ -1,0 +1,108 @@
+.initial-results-layout {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  margin-top: 20px;
+}
+.initial-picker {
+  position: sticky;
+  top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #faf9fd;
+}
+.initial-picker > strong {
+  font-size: 12px;
+}
+.initial-picker output {
+  display: block;
+  margin: 12px 0;
+  min-height: 30px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #efedf9;
+  color: #6558db;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.initial-keys {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+.initial-keys button {
+  padding: 0;
+  min-height: 32px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+.initial-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.initial-actions button {
+  flex: 1;
+  font-size: 11px;
+  padding: 5px;
+  min-height: 32px;
+}
+.tv .initial-picker {
+  background: #211c2d;
+}
+.tv .initial-picker output {
+  background: #322941;
+  color: #ddccff;
+}
+.initial-results-layout > .song-poster-grid,
+.initial-results-layout > .artist-grid {
+  margin-top: 0;
+}
+.song-poster-select {
+  display: block;
+  width: 100%;
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  text-align: left;
+  color: inherit;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.song-poster-select .song-poster-image {
+  display: block;
+}
+.song-poster-select .poster-song-info {
+  display: block;
+}
+.library-collection {
+  min-width: 0;
+}
+@media (max-width: 650px) {
+  .initial-results-layout {
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .initial-picker {
+    padding: 8px;
+  }
+  .initial-keys {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .initial-results-layout > .song-poster-grid,
+  .initial-results-layout > .artist-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .library-workspace > .initial-results-layout {
+    display: block;
+  }
+  .library-workspace > .initial-results-layout > .initial-picker {
+    position: static;
+    margin-bottom: 12px;
+  }
+  .library-workspace .initial-keys {
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+  }
+}

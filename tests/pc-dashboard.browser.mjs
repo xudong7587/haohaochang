@@ -173,18 +173,9 @@ try {
       .get(),
     undefined,
   );
-  await page.getByRole("button", { name: "检查更新", exact: true }).click();
-  await page.getByRole("button", { name: "安装新版", exact: true }).waitFor();
-  assert.ok(
-    !(await page.locator("body").textContent()).includes(
-      "never-forward-update-secret",
-    ),
-  );
-  await page.getByRole("button", { name: "安装新版", exact: true }).click();
-  await page.getByRole("button", { name: "取消更新", exact: true }).waitFor();
-  await page.getByRole("button", { name: "取消更新", exact: true }).click();
-  await page.getByRole("status").filter({ hasText: "已取消更新" }).waitFor();
-  assert.deepEqual(updateCalls, ["check", "install", "cancel"]);
+  for (const name of ["检查更新", "安装新版", "取消更新"]) assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
+  assert.deepEqual(updateCalls, []);
+  assert.ok(!(await page.locator("body").textContent()).includes("never-forward-update-secret"));
   assert.equal(
     await page.getByText("已整理旧歌曲", { exact: true }).isVisible(),
     false,

@@ -34,6 +34,7 @@ public class NativeRoomTest {
   private Activity activity;
   private NativeRoom room;
   private LocalNas server;
+  private final List<String> paths = new CopyOnWriteArrayList<>();
   private final List<JSONObject> commands = new CopyOnWriteArrayList<>();
   private volatile String songsFixture =
       "[{\"id\":\"song-1\",\"title\":\"测试歌曲\",\"artist\":\"测试歌手\"}]";
@@ -57,6 +58,7 @@ public class NativeRoomTest {
     server =
         new LocalNas(
             (path, headers, body) -> {
+              paths.add(path);
               if (path.equals("/api/control")) commands.add(new JSONObject(body));
               return new LocalNas.Reply(200, path.startsWith("/api/songs") ? songsFixture : "{}");
             });
@@ -146,6 +148,11 @@ public class NativeRoomTest {
     press(KeyEvent.KEYCODE_DPAD_DOWN);
     assertTrue(find("歌曲卡片").hasFocus());
     press(KeyEvent.KEYCODE_DPAD_LEFT);
+    assertTrue(find("首字母 D").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
+    press(KeyEvent.KEYCODE_DPAD_LEFT);
     assertTrue(find("歌名点歌").hasFocus());
     press(KeyEvent.KEYCODE_DPAD_RIGHT);
     press(KeyEvent.KEYCODE_DPAD_DOWN);
@@ -189,7 +196,7 @@ public class NativeRoomTest {
   }
 
   @Test
-  public void catalogueLeavesVideoVisibleAndCapturesNativeStyle() throws Exception {
+  public void catalogueCoversMainStageAndCapturesNativeStyle() throws Exception {
     JSONArray fixtures = new JSONArray();
     for (int i = 0; i < 16; i++)
       fixtures.put(
@@ -201,7 +208,7 @@ public class NativeRoomTest {
     NativeCatalogue catalogue =
         (NativeCatalogue)
             descendants(room).stream().filter(v -> v instanceof NativeCatalogue).findFirst().get();
-    assertTrue("Keep a clear video strip at the right", catalogue.getRight() <= 800);
+    assertEquals("Catalogue covers the main video area", 960, catalogue.getRight());
     assertEquals(144, catalogue.getLeft());
     assertFalse(find("隐藏歌词").isShown());
     assertFalse(
@@ -227,6 +234,68 @@ public class NativeRoomTest {
     press(KeyEvent.KEYCODE_DPAD_UP);
     layout(960, 540);
     assertEquals(2 + columns * 2, grid.getSelectedItemPosition());
+  }
+
+  @Test
+  public void initialKeypadFiltersWithoutOpeningKeyboard() throws Exception {
+    find("歌名点歌").performClick();
+    drain();
+    layout(960, 540);
+    find("首字母 Z").requestFocusFromTouch();
+    press(KeyEvent.KEYCODE_DPAD_CENTER);
+    drain();
+    assertTrue(paths.stream().anyMatch(path -> path.contains("initials=Z")));
+    assertTrue(find("首字母 Z").hasFocus());
+    find("首字母 J").performClick();
+    drain();
+    assertTrue(paths.stream().anyMatch(path -> path.contains("initials=ZJ")));
+    find("退格").performClick();
+    drain();
+    assertTrue(find("首字母 Z").isShown());
+  }
+
+  @Test
+  public void fullscreenQueueStaysOutsideFocusNavigation() throws Exception {
+    assertFalse(find("手机扫码点歌二维码").isShown());
+    find("全屏播放").performClick();
+    layout(960, 540);
+    assertTrue(find("手机扫码点歌二维码").isShown());
+    assertTrue(find("全屏已点歌单").isShown());
+    assertFalse(find("手机扫码点歌二维码").isFocusable());
+    capture("native-tv-queue-overlay.png");
+  }
+
+  @Test
+  public void queueConfirmPrioritizesButLongConfirmOnlyOffersDeletion() throws Exception {
+    find("已点歌曲").performClick();
+    drain();
+    JSONObject second =
+        RoomApi.object("id", "entry-2", "song_id", "song-2", "title", "下一首", "artist", "测试歌手");
+    room.state(
+        RoomApi.object(
+            "queue",
+            new JSONArray().put(song).put(second),
+            "playback",
+            RoomApi.object("paused", false)));
+    layout(960, 540);
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    press(KeyEvent.KEYCODE_DPAD_CENTER);
+    drain();
+    assertTrue(paths.contains("/api/queue/entry-2/first"));
+    long firstCalls = paths.stream().filter(path -> path.endsWith("/first")).count();
+    activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER));
+    Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(650));
+    activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER));
+    drain();
+    android.app.AlertDialog dialog =
+        org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+    assertNotNull(dialog);
+    assertTrue(dialog.isShowing());
+    assertEquals(firstCalls, paths.stream().filter(path -> path.endsWith("/first")).count());
+    dialog.getListView().performItemClick(dialog.getListView().getChildAt(0), 0, 0);
+    drain();
+    assertTrue(paths.contains("/api/queue/entry-2"));
   }
 
   private void capture(String name) throws Exception {

@@ -48,6 +48,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private final Map<String, Button> navigation = new LinkedHashMap<>();
   private final TextView subtitle;
   private final NativeCatalogue catalogue;
+  private final NativeRoomOverlay overlay;
   private final TextView title, status, offsetLabel, stageTitle;
   private final Button pause, vocal, next, fullscreen, lyricToggle, queueButton, reset;
   private final Handler handler = new Handler(Looper.getMainLooper());
@@ -68,6 +69,15 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private int wakeKey = -1;
   private String pageBeforeFull = "stage";
   private View confirmTarget;
+  private boolean longConfirmed;
+  private final Runnable longConfirm = this::longConfirm;
+
+  private void longConfirm() {
+    View target = confirmTarget;
+    if (target != null && target == findFocus() && target.isShown())
+      longConfirmed = catalogue.longActivate(target);
+  }
+
   private TextView controlHint;
   private View hintAnchor;
   private final Runnable clearHint = this::hideHint;
@@ -110,6 +120,12 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
               }
             });
     stage.addView(lyrics, new FrameLayout.LayoutParams(-1, -1));
+    overlay = new NativeRoomOverlay(activity, session);
+    FrameLayout.LayoutParams overlayParams =
+        new FrameLayout.LayoutParams(dp(176), -2, Gravity.TOP | Gravity.RIGHT);
+    overlayParams.topMargin = dp(20);
+    overlayParams.rightMargin = dp(22);
+    stage.addView(overlay, overlayParams);
     stage.setOnClickListener(
         v -> {
           if (full) reveal(true);
@@ -149,7 +165,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     nav("音乐现场", "stage");
     nav("歌名点歌", "songs");
     nav("歌星点歌", "artists");
-    nav("分类歌单", "playlists");
+
     queueButton = nav("已点歌曲", "queue");
     nav("在线找歌", "online");
     sidebar.addView(new View(activity), new LinearLayout.LayoutParams(1, 0, 1));
@@ -322,8 +338,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     sidebar.setLayoutParams(navParams);
     FrameLayout.LayoutParams libraryParams = new FrameLayout.LayoutParams(-1, -1);
     libraryParams.leftMargin = nav;
-    // Leave the right fifth of the main stage uncovered while browsing songs.
-    libraryParams.rightMargin = Math.max(dp(120), Math.round((getWidth() - nav) * .22f));
+    libraryParams.rightMargin = 0;
     libraryParams.bottomMargin = bar;
     catalogue.setLayoutParams(libraryParams);
     footer.setLayoutParams(new FrameLayout.LayoutParams(-1, bar, Gravity.BOTTOM));
@@ -351,6 +366,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     sidebar.setVisibility(full ? GONE : VISIBLE);
     catalogue.setVisibility(!full && !tab.equals("stage") ? VISIBLE : GONE);
     lyrics.setVisibility(lyricsVisible && full ? VISIBLE : GONE);
+    overlay.fullscreen(full);
     lyricToggle.setVisibility(full ? VISIBLE : GONE);
     stage.setContentDescription(full ? "演唱画面，按下键打开控制，左右键微调歌词" : "演唱画面，确认键全屏");
     updateAdjustmentVisibility();
@@ -359,8 +375,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   @Override
   protected void onMeasure(int widthSpec, int heightSpec) {
     FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) catalogue.getLayoutParams();
-    p.rightMargin =
-        Math.max(dp(120), Math.round((MeasureSpec.getSize(widthSpec) - dp(144)) * .22f));
+    p.rightMargin = 0;
     super.onMeasure(widthSpec, heightSpec);
   }
 
@@ -518,10 +533,15 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
             || key == KeyEvent.KEYCODE_ENTER
             || key == KeyEvent.KEYCODE_NUMPAD_ENTER;
     if (event.getAction() == KeyEvent.ACTION_UP && confirm && confirmTarget != null) {
+      handler.removeCallbacks(longConfirm);
       View target = confirmTarget;
       confirmTarget = null;
       target.setPressed(false);
-      if (!event.isCanceled() && target == findFocus() && target.isShown() && target.isEnabled()) {
+      if (!longConfirmed
+          && !event.isCanceled()
+          && target == findFocus()
+          && target.isShown()
+          && target.isEnabled()) {
         if (!catalogue.activate(target)) target.performClick();
       }
       return true;
@@ -569,6 +589,9 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
           && ((android.widget.EditText) findFocus()).length() > 0
           && (key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT))
         return super.dispatchKeyEvent(event);
+      handler.removeCallbacks(longConfirm);
+      if (confirmTarget != null) confirmTarget.setPressed(false);
+      confirmTarget = null;
       navigate(key);
       return true;
     }
@@ -579,7 +602,9 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
           focusInitial();
           target = findFocus();
         }
+        longConfirmed = false;
         confirmTarget = target;
+        handler.postDelayed(longConfirm, 600);
         if (target != null) target.setPressed(true);
       }
       return true;
@@ -770,6 +795,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     lyrics.offset(lyricBaseOffset + playback.optInt("lyricsOffsetMs") / 1000.0);
     queueButton.setText("已点歌曲  " + queueCount);
     catalogue.queue(state);
+    overlay.queue(queue);
     updateControls();
     syncPlayback();
   }
@@ -811,6 +837,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
         color,
         (float) style.optDouble("size", 48),
         style.optString("font", "sans-serif"));
+    lyrics.position((float) style.optDouble("x", 50), (float) style.optDouble("y", 67));
   }
 
   @Override
@@ -977,6 +1004,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     handler.removeCallbacksAndMessages(null);
     session.close();
     catalogue.close();
+    overlay.close();
     player.destroy();
   }
 }

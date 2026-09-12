@@ -12,9 +12,13 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
   function snapshot() {
     const queue = db
       .prepare(
-        "SELECT q.*,s.title,s.artist,s.mode,s.duration,s.status,s.needs_video,s.lyrics FROM queue q JOIN songs s ON q.song_id=s.id ORDER BY position",
+        "SELECT q.*,s.title,s.artist,s.mode,s.duration,s.status,s.needs_video,s.lyrics,CASE WHEN s.poster!='' THEN 1 ELSE 0 END AS hasPoster FROM queue q JOIN songs s ON q.song_id=s.id ORDER BY position",
       )
-      .all();
+      .all()
+      .map((song) => ({
+        ...song,
+        posterVersion: get("poster-source:" + song.song_id)?.hash || "",
+      }));
     const pending = db
       .prepare(
         "SELECT id,kind,payload,status FROM jobs WHERE status IN ('queued','running') AND kind NOT IN ('scan','poster') ORDER BY created",
@@ -118,6 +122,30 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
       throw e;
     }
     emit();
+    res.json(snapshot());
+  });
+  app.post("/api/queue/:id/first", member, (req, res) => {
+    const queue = snapshot().queue;
+    const selected = queue.find((entry) => entry.id === req.params.id);
+    if (!selected) throw fail(404, "歌曲不在队列中");
+    if (queue[0].id === selected.id) return res.json(snapshot());
+    const reordered = [
+      selected,
+      ...queue.filter((entry) => entry.id !== selected.id),
+    ];
+    db.exec("BEGIN");
+    try {
+      reordered.forEach((entry, index) =>
+        db
+          .prepare("UPDATE queue SET position=? WHERE id=?")
+          .run(index, entry.id),
+      );
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+    revise({ paused: false, vocal: false });
     res.json(snapshot());
   });
   app.delete("/api/queue/:id", member, (req, res) => {

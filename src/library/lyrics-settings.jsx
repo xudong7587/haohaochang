@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
+import { LyricsSurface } from "../lyrics-surface.jsx";
+import {
+  defaultLyricsStyle,
+  normalizeLyricsStyle,
+} from "../../shared/lyrics-style.js";
 export function LyricsSettings({ request, notify }) {
-  const [style, setStyle] = useState({
-    font: "sans-serif",
-    size: 48,
-    color: "#ffd66e",
-    offset: 0,
-  });
+  const [style, setStyle] = useState(defaultLyricsStyle);
   useEffect(() => {
     request("/lyrics-style")
-      .then(setStyle)
+      .then((value) => setStyle(normalizeLyricsStyle(value)))
       .catch(() => {});
   }, []);
   return (
@@ -25,6 +25,44 @@ export function LyricsSettings({ request, notify }) {
       }}
     >
       <h3>演唱字幕</h3>
+      <div className="lyrics-preview-frame" aria-label="歌词静态预览">
+        <small>16:9 · 歌词预览</small>
+        <LyricsSurface style={style}>
+          <div className="lyric-lines">
+            <strong className="karaoke-line">今晚，唱一首喜欢的歌</strong>
+            <span>熟悉的旋律，和身边的人</span>
+          </div>
+        </LyricsSurface>
+      </div>
+      <p className="lyrics-preview-note">
+        预览按播放画面比例缩放。保存后，网页歌房和 TV 在下一首歌应用。
+      </p>
+      <div className="lyrics-tuning">
+        {[
+          ["size", "歌词大小", 24, 90],
+          ["x", "水平位置", 10, 90],
+          ["y", "垂直位置", 20, 80],
+        ].map(([key, label, min, max]) => (
+          <label key={key}>
+            {label}
+            <output>
+              {style[key]}
+              {key === "size" ? "" : "%"}
+            </output>
+            <input
+              aria-label={label}
+              type="range"
+              min={min}
+              max={max}
+              step="1"
+              value={style[key]}
+              onChange={(event) =>
+                setStyle({ ...style, [key]: Number(event.target.value) })
+              }
+            />
+          </label>
+        ))}
+      </div>
       <p>
         当前句渐变着色、下一句预告。增强 LRC 使用逐字时间戳；普通 LRC
         按整句进度着色。

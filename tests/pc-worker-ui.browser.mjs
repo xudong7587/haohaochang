@@ -85,35 +85,11 @@ try {
     "http://127.0.0.1:" + server.address().port + "/#fixture-key",
   );
   await page.locator(".task-item").waitFor();
-  await page.getByRole("button", { name: "检查更新", exact: true }).click();
-  await page.getByRole("button", { name: "安装新版", exact: true }).waitFor();
-  await page.getByRole("button", { name: "安装新版", exact: true }).click();
-  await page.getByRole("button", { name: "取消更新", exact: true }).waitFor();
-  await page.getByRole("button", { name: "取消更新", exact: true }).click();
-  await page.getByRole("status").filter({ hasText: "已取消更新" }).waitFor();
-  rateLimited = true;
-  await page.getByRole("button", { name: "检查更新", exact: true }).click();
-  await page
-    .getByRole("status")
-    .filter({ hasText: "GitHub 暂时限制更新请求" })
-    .waitFor();
-  assert.equal(
-    await page
-      .getByRole("button", { name: "检查更新", exact: true })
-      .isDisabled(),
-    true,
-  );
-  assert.equal(checks, 2);
-  assert.equal(
-    await page
-      .getByRole("link", { name: "手动下载更新包" })
-      .getAttribute("href"),
-    "https://github.com/xudong7587/haohaochang/releases/latest",
-  );
-  update.nextCheck = Date.now() / 1000 - 1;
-  await page.waitForFunction(
-    () => !document.getElementById("checkUpdate").disabled,
-  );
+  for (const name of ["检查更新", "安装新版", "取消更新"]) assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
+  assert.equal(checks, 0);
+  update = { phase: "failed", error: "403 Forbidden" };
+  await page.getByRole("status").filter({hasText:"应用内更新已暂停"}).waitFor();
+  assert.equal(await page.getByText("403 Forbidden", {exact:true}).count(), 0);
   assert.equal(await page.locator(".task-item").count(), 1);
   await page.getByRole("button", { name: /排队等待 · 75 项/ }).click();
   assert.equal(await page.locator(".task-item").count(), 11);

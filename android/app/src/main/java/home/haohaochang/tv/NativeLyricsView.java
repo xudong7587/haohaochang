@@ -20,7 +20,7 @@ final class NativeLyricsView extends View {
   private LyricsTimeline timeline = new LyricsTimeline("");
   private double offset, duration;
   private int color = Color.rgb(255, 214, 110), cachedIndex = Integer.MIN_VALUE, cachedWidth;
-  private float preferredSize = 48, size, lineWidth;
+  private float preferredSize = 48, size, lineWidth, anchorX = 50, anchorY = 67;
   private float[] wordWidths = new float[0];
   private String current = "", next = "";
   private LyricsTimeline.Line line;
@@ -44,10 +44,22 @@ final class NativeLyricsView extends View {
     duration = seconds;
     offset = offsetSeconds;
     color = highlight;
-    preferredSize = Math.max(18, Math.min(80, fontSize));
+    preferredSize = Math.max(24, Math.min(90, fontSize));
     paint.setTypeface(Typeface.create(font, Typeface.BOLD));
     cachedIndex = Integer.MIN_VALUE;
     invalidate();
+  }
+
+  void position(float x, float y) {
+    anchorX = Math.max(10, Math.min(90, x));
+    anchorY = Math.max(20, Math.min(80, y));
+    invalidate();
+  }
+
+  private float left(float width) {
+    return Math.max(
+        getWidth() * .05f,
+        Math.min(getWidth() * .95f - width, getWidth() * anchorX / 100f - width / 2));
   }
 
   void offset(double seconds) {
@@ -67,7 +79,7 @@ final class NativeLyricsView extends View {
     line = timeline.lines.isEmpty() ? null : timeline.lines.get(active);
     current = line == null ? timeline.plain : line.text;
     next = active + 1 < timeline.lines.size() ? timeline.lines.get(active + 1).text : "";
-    size = Math.min(preferredSize * getResources().getDisplayMetrics().density, getWidth() * .047f);
+    size = preferredSize * getWidth() / 960f;
     paint.setTextSize(size);
     if (line != null && !line.words.isEmpty()) {
       StringBuilder text = new StringBuilder();
@@ -92,10 +104,10 @@ final class NativeLyricsView extends View {
     double time = clock.timeMs() / 1000.0 + offset;
     int index = timeline.index(time);
     prepare(index);
-    float baseline = getHeight() * .67f;
+    float baseline = getHeight() * anchorY / 100f;
     paint.setTextSize(size);
     paint.setStyle(Paint.Style.FILL);
-    float left = (getWidth() - lineWidth) / 2;
+    float left = left(lineWidth);
     // Stroke and a clipped second draw avoid gradient/filter allocation.
     drawText(canvas, current, left, baseline, Color.WHITE, true);
     if (line != null) {
@@ -130,20 +142,14 @@ final class NativeLyricsView extends View {
     float nextWidth = paint.measureText(next);
     if (nextWidth > getWidth() * .9f)
       paint.setTextSize(paint.getTextSize() * getWidth() * .9f / nextWidth);
-    drawText(
-        canvas,
-        next,
-        (getWidth() - paint.measureText(next)) / 2,
-        baseline + size * 1.1f,
-        0xffded2ec,
-        true);
+    drawText(canvas, next, left(paint.measureText(next)), baseline + size * 1.1f, 0xffded2ec, true);
     int countdown = timeline.countdown(time);
     paint.setTextSize(size * .5f);
     for (int i = 0; i < countdown; i++)
       drawText(
           canvas,
           "●",
-          getWidth() / 2f + (i - 1.5f) * size * .6f,
+          getWidth() * anchorX / 100f + (i - 1.5f) * size * .6f,
           baseline - size * 1.3f,
           color,
           true);

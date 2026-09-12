@@ -1,0 +1,116 @@
+.lyrics-preview-frame {
+  position: relative;
+  aspect-ratio: 16/9;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 28% 30%, #60477366, transparent 52%),
+    linear-gradient(165deg, #171925, #34304b 65%, #11121a);
+  border: 1px solid #4c455c;
+  margin: 18px 0 10px;
+  max-width: 880px;
+}
+.lyrics-preview-frame::before {
+  content: "";
+  position: absolute;
+  inset: 65% -10% -30%;
+  border-radius: 50%;
+  background: #131321;
+  transform: rotate(-8deg);
+}
+.lyrics-preview-frame > small {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  color: #c8bfd5;
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+.lyrics-scene.lyrics-positioned {
+  padding: 0;
+  background: none;
+}
+.lyrics-scene.lyrics-positioned .lyric-lines {
+  position: absolute;
+  left: var(--lyrics-x, 50%);
+  top: var(--lyrics-y, 67%);
+  transform: translate(-50%, -1em);
+  margin: 0 !important;
+  width: max-content;
+  max-width: 90%;
+  gap: 0.2em !important;
+  font-size: calc(
+    var(--karaoke-size, 48px) * var(--lyrics-scale, 1) * var(--line-fit, 1)
+  ) !important;
+  text-align: center;
+  align-items: center;
+}
+.lyrics-positioned .lyric-lines strong {
+  font-size: inherit !important;
+  line-height: 1.25;
+  max-height: none;
+}
+.lyrics-positioned .lyric-lines > span {
+  font-size: 0.64em !important;
+  line-height: 1.35;
+  color: #ded2ec;
+  text-shadow: 0 1px 2px #000;
+}
+.lyrics-positioned .lyric-countdown {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 0.4em;
+}
+.lyrics-preview-frame .karaoke-line {
+  --lyric-fill: 52%;
+  background-image: linear-gradient(
+    90deg,
+    var(--karaoke-color) var(--lyric-fill),
+    white var(--lyric-fill)
+  );
+}
+.lyrics-tuning {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  max-width: 880px;
+}
+.lyrics-tuning label + label {
+  margin-top: 0;
+}
+.lyrics-tuning input[type="range"] {
+  padding: 0;
+  accent-color: #6558db;
+  width: 100%;
+}
+.lyrics-preview-note {
+  font-size: 12px !important;
+}
+.lyrics-tuning output {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 650px) {
+  .lyrics-tuning {
+    grid-template-columns: 1fr;
+  }
+  .lyrics-preview-frame {
+    border-radius: 8px;
+  }
+}
+
+.lyrics-preview-frame .lyrics-scene {
+  position: absolute;
+  inset: 0;
+}
+.lyrics-positioned .lyric-lines {
+  display: flex;
+  flex-direction: column;
+}
+.lyrics-positioned .lyric-lines strong {
+  white-space: nowrap;
+}
+.lyrics-preview-frame .karaoke-line {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

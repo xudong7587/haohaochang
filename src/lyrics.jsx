@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { parseLyrics, progress, lyricFrame } from "../shared/lyrics.js";
+import { LyricsSurface } from "./lyrics-surface.jsx";
 export { parseLyrics } from "../shared/lyrics.js";
 export function Lyrics({ song, time, token, resource, offsetMs = 0 }) {
   const [style, setStyle] = useState({
@@ -52,14 +53,7 @@ export function Lyrics({ song, time, token, resource, offsetMs = 0 }) {
     song.duration,
   );
   return (
-    <div
-      className="lyrics-scene"
-      style={{
-        fontFamily: style.font,
-        "--karaoke-size": style.size + "px",
-        "--karaoke-color": style.color,
-      }}
-    >
+    <LyricsSurface style={style}>
       {!!song.needs_video && (
         <div className="audio-title">
           <small>音频舞台 · 待补 MTV</small>
@@ -121,6 +115,6 @@ export function Lyrics({ song, time, token, resource, offsetMs = 0 }) {
           <span>纯文本歌词 · 暂无时间轴</span>
         </div>
       ) : null}
-    </div>
+    </LyricsSurface>
   );
 }

@@ -2,7 +2,6 @@ import { TaskList } from "./task-list.jsx";
 import { TaskActions } from "./task-actions.jsx";
 import React, { useEffect, useState } from "react";
 import { PCSettings } from "./settings.jsx";
-import { PcUpdate } from "./pc-update.jsx";
 export function PcDashboard({ embedded = false }) {
   const [token, setToken] = useState(
       sessionStorage.getItem("adminToken") || "",
@@ -102,11 +101,6 @@ export function PcDashboard({ embedded = false }) {
         {!embedded && <a href="/admin">返回管理页面</a>}
       </div>
       {error && <p role="alert">{error}</p>}
-      <PcUpdate
-        worker={worker}
-        token={token}
-        onChange={() => setReload((v) => v + 1)}
-      />
       <section className="settings-card">
         <h2>整理任务中心</h2>
         <p>
