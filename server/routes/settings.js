@@ -4,6 +4,7 @@ import { biliLoginApi } from "../bili-login.js";
 import { enrichmentConfig, enrichSong } from "../enrichment.js";
 import { favoriteConfig } from "../favorites.js";
 import { providerConfig, testProvider } from "../separation.js";
+import { npuConfig } from "../separation/providers.js";
 
 import { fail, clean } from "../http-utils.js";
 
@@ -84,6 +85,9 @@ export function settingsApi({
       pcEndpoint: config.pcEndpoint || "",
       pcModel: config.pcModel || "htdemucs",
       hasPcKey: !!config.pcApiKey,
+      npuEnabled: npuConfig(config).enabled,
+      npuEndpoint: npuConfig(config).endpoint,
+      hasNpuKey: !!npuConfig(config).apiKey,
     });
   });
   app.post("/api/admin/ai/discover", admin, (req, res) => {
@@ -94,7 +98,7 @@ export function settingsApi({
     set("ai", providerConfig(req.body, get("ai", {})));
     res.json({ ok: true });
   });
-  for (const kind of ["pc", "cloud"]) {
+  for (const kind of ["pc", "npu", "cloud"]) {
     const configFor = (input) => {
       const old = get("ai", {});
       const fields =
@@ -107,7 +111,9 @@ export function settingsApi({
               "pcApiKey",
               "clearPcKey",
             ]
-          : ["enabled", "endpoint", "model", "apiKey", "clearKey"];
+          : kind === "npu"
+            ? ["npuEnabled", "npuEndpoint", "npuApiKey", "clearNpuKey"]
+            : ["enabled", "endpoint", "model", "apiKey", "clearKey"];
       const patch = Object.fromEntries(
         fields.filter((k) => k in input).map((k) => [k, input[k]]),
       );
@@ -123,7 +129,9 @@ export function settingsApi({
       const target =
         kind === "pc"
           ? { endpoint: c.pcEndpoint, model: c.pcModel, apiKey: c.pcApiKey }
-          : c;
+          : kind === "npu"
+            ? npuConfig(c)
+            : c;
       if (!target.endpoint)
         throw fail(
           400,
@@ -141,7 +149,9 @@ export function settingsApi({
           const c = providerConfig(req.body, get("ai", {}));
           return c.pcEndpoint
             ? { endpoint: c.pcEndpoint, model: c.pcModel, apiKey: c.pcApiKey }
-            : c;
+            : npuConfig(c).enabled
+              ? npuConfig(c)
+              : c;
         })(),
       ),
     ),

@@ -1,6 +1,8 @@
-# 好好唱使用手册 · v0.4.6
+# 好好唱使用手册 · 稳定版 v0.4.6 / NPU 测试版 v0.4.6.rc1
 
-本版同时更新 NAS/Docker、原生 TV 和 PC 界面。先更新 NAS，再安装 `haohaochang-tv-v0.4.6.apk`，首次启动自动寻找同一局域网中的歌房。找到一个直接连接，多个则让你选择；没有找到可手动输入 NAS 根地址。正式 APK 可直接同签名覆盖安装，保留登录；首次从旧 WebView 版本迁移需重新扫码登录。应用内更新已隐藏，请手动下载 APK。
+NPU 测试版仅更新 Docker，须显式指定 `0.4.6.rc1`，不更新 `latest`；TV／PC 继续用 v0.4.6。安装与自动检测见 [RC1 专用说明](NPU-RC1.md)，版本变化见 [Changelog](../CHANGELOG.md)。以下为稳定版的通用使用流程。
+
+v0.4.6 同时更新 NAS/Docker、原生 TV 和 PC 界面。先更新 NAS，再安装 `haohaochang-tv-v0.4.6.apk`，首次启动自动寻找同一局域网中的歌房。找到一个直接连接，多个则让你选择；没有找到可手动输入 NAS 根地址。正式 APK 可直接同签名覆盖安装，保留登录；首次从旧 WebView 版本迁移需重新扫码登录。应用内更新已隐藏，请手动下载 APK。
 
 TV、PC 和网页的应用内更新／热更新入口已隐藏。请从 [最新 Release](https://github.com/xudong7587/haohaochang/releases/latest) 手动下载。PC 等待任务结束并点击“退出整理器”，解压 `haohaochang-resource-ai-v0.4.6.zip` 覆盖原目录，保留 `worker.json`、`runtime`、`.venv` 和 `data`，再运行 `start.cmd`。
 

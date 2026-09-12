@@ -1,25 +1,14 @@
 import { checkProvider, runProviderJob } from "./protocol.js";
 import { validateResult } from "./validation.js";
 import { waitingWorker } from "../clipping.js";
+import { providerCandidates } from "./providers.js";
 
 // F boundary: produce and validate a new accompaniment, without publishing a
 // song or changing its current audio. A publishes the complete recording once.
 export async function separateRecording(store, song, vocal, staging) {
   const ai = store.get("ai", {});
   if (!ai.enabled) throw waitingWorker("请启用 PC 整理与伴奏分离后重试更新");
-  const candidates = [
-    ai.pcEndpoint && {
-      endpoint: ai.pcEndpoint,
-      apiKey: ai.pcApiKey,
-      model: ai.pcModel || "htdemucs",
-      pc: true,
-    },
-    ai.endpoint && {
-      endpoint: ai.endpoint,
-      apiKey: ai.apiKey,
-      model: ai.model,
-    },
-  ].filter(Boolean);
+  const candidates = providerCandidates(ai);
   let last;
   for (const candidate of candidates) {
     try {

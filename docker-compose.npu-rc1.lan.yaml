@@ -1,0 +1,31 @@
+# Standalone Linux LAN deployment. Keep original data/media/download paths.
+services:
+  ktv:
+    image: ghcr.io/xudong7587/haohaochang:0.4.6.rc1
+    network_mode: host
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (12+ characters)}
+      PORT: '43210'
+      KTV_DISCOVERY_ENABLED: '1'
+      KTV_TV_DISCOVERY_ENABLED: '1'
+      KTV_NPU_ENDPOINT: http://127.0.0.1:8001
+      KTV_NPU_API_KEY: ${NPU_API_KEY:?Set NPU_API_KEY in .env}
+    volumes:
+      - ./data:/data
+      - ./media:/media
+      - ./download:/download
+    restart: unless-stopped
+    init: true
+  separator-npu:
+    image: ghcr.io/xudong7587/haohaochang-separator-npu:0.4.6.rc1
+    user: '0:0'
+    devices: ['/dev/accel/accel0:/dev/accel/accel0']
+    ports: ['127.0.0.1:8001:8000']
+    environment:
+      SEPARATION_API_KEY: ${NPU_API_KEY:?Set NPU_API_KEY in .env}
+    volumes: ['./data/npu:/data']
+    mem_limit: 4g
+    memswap_limit: 4g
+    cpus: 2
+    restart: unless-stopped
+    init: true

@@ -5,6 +5,7 @@ import sys
 import wave
 import math
 from array import array
+from pathlib import Path
 
 
 def vocal_activity(file):
@@ -71,9 +72,15 @@ def separate(store, job, model):
                 '-vn', '-ac', '2', '-ar', '44100', '-c:a', 'pcm_s16le', str(folder / 'input.wav')],
                 check=True, timeout=300, stdout=log, stderr=log, **flags)
             store.write(job, dict(status='running', stage='separating'))
-            subprocess.run([sys.executable, '-m', 'demucs', '--two-stems=vocals', '-n', model, '-d', device,
-                '-j', '1', '--segment', os.getenv('SEPARATION_SEGMENT', '7'), '-o', str(folder / 'out'),
-                str(folder / 'input.wav')], check=True, timeout=1800, stdout=log, stderr=log, **flags)
+            if os.getenv('SEPARATION_BACKEND') == 'openvino-npu':
+                if model != 'htdemucs':
+                    raise ValueError('NPU preview supports htdemucs only')
+                command = [sys.executable, str(Path(__file__).with_name('npu_inference.py')),
+                    str(folder / 'input.wav'), str(folder / 'out' / model / 'input')]
+            else:
+                command = [sys.executable, '-m', 'demucs', '--two-stems=vocals', '-n', model, '-d', device,
+                    '-j', '1', '--segment', os.getenv('SEPARATION_SEGMENT', '7'), '-o', str(folder / 'out'), str(folder / 'input.wav')]
+            subprocess.run(command, check=True, timeout=1800, stdout=log, stderr=log, **flags)
             store.write(job, dict(status='running', stage='validating'))
             # Decode once into PCM so a corrupt/truncated or float WAV cannot escape validation.
             subprocess.run([os.getenv('FFMPEG', 'ffmpeg'), '-y', '-v', 'error', '-xerror', '-i',
@@ -96,4 +103,4 @@ def separate(store, job, model):
         store.write(job, dict(status='done', instrumental_url=f'/artifacts/{job}', vocal_activity=activity))
     except Exception:
         store.write(job, dict(status='failed', retryable=True,
-            error='Demucs separation or output validation failed; check model availability and service logs'))
+            error='Separation or output validation failed; check worker.log, model availability and device mapping'))

@@ -16,10 +16,92 @@ import ffprobe from "ffprobe-static";
 import { openStore } from "../server/db.js";
 import { run, prepareSong } from "../server/media.js";
 import { separateSong } from "../server/separation.js";
+import { separateRecording } from "../server/separation/recording.js";
+import { providerConfig } from "../server/separation/config.js";
 import { runProviderJob } from "../server/separation/protocol.js";
 import { validateResult } from "../server/separation/validation.js";
 process.env.FFMPEG = ffmpeg;
 process.env.FFPROBE = ffprobe.path;
+
+test("NPU-only configuration is allowed and survives edits to cloud/PC fields", () => {
+  const config = providerConfig({
+    enabled: true,
+    autoDiscover: false,
+    npuEnabled: true,
+    npuEndpoint: "http://localhost:8001",
+    npuApiKey: "npu-secret",
+  });
+  const next = providerConfig(
+    { ...config, endpoint: "https://example.com", model: "htdemucs" },
+    config,
+  );
+  assert.equal(next.npuEnabled, true);
+  assert.equal(next.npuApiKey, "npu-secret");
+  assert.throws(() =>
+    providerConfig({ ...config, npuEndpoint: "file:///tmp/socket" }),
+  );
+});
+
+for (const replacement of [false, true]) {
+  for (const scenario of [
+    "pc",
+    "npu",
+    "cloud",
+    "unqualified",
+    "bad-pc-audio",
+  ]) {
+    test(`${replacement ? "replacement" : "new song"} priority and fallback: ${scenario}`, async (t) => {
+      const f = await fixture(t);
+      const calls = [];
+      for (const kind of ["pc", "npu", "cloud"]) {
+        f.remote.get(`/${kind}/health`, (req, res) => {
+          if (kind === "pc" && !["pc", "bad-pc-audio"].includes(scenario))
+            return res.sendStatus(503);
+          res.json({
+            protocol: "ktv-separation-v1",
+            backend: kind === "npu" ? "openvino-npu" : "demucs",
+            ready: scenario !== "unqualified",
+            models: ["htdemucs"],
+          });
+        });
+        f.remote.post(`/${kind}/separate`, (req, res) => {
+          calls.push(kind);
+          if (kind === "npu" && scenario === "cloud")
+            return res.json({ status: "failed", error: "NPU runtime failed" });
+          res.json({
+            status: "done",
+            instrumental_url:
+              kind === "pc" && scenario === "bad-pc-audio"
+                ? "/bad"
+                : "/artifact",
+          });
+        });
+      }
+      f.remote.get("/bad", (req, res) => res.send("corrupt audio"));
+      f.store.set("ai", {
+        enabled: true,
+        pcEndpoint: f.config.endpoint + "/pc",
+        npuEnabled: true,
+        npuEndpoint: f.config.endpoint + "/npu",
+        endpoint: f.config.endpoint + "/cloud",
+        model: "htdemucs",
+      });
+      if (replacement)
+        await separateRecording(f.store, f.song, f.vocal, f.cache);
+      else await separateSong(f.store, f.song, f.cache);
+      assert.deepEqual(
+        calls,
+        {
+          pc: ["pc"],
+          npu: ["npu"],
+          cloud: ["npu", "cloud"],
+          unqualified: ["cloud"],
+          "bad-pc-audio": ["pc", "npu"],
+        }[scenario],
+      );
+    });
+  }
+}
 
 async function fixture(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-separation-"));

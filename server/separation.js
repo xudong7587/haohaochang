@@ -11,6 +11,7 @@ import {
 } from "./separation/protocol.js";
 import { validateResult } from "./separation/validation.js";
 import { autoAlignLyrics } from "./lyrics-alignment.js";
+import { providerCandidates } from "./separation/providers.js";
 export { providerConfig } from "./separation/config.js";
 export { testProvider } from "./separation/protocol.js";
 
@@ -24,19 +25,10 @@ export async function separateSong(store, song, cache) {
       .backing.available
   )
     return true;
-  const pc = config.pcEndpoint
-    ? {
-        endpoint: config.pcEndpoint,
-        model: config.pcModel || "htdemucs",
-        apiKey: config.pcApiKey,
-        pc: true,
-      }
-    : null;
-  const cloud = config.endpoint
-    ? { endpoint: config.endpoint, model: config.model, apiKey: config.apiKey }
-    : null;
+  const candidates = providerCandidates(config);
+  const pc = candidates.find((c) => c.pc);
+  const fallback = candidates.some((c) => !c.pc);
   const resumingPc = pc && hasProviderCheckpoint(store, song, pc);
-  const candidates = [pc, cloud].filter(Boolean);
   let last;
   for (const candidate of candidates) {
     let reserved = false;
@@ -46,12 +38,12 @@ export async function separateSong(store, song, cache) {
         try {
           health = await checkProvider(candidate, 3000);
         } catch (error) {
-          if (!cloud) throw waitingWorker();
+          if (!fallback) throw waitingWorker();
           throw error;
         }
         // Existing v1 adapters need not advertise load; local concurrency still applies.
         if (
-          cloud &&
+          fallback &&
           !resumingPc &&
           (health.busy === true ||
             Number(health.pending) >= (Number(health.concurrency) || 1) ||
@@ -65,6 +57,7 @@ export async function separateSong(store, song, cache) {
         );
         reserved = true;
       }
+      if (candidate.npu) await checkProvider(candidate, 3000);
       const root = path.join(cache, "separation-tasks");
       await mkdir(root, { recursive: true });
       const staging = await mkdtemp(path.join(root, "task-"));
@@ -105,7 +98,7 @@ export async function separateSong(store, song, cache) {
     } catch (error) {
       last =
         candidate.pc &&
-        !cloud &&
+        !fallback &&
         (error.retryable ||
           ["TimeoutError", "AbortError"].includes(error.name) ||
           (error instanceof TypeError && /fetch/i.test(error.message)))
