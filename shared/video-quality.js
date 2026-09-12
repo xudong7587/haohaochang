@@ -24,7 +24,7 @@ export function qualityChoices(formats) {
     .filter((v) => v === "highest" || heights.has(v))
     .map((value) => ({
       value,
-      label: value === "highest" ? "最高画质（至少 720p）" : `${value}p`,
+      label: value === "highest" ? "最高可用画质" : `${value}p`,
     }));
 }
 export function previewDownloadHeight(preview, value) {

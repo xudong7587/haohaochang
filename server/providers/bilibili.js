@@ -113,10 +113,7 @@ export const bilibiliProvider = {
       );
       if (!nav.ok) throw new Error("B站登录与签名检测失败，请稍后重试");
       const account = await nav.json();
-      if (
-        (quality === "highest" || Number(quality) >= 720) &&
-        account.data?.isLogin !== true
-      )
+      if (cookie && account.data?.isLogin !== true)
         throw new Error(
           "B站未登录或凭证已过期。请在“在线资源”扫码登录或更新 bili-sync 凭证后重试高清下载。",
         );

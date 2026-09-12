@@ -35,6 +35,7 @@ jobs:
           flavor: latest=false
           tags: |
             type=ref,event=tag
+            type=match,pattern=v(.*),group=1
             type=sha,format=long
       - uses: docker/build-push-action@v6
         with:

@@ -16,21 +16,6 @@ const service = createApp({
 });
 const worker = express();
 worker.use(express.json());
-let npuReady = false;
-worker.get("/npu/health", (q, r) => {
-  assert.equal(q.headers.authorization, "Bearer npu-test-key");
-  r.json({
-    protocol: "ktv-separation-v1",
-    backend: "openvino-npu",
-    models: ["htdemucs"],
-    ready: npuReady,
-    qualification: {
-      device: "Intel AI Boost test",
-      model: "htdemucs",
-      message: "正在匹配 NPU 模型",
-    },
-  });
-});
 let updateState = { phase: "idle", current: "0.3.10" };
 const updateCalls = [];
 worker.post("/desktop/update/:action", (q, r) => {
@@ -188,17 +173,9 @@ try {
       .get(),
     undefined,
   );
-  for (const name of ["检查更新", "安装新版", "取消更新"])
-    assert.equal(
-      await page.getByRole("button", { name, exact: true }).count(),
-      0,
-    );
+  for (const name of ["检查更新", "安装新版", "取消更新"]) assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
   assert.deepEqual(updateCalls, []);
-  assert.ok(
-    !(await page.locator("body").textContent()).includes(
-      "never-forward-update-secret",
-    ),
-  );
+  assert.ok(!(await page.locator("body").textContent()).includes("never-forward-update-secret"));
   assert.equal(
     await page.getByText("已整理旧歌曲", { exact: true }).isVisible(),
     false,
@@ -288,33 +265,6 @@ try {
   assert.equal(await page.getByLabel("PC 地址", { exact: true }).count(), 0);
   await page.getByRole("button", { name: "检测备用 AI" }).click();
   await page.getByRole("alert").filter({ hasText: "未配置备用 AI" }).waitFor();
-  await page.getByRole("heading", { name: "NAS NPU · RC1 测试版" }).waitFor();
-  await page
-    .getByLabel("NPU 服务地址", { exact: true })
-    .fill(`http://127.0.0.1:${remote.address().port}/npu`);
-  await page.getByLabel("NPU 服务密钥", { exact: true }).fill("npu-test-key");
-  await page.getByLabel("启用 NAS NPU 后备", { exact: true }).check();
-  await page
-    .getByRole("button", { name: "保存 NPU 配置", exact: true })
-    .click();
-  await page.getByText("NPU 配置已保存", { exact: true }).waitFor();
-  assert.equal(service.store.get("ai").npuEnabled, true);
-  assert.equal(service.store.get("ai").pcApiKey, "worker-test-secret");
-  const publicConfig = await fetch(base + "/api/admin/ai", {
-    headers: { Authorization: "Bearer pc-page-test-password" },
-  });
-  assert.ok(!(await publicConfig.text()).includes("npu-test-key"));
-  await page
-    .getByRole("button", { name: "检测 NPU 与模型", exact: true })
-    .click();
-  await page.getByText("正在匹配 NPU 模型", { exact: true }).waitFor();
-  npuReady = true;
-  await page
-    .getByRole("button", { name: "检测 NPU 与模型", exact: true })
-    .click();
-  await page
-    .getByText("匹配成功：Intel AI Boost test · htdemucs", { exact: true })
-    .waitFor();
   await page.screenshot({
     path: "test-results/pc-dashboard/ai-tab.png",
     fullPage: true,

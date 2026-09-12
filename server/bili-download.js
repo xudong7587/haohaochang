@@ -11,13 +11,12 @@ import { withKeyLock } from "./song-writes.js";
 import { videoQuality } from "../shared/video-quality.js";
 
 export function requireDownloadHeight(actual, quality, expected = 0) {
-  const minimum = Math.max(
-    expected,
-    quality === "highest" ? 720 : Number(quality),
-  );
-  if (!(actual >= minimum))
+  // A requested quality is a ceiling, not a minimum. Only the freshly
+  // resolved stream is authoritative when validating the downloaded file.
+  const minimum = Math.max(1, Number(expected) || 0);
+  if (!Number.isFinite(actual) || actual < minimum)
     throw new Error(
-      `B站仅返回 ${actual || 0}p，未达到${quality === "highest" ? "高清" : quality + "p"}要求。请到“在线资源”扫码登录或更新 Cookie，并检查会员权限；若原视频只有低清，请明确选择该清晰度。`,
+      `实际视频 ${actual || 0}p 未达到所选视频流 ${minimum}p，请重试下载。`,
     );
 }
 
@@ -36,7 +35,7 @@ export async function downloadBiliTracks(
   quality = videoQuality(quality);
   // Resolve on every attempt: expired credentials must not reuse an old low-quality cache.
   const streams = await resolve(url, cookie, fetch, quality, true);
-  requireDownloadHeight(streams.previewHeight, quality, expectedHeight);
+  requireDownloadHeight(streams.previewHeight, quality);
   const id = createHash("sha256")
     .update(
       [
@@ -57,11 +56,7 @@ export async function downloadBiliTracks(
       videoFile = path.join(target, "video.mp4");
     const validate = async (audio, video) => {
       const [a, v] = await Promise.all([probe(audio), probe(video)]);
-      requireDownloadHeight(
-        v.height,
-        quality,
-        Math.max(expectedHeight, streams.previewHeight),
-      );
+      requireDownloadHeight(v.height, quality, streams.previewHeight);
       if (streams.previewFps > 0 && v.videoFps + 0.1 < streams.previewFps)
         throw new Error("实际视频帧率低于所选视频流，请重试下载");
       if (

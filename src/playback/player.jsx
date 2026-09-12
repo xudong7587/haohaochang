@@ -1,5 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Mic2, Monitor, Play } from "lucide-react";
+import {
+  Mic2,
+  Monitor,
+  Play,
+  Pause,
+  SkipForward,
+  Captions,
+  Minimize,
+  Info,
+  ArrowLeft,
+  ArrowRight,
+  RotateCcw,
+} from "lucide-react";
 import { useMediaPlayback } from "../media-playback.js";
 import { PlayerVisuals } from "./player-visuals.jsx";
 import { usePlayerLease } from "./use-player-lease.js";
@@ -116,7 +128,7 @@ export function Player({
       e.stopImmediatePropagation();
       if (e.repeat && Date.now() - last < 250) return;
       last = Date.now();
-      adjustLyrics(e.key === "ArrowLeft" ? 100 : -100);
+      adjustLyrics(e.key === "ArrowLeft" ? -500 : 500);
     };
     document.addEventListener("keydown", key, true);
     return () => document.removeEventListener("keydown", key, true);
@@ -480,49 +492,102 @@ export function Player({
             </div>
           )}
           {full && current && (
-            <div className="full-controls">
-              {[
-                ["pause", playback.paused ? "继续" : "暂停"],
-                ...(!current.ambient &&
-                !["original", "instrumental"].includes(current.mode)
-                  ? [["vocal", playback.vocal ? "切伴奏" : "切原唱"]]
-                  : []),
-                ["next", "切歌"],
-              ].map(([action, label]) => (
-                <button
-                  key={action}
-                  data-player-action={action}
-                  onClick={() =>
-                    request(
-                      "/control",
-                      { action, entryId: current.id },
-                      "POST",
-                    ).catch((e) => notify(e.message))
-                  }
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="full-controls tv-style-controls">
               <button
                 onClick={toggleLyrics}
                 aria-pressed={lyricsVisible}
                 aria-label={lyricsVisible ? "隐藏歌词" : "显示歌词"}
+                data-hint={lyricsVisible ? "隐藏歌词" : "显示歌词"}
               >
-                {lyricsVisible ? "隐藏歌词" : "显示歌词"}
+                <Captions size={22} />
               </button>
-              <button
-                onClick={() => setDiagnostics((value) => !value)}
-                aria-pressed={diagnostics}
-              >
-                播放信息
-              </button>
+              <div className="singing-controls">
+                {lyricsVisible && (
+                  <div className="offset-buttons" aria-label="歌词延后">
+                    {[10, 3, 0.5].map((seconds) => (
+                      <button
+                        key={seconds}
+                        aria-label={`歌词延后 ${seconds} 秒`}
+                        data-hint={`歌词延后 ${seconds} 秒`}
+                        onClick={() => adjustLyrics(-seconds * 1000)}
+                      >
+                        <span>{seconds}</span>
+                        <ArrowLeft size={14} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="transport-buttons">
+                  {!current.ambient &&
+                    !["original", "instrumental"].includes(current.mode) && (
+                      <button
+                        data-player-action="vocal"
+                        aria-label={playback.vocal ? "切伴奏" : "切原唱"}
+                        data-hint={playback.vocal ? "切伴奏" : "切原唱"}
+                        aria-pressed={playback.vocal}
+                        onClick={() =>
+                          request(
+                            "/control",
+                            { action: "vocal", entryId: current.id },
+                            "POST",
+                          ).catch((e) => notify(e.message))
+                        }
+                      >
+                        <Mic2 size={22} />
+                      </button>
+                    )}
+                  <button
+                    data-player-action="pause"
+                    aria-label={playback.paused ? "继续" : "暂停"}
+                    data-hint={playback.paused ? "继续" : "暂停"}
+                    onClick={() =>
+                      request(
+                        "/control",
+                        { action: "pause", entryId: current.id },
+                        "POST",
+                      ).catch((e) => notify(e.message))
+                    }
+                  >
+                    {playback.paused ? <Play size={25} /> : <Pause size={25} />}
+                  </button>
+                  <button
+                    data-player-action="next"
+                    aria-label="切歌"
+                    data-hint="切歌"
+                    onClick={() =>
+                      request(
+                        "/control",
+                        { action: "next", entryId: current.id },
+                        "POST",
+                      ).catch((e) => notify(e.message))
+                    }
+                  >
+                    <SkipForward size={22} />
+                  </button>
+                </div>
+                {lyricsVisible && (
+                  <div className="offset-buttons" aria-label="歌词提前">
+                    {[0.5, 3, 10].map((seconds) => (
+                      <button
+                        key={seconds}
+                        aria-label={`歌词提前 ${seconds} 秒`}
+                        data-hint={`歌词提前 ${seconds} 秒`}
+                        onClick={() => adjustLyrics(seconds * 1000)}
+                      >
+                        <span>{seconds}</span>
+                        <ArrowRight size={14} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button
                 data-fullscreen
                 onClick={fullscreen}
                 aria-label="退出全屏"
+                data-hint="退出全屏"
               >
-                <Monitor size={18} />
-                退出全屏
+                <Minimize size={22} />
               </button>
             </div>
           )}
@@ -537,36 +602,30 @@ export function Player({
             </button>
           )}
           {full && current && lyricsVisible && (
-            <div className="lyric-adjust" aria-label="歌词时间微调">
-              {[10, 3, 0.5, 0.1].map((seconds) => (
-                <button
-                  key={seconds}
-                  aria-label={`歌词提前 ${seconds} 秒`}
-                  onClick={() => adjustLyrics(seconds * 1000)}
-                >
-                  ← {seconds} 秒
-                </button>
-              ))}
+            <div
+              className="lyric-adjust compact-offset-status"
+              aria-label="歌词时间微调"
+            >
               <output aria-live="polite">
                 歌词{" "}
                 {playback.lyricsOffsetMs
                   ? `${playback.lyricsOffsetMs > 0 ? "提前" : "延后"} ${(Math.abs(playback.lyricsOffsetMs) / 1000).toFixed(1)} 秒`
                   : "原始时间"}
               </output>
-              {[0.1, 0.5, 3, 10].map((seconds) => (
-                <button
-                  key={seconds}
-                  aria-label={`歌词延后 ${seconds} 秒`}
-                  onClick={() => adjustLyrics(-seconds * 1000)}
-                >
-                  {seconds} 秒 →
-                </button>
-              ))}
               <button
                 aria-label="重置歌词微调"
+                title="重置歌词微调"
                 onClick={() => adjustLyrics(0, true)}
               >
-                复位
+                <RotateCcw size={15} />
+              </button>
+              <button
+                aria-label="播放信息"
+                title="播放信息"
+                onClick={() => setDiagnostics((value) => !value)}
+                aria-pressed={diagnostics}
+              >
+                <Info size={15} />
               </button>
             </div>
           )}

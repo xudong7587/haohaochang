@@ -339,3 +339,135 @@
     transition: none;
   }
 }
+
+/* Match the native TV transport: compact icons, inward lyric steps. */
+.tv-player.is-full .full-controls.tv-style-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.tv-player.is-full .tv-style-controls .singing-controls,
+.tv-player.is-full .tv-style-controls .transport-buttons,
+.tv-player.is-full .tv-style-controls .offset-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tv-player.is-full .tv-style-controls .singing-controls {
+  gap: 20px;
+}
+.tv-player.is-full .tv-style-controls button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  width: 44px;
+  min-height: 44px;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  border-radius: 50%;
+  color: #eee;
+}
+.tv-player.is-full .tv-style-controls .offset-buttons button {
+  flex-direction: column;
+  gap: 2px;
+  font-size: 17px;
+  border-radius: 10px;
+}
+.tv-player.is-full .tv-style-controls [data-player-action="pause"] {
+  width: 54px;
+  height: 54px;
+  background: #ffffff20;
+}
+.tv-player.is-full .tv-style-controls [data-fullscreen] {
+  margin-left: 0;
+}
+.tv-player.is-full .tv-style-controls button:is(:focus-visible, :hover) {
+  background: #fff;
+  color: #211d31;
+}
+.tv-style-controls button:is(:focus-visible, :hover)::after {
+  content: attr(data-hint);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  white-space: nowrap;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: #17121fee;
+  color: white;
+  font-size: 12px;
+  pointer-events: none;
+  animation: control-hint 2.2s forwards;
+}
+@keyframes control-hint {
+  0%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.tv-player.is-full .lyric-adjust.compact-offset-status {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+}
+.tv-player.is-full .compact-offset-status button {
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+}
+@media (max-width: 700px) {
+  .tv-player.is-full .full-controls.tv-style-controls {
+    gap: 4px;
+  }
+  .tv-player.is-full .tv-style-controls .singing-controls {
+    gap: 4px;
+  }
+  .tv-player.is-full .tv-style-controls .offset-buttons,
+  .tv-player.is-full .tv-style-controls .transport-buttons {
+    gap: 0;
+  }
+  .tv-player.is-full .tv-style-controls button {
+    width: 32px;
+    min-width: 32px;
+  }
+}
+
+@media (max-width: 450px) {
+  .tv-player.is-full .tv-style-controls button {
+    width: 28px;
+    min-width: 28px;
+  }
+  .tv-player.is-full .tv-style-controls [data-player-action="pause"] {
+    width: 38px;
+  }
+  .tv-player.is-full .tv-style-controls .singing-controls {
+    gap: 2px;
+  }
+}
+
+.tv-player.is-full .video-caption {
+  padding: 14px 4vw 12px;
+  gap: 10px;
+}
+.tv-player.is-full .video-caption-heading strong {
+  font-size: 18px;
+}
+.tv-player.is-full .tv-style-controls [data-player-action="pause"] {
+  color: #fff;
+}
+.tv-player.is-full
+  .tv-style-controls
+  [data-player-action="pause"]:is(:focus-visible, :hover) {
+  color: #211d31;
+  background: #fff;
+}

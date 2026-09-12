@@ -49,7 +49,7 @@ await writeFile(
 await build({
   stdin: {
     contents: `
-import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{OnlineSongs}from'./src/online-songs.jsx';import{Player}from'./src/playback/player.jsx';import './src/style.css';
+import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{OnlineSongs}from'./src/online-songs.jsx';import{Player}from'./src/playback/player.jsx';import './src/style.css';import './src/player-adaptive.css';import './src/playback/tv-experience.css';
 function Fixture(){const[offset,setOffset]=useState(0);window.controlCalls ||= [];async function request(url,body){if(url==='/control'){window.controlCalls.push(body);setOffset(v=>body.reset?0:v+body.deltaMs);}return{ok:true};}
 return location.pathname==='/lyrics'?<div className="app tv stage-home"><input aria-label="测试输入框"/><Player keyboardLyrics current={{id:'entry-fixture',song_id:'fixture',title:'歌词测试',artist:'合成测试',duration:12,mode:'tracks',lyrics:'[00:08]第一句歌词\\n[00:10]第二句歌词'}} playback={{paused:true,vocal:true,lyricsOffsetMs:offset}} request={request} token="fixture" notify={()=>{}}/></div>:<main style={{maxWidth:1100,margin:'auto',padding:24}}><OnlineSongs mobile={location.pathname==='/mobile'} notify={message=>window.notice=message}/></main>;}
 createRoot(document.getElementById('root')).render(<Fixture/>);
@@ -328,10 +328,10 @@ try {
   await page.locator(".video-stage").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("ArrowLeft");
   await page.waitForFunction(() => window.controlCalls.length === 1);
-  assert.equal(await page.evaluate(() => window.controlCalls[0].deltaMs), 100);
+  assert.equal(await page.evaluate(() => window.controlCalls[0].deltaMs), -500);
   await page.keyboard.press("ArrowRight");
   await page.waitForFunction(() => window.controlCalls.length === 2);
-  assert.equal(await page.evaluate(() => window.controlCalls[1].deltaMs), -100);
+  assert.equal(await page.evaluate(() => window.controlCalls[1].deltaMs), 500);
   await page.getByLabel("测试输入框").fill("输入内容");
   await page.keyboard.press("ArrowLeft");
   assert.equal(await page.evaluate(() => window.controlCalls.length), 2);
@@ -353,6 +353,24 @@ try {
       );
     }
   }
+  assert.equal(
+    await page.getByRole("button", { name: /歌词.*0\.1 秒/ }).count(),
+    0,
+  );
+  const leftStep = await page
+    .getByRole("button", { name: "歌词延后 0.5 秒", exact: true })
+    .boundingBox();
+  const pauseButton = await page
+    .locator('[data-player-action="pause"]')
+    .boundingBox();
+  const rightStep = await page
+    .getByRole("button", { name: "歌词提前 0.5 秒", exact: true })
+    .boundingBox();
+  assert.ok(leftStep.x < pauseButton.x && rightStep.x > pauseButton.x);
+  assert.ok(
+    rightStep.x - leftStep.x < 400,
+    "lyric steps stay close to transport",
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => {
     document.querySelector(".app").className = "";

@@ -89,9 +89,11 @@ test("Bili signed download rejects expired saved credentials and selects 4K beyo
   assert.equal(selected.video, "uhd");
   assert.equal(selected.previewHeight, 2160);
   assert.ok(selected.previewFps > 59.9);
-  assert.throws(() => requireDownloadHeight(480, "highest"), /仅返回 480p/);
+  requireDownloadHeight(480, "highest");
   assert.throws(() => requireDownloadHeight(1080, "highest", 2160), /未达到/);
-  assert.throws(() => requireDownloadHeight(720, "1080"), /未达到/);
+  requireDownloadHeight(720, "1080");
+  requireDownloadHeight(460, "480");
+  assert.throws(() => requireDownloadHeight(0, "highest"), /未达到/);
   requireDownloadHeight(480, "480");
 });
 
@@ -361,4 +363,96 @@ test("QR login accepts current official account domain and stores credentials on
     await biliLoginStatus("expired", async () => json({ code: -101 })),
     { loggedIn: false },
   );
+});
+
+test("old MV accepts freshly available 480p despite stale preview and rejects a substituted lower stream", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "ktv-old-mv-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const video = path.join(root, "old.mp4"),
+    audio = path.join(root, "old.m4a");
+  await run(ffmpeg, [
+    "-y",
+    "-v",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "color=s=640x480:r=2:d=1",
+    "-c:v",
+    "libx264",
+    video,
+  ]);
+  await run(ffmpeg, [
+    "-y",
+    "-v",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "sine=duration=1",
+    "-c:a",
+    "aac",
+    audio,
+  ]);
+  const transfer = (kind, out) =>
+    copyFile(kind === "video" ? video : audio, out);
+  const resolve = async () => ({
+    previewHeight: 480,
+    previewFps: 2,
+    video: "video",
+    audio: "audio",
+  });
+  for (const quality of ["highest", "1080", "480"]) {
+    const result = await downloadBiliTracks(
+      "https://www.bilibili.com/video/BVold",
+      path.join(root, quality),
+      "",
+      quality,
+      1080,
+      { resolve, transfer },
+    );
+    assert.equal(result.height, 480);
+  }
+  await assert.rejects(
+    downloadBiliTracks(
+      "https://www.bilibili.com/video/BVold",
+      path.join(root, "bad"),
+      "",
+      "highest",
+      0,
+      {
+        resolve: async () => ({ ...(await resolve()), previewHeight: 1080 }),
+        transfer,
+      },
+    ),
+    /未达到所选视频流/,
+  );
+});
+
+test("signed highest download can select an anonymous old 480p MV", async () => {
+  const fetcher = async (input) => {
+    const pathname = new URL(input).pathname;
+    if (pathname.endsWith("/view"))
+      return json({ code: 0, data: { cid: 123, bvid: "BVold" } });
+    if (pathname.endsWith("/nav"))
+      return json({ code: -101, data: { isLogin: false, wbi_img: images } });
+    return json({
+      code: 0,
+      data: {
+        dash: {
+          video: [{ height: 480, codecs: "avc1", baseUrl: "video" }],
+          audio: [{ codecs: "mp4a", baseUrl: "audio" }],
+        },
+      },
+    });
+  };
+  const selected = await bilibiliProvider.preview(
+    "https://www.bilibili.com/video/BVold",
+    "",
+    fetcher,
+    "highest",
+    true,
+  );
+  assert.equal(selected.previewHeight, 480);
+  assert.equal(selected.qualities[0].label, "最高可用画质");
 });

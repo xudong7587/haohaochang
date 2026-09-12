@@ -2,16 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 const json = JSON.parse(await readFile("package.json", "utf8")),
   version = json.version;
-const dockerPreview = /^(\d+\.\d+\.\d+)\.rc\d+$/.exec(version);
-const clientVersion = dockerPreview?.[1] || version;
 for (const file of ["README.md", "docs/USER-GUIDE.md"])
   assert.ok(
-    (await readFile(file, "utf8")).includes("v" + version),
+    (await readFile(file, "utf8")).split("\n")[0].includes("v" + version),
     `${file} must describe v${version}`,
   );
 assert.ok(
   (await readFile("pc-worker/version.py", "utf8")).includes(
-    `VERSION = '${clientVersion}'`,
+    `VERSION = '${version}'`,
   ),
   "PC version differs",
 );
@@ -19,10 +17,8 @@ const tvVersion = (await readFile("android/app/build.gradle", "utf8")).match(
   /versionName '([^']+)'/,
 )?.[1];
 assert.ok(
-  tvVersion === clientVersion ||
-    new RegExp(`^${clientVersion.replaceAll(".", "\\.")}\\.\\d+$`).test(
-      tvVersion,
-    ),
+  tvVersion === version ||
+    new RegExp(`^${version.replaceAll(".", "\\.")}\\.\\d+$`).test(tvVersion),
   "TV version must match the release or be its APK-only patch",
 );
 assert.equal(
@@ -33,8 +29,8 @@ console.log(`Release versions and user documentation agree: v${version}`);
 const releaseGuide = await readFile("docs/USER-GUIDE.md", "utf8");
 for (const asset of [
   `haohaochang-tv-v${tvVersion}.apk`,
-  `haohaochang-resource-ai-v${clientVersion}.zip`,
-  `haohaochang-nas-v${clientVersion}.zip`,
-  `haohaochang-preprocess-v${clientVersion}.zip`,
+  `haohaochang-resource-ai-v${version}.zip`,
+  `haohaochang-nas-v${version}.zip`,
+  `haohaochang-preprocess-v${version}.zip`,
 ])
   assert.ok(releaseGuide.includes(asset), `User guide must name ${asset}`);

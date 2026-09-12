@@ -274,13 +274,11 @@ try {
   );
   await tv.keyboard.press("Enter");
   await tv
-    .locator('[data-player-action="pause"]')
-    .filter({ hasText: "继续" })
+    .locator('[data-player-action="pause"][aria-label="继续"]')
     .waitFor();
   await tv.keyboard.press("Enter");
   await tv
-    .locator('[data-player-action="pause"]')
-    .filter({ hasText: "暂停" })
+    .locator('[data-player-action="pause"][aria-label="暂停"]')
     .waitFor();
   await tv.locator('.tv-player[data-controls="hidden"]').waitFor();
   await tv.keyboard.down("Enter");
@@ -291,7 +289,7 @@ try {
   );
   assert.equal(await tv.locator(".tv-player.is-full").count(), 1);
   assert.equal(
-    await tv.locator('[data-player-action="pause"]').innerText(),
+    await tv.locator('[data-player-action="pause"]').getAttribute("aria-label"),
     "暂停",
     "first confirmation wakes controls without pausing",
   );

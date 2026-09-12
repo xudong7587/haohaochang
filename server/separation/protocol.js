@@ -25,15 +25,6 @@ export async function checkProvider(config, timeout = 15000) {
       new Error("服务不是 ktv-separation-v1 协议，请部署适配器"),
       { code: "INVALID_PROTOCOL" },
     );
-  if (
-    config.npu &&
-    (data.backend !== "openvino-npu" ||
-      data.ready !== true ||
-      !data.models?.includes("htdemucs"))
-  )
-    throw new Error(
-      data.qualification?.message || "NPU 服务未完成设备与模型匹配",
-    );
   return data;
 }
 export async function testProvider(config) {
@@ -43,15 +34,8 @@ export async function testProvider(config) {
     );
   try {
     const data = await checkProvider(config);
-    return {
-      ok: true,
-      protocol: data.protocol,
-      endpoint: config.endpoint,
-      ...(config.npu ? { qualification: data.qualification } : {}),
-    };
+    return { ok: true, protocol: data.protocol, endpoint: config.endpoint };
   } catch (error) {
-    if (config.npu)
-      throw Object.assign(new Error(error.message), { status: 502 });
     throw Object.assign(new Error(connectionError(error, "服务").message), {
       status: 502,
     });

@@ -89,7 +89,7 @@ function ConnectionSettings({ kind, onSaved }) {
       <p>
         {pc
           ? "PC 负责裁剪与去人声。连接状态和任务直接显示在本页。"
-          : "分离顺序：PC 连接器 → NAS NPU → 外部 API。前面的服务不可用或处理失败时，才调用这里配置的 API。需要兼容的协议适配器。"}
+          : "独立配置与检测备用分离 API，检测不会访问 PC。仅使用 PC 时，这些字段可以留空。"}
       </p>
       <label className="checkbox">
         <input
@@ -97,7 +97,7 @@ function ConnectionSettings({ kind, onSaved }) {
           checked={config.enabled}
           onChange={(e) => update("enabled", e.target.checked)}
         />
-        启用自动整理（PC、NPU 与备用 API 共用）
+        启用自动整理（PC 与备用 API 共用）
       </label>
       {pc ? (
         <>
@@ -241,106 +241,5 @@ export function PCSettings(props) {
   return <ConnectionSettings kind="pc" {...props} />;
 }
 export function AISettings() {
-  return (
-    <>
-      <NPUSettings />
-      <ConnectionSettings kind="cloud" />
-    </>
-  );
-}
-
-function NPUSettings() {
-  const [config, setConfig] = useState(null);
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    request("")
-      .then(setConfig)
-      .catch((e) => setMessage(e.message));
-  }, []);
-  const update = (key, value) => setConfig((c) => ({ ...c, [key]: value }));
-  async function act(test) {
-    setBusy(true);
-    setMessage("");
-    try {
-      const result = await request("/npu" + (test ? "/test" : ""), config);
-      setMessage(
-        test
-          ? `匹配成功：${result.qualification?.device || "Intel NPU"} · ${result.qualification?.model || "htdemucs"}`
-          : "NPU 配置已保存",
-      );
-      if (!test)
-        setConfig((c) => ({
-          ...c,
-          npuApiKey: "",
-          hasNpuKey: !!c.npuApiKey || c.hasNpuKey,
-        }));
-    } catch (e) {
-      setMessage(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <form
-      className="settings-card"
-      onSubmit={(e) => {
-        e.preventDefault();
-        act(false);
-      }}
-    >
-      <h2>NAS NPU · RC1 测试版</h2>
-      <p>
-        自动检测 Intel NPU，编译并试运行
-        htdemucs，通过后才接收分离任务。首次可能需要数分钟；未就绪或失败时转外部
-        API。AMD、高通 NPU 暂未适配。
-      </p>
-      {config && (
-        <>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={!!config.npuEnabled}
-              onChange={(e) => update("npuEnabled", e.target.checked)}
-            />
-            启用 NAS NPU 后备
-          </label>
-          <label>
-            NPU 服务地址
-            <input
-              type="url"
-              value={config.npuEndpoint || ""}
-              placeholder="http://127.0.0.1:8001"
-              onChange={(e) => update("npuEndpoint", e.target.value)}
-            />
-          </label>
-          <label>
-            NPU 服务密钥
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={config.npuApiKey || ""}
-              placeholder={
-                config.hasNpuKey ? "已保存，留空保留" : "按 Compose 配置填写"
-              }
-              onChange={(e) => update("npuApiKey", e.target.value)}
-            />
-          </label>
-          <p>
-            当前自动匹配模型：htdemucs。NPU 只负责分离；视频裁剪仍使用 PC
-            连接器。
-          </p>
-          <div className="modal-actions">
-            <button type="button" disabled={busy} onClick={() => act(true)}>
-              检测 NPU 与模型
-            </button>
-            <button className="primary" disabled={busy}>
-              保存 NPU 配置
-            </button>
-          </div>
-        </>
-      )}
-      {message && <p role="status">{message}</p>}
-    </form>
-  );
+  return <ConnectionSettings kind="cloud" />;
 }

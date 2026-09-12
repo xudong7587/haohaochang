@@ -28,7 +28,7 @@ export function VideoPreview({
   const resumeAt = useRef(0);
   const [quality, setQuality] = useState("highest"),
     [qualities, setQualities] = useState([
-      { value: "highest", label: "最高画质（至少 720p）" },
+      { value: "highest", label: "最高可用画质" },
     ]);
   const [reload, setReload] = useState(0),
     [preview, setPreview] = useState(null),
