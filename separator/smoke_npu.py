@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+import urllib.error
 import uuid
 import wave
 import numpy as np
@@ -24,7 +25,12 @@ def request(path, data=None, content_type=None):
 
 deadline = time.monotonic() + 300
 while True:
-    with request('/health') as response: health = json.load(response)
+    try:
+        with request('/health') as response: health = json.load(response)
+    except urllib.error.URLError:
+        if time.monotonic() > deadline: raise
+        time.sleep(1)
+        continue
     if health.get('ready'): break
     if time.monotonic() > deadline: raise RuntimeError(health.get('qualification'))
     time.sleep(2)

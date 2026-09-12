@@ -4,7 +4,8 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg python3-venv ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv --system-site-packages /opt/npu-venv
 ENV PATH=/opt/npu-venv/bin:$PATH
-RUN pip install --no-cache-dir fastapi==0.115.12 uvicorn==0.34.2 python-multipart==0.0.20
+RUN pip install --no-cache-dir numpy==1.26.4 fastapi==0.115.12 uvicorn==0.34.2 python-multipart==0.0.20 \
+    && python -c "import openvino, numpy; print(openvino.__version__, numpy.__version__)"
 WORKDIR /app
 COPY npu_model.py ./
 RUN python npu_model.py /opt/models

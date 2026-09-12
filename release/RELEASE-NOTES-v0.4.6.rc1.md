@@ -19,3 +19,7 @@ docker pull ghcr.io/xudong7587/haohaochang-separator-npu:0.4.6.rc1
 仅支持已适配的 Intel OpenVINO NPU 路线，其他 Intel 型号需检测通过；AMD／高通 NPU、htdemucs_ft 尚未适配。真实歌曲音质与长期稳定性需要内测，不能保证所有带 NPU 的 CPU 均可用。外部 API 仍须兼容 ktv-separation-v1。
 
 [安装、检测与回退说明](https://github.com/xudong7587/haohaochang/blob/v0.4.6.rc1/docs/NPU-RC1.md)
+
+建议整机 16 GB 内存，分离器预留至少 4 GB 可用内存、最多 2 CPU 核心等效算力、单任务；CPU 配额不是 NPU 核心数量。Compose 已附说明。
+
+验证：本地 182 项 Node 测试、4 项 NPU 数值／分段／检测测试、前端构建及设置页浏览器验证通过；隔离 NAS 完成 16.2 秒合成音频的完整协议分离流程。

@@ -1,3 +1,7 @@
+# RC1 仅用于 NAS Intel NPU 测试，不更新 latest；AMD/高通 NPU 暂未适配。
+# 建议整机 16 GB 内存，为分离器预留至少 4 GB 可用内存；主服务与 NAS 系统另计。
+# cpus: 2 是辅助解码/编译/预处理的 CPU 计算配额，不是 NPU 核心数，也不是独占绑核。
+# NPU 自动识别并匹配 htdemucs；首次编译可能数分钟，缓存持久保存。
 # Standalone bridge deployment. Do not combine with the LAN file.
 services:
   ktv:
@@ -20,8 +24,8 @@ services:
     environment:
       SEPARATION_API_KEY: ${NPU_API_KEY:?Set NPU_API_KEY in .env}
     volumes: ['./data/npu:/data']
-    mem_limit: 4g
-    memswap_limit: 4g
-    cpus: 2
+    mem_limit: 4g # 测试建议上限 4 GB，NAS 需实际有足够可用内存
+    memswap_limit: 4g # 内存+交换总上限同为 4 GB，避免分离任务大量交换
+    cpus: 2 # 最多 2 个 CPU 核心等效算力；模型推理使用 NPU
     restart: unless-stopped
     init: true
