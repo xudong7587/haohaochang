@@ -290,12 +290,24 @@ export async function findPoster(
   {
     source = {},
     sourceUrl = "",
+    albumHint = "",
     cookie = "",
     fetcher = fetch,
     throttle = paceSearch,
     random = Math.random,
   } = {},
 ) {
+  if (albumHint) {
+    try {
+      const album = await findAlbumPoster(song.artist, albumHint, {
+        fetcher,
+        throttle,
+      });
+      if (album) return album;
+    } catch {
+      /* Preserve the existing fallback when album search is unavailable. */
+    }
+  }
   const url = source.canonicalUrl || source.url || sourceUrl;
   if (url && /^https:\/\/(www\.)?bilibili\.com\//i.test(url)) {
     try {
@@ -352,4 +364,64 @@ export async function findPoster(
   });
   if (artist) return artist;
   throw new Error("没有找到歌曲封面或对应歌手的图片，原封面已保留");
+}
+
+export function albumTitle(hint, artist) {
+  let text = String(hint || "").trim();
+  const named = text.match(/[《「『]([^》」』]+)[》」』]/);
+  if (named) text = named[1];
+  else {
+    if (artist) text = text.replaceAll(artist, "");
+    text = text
+      .replace(/\[[^\]]*BV[^\]]*\]/gi, "")
+      .replace(/【[^】]*(?:无损|音质|FLAC|专辑|合集|4K|高清)[^】]*】/gi, "");
+    text = text
+      .replace(
+        /(?:完整专辑|全专辑|专辑完整版|无损音质|高音质|官方音频|正式专辑|专辑|FLAC|LOSSLESS|CD版)/gi,
+        "",
+      )
+      .replace(/(?:^|\s)(?:19|20)\d{2}(?:年)?(?=\s|$)/g, "");
+    text = text.replace(/^[\s\-–—_:：·]+|[\s\-–—_:：·]+$/g, "");
+  }
+  return !text ||
+    /^(?:歌曲|音乐|MV|精选|金曲|合集|全集|精选合集|经典歌曲|无损)$/i.test(text)
+    ? ""
+    : text.slice(0, 120);
+}
+export async function findAlbumPoster(
+  artist,
+  hint,
+  { fetcher = fetch, throttle = paceSearch } = {},
+) {
+  const album = albumTitle(hint, artist);
+  if (!album || !artist || artist === "未知歌手") return null;
+  const rows = await searchMusic(`${artist} ${album}`, {
+    fetcher,
+    throttle,
+    entity: "album",
+  });
+  const matches = rows.filter(
+    (row) =>
+      row.artworkUrl100 &&
+      sameName(row.artistName || "", artist) &&
+      sameName(row.collectionName || "", album),
+  );
+  const albums = new Map(
+    matches.map((row) => [
+      String(row.collectionId || row.collectionViewUrl || row.artworkUrl100),
+      row,
+    ]),
+  );
+  if (albums.size !== 1) return null;
+  const row = [...albums.values()][0];
+  try {
+    return {
+      ...artworkSource(row),
+      title: row.collectionName,
+      source: "匹配专辑封面",
+      provider: "itunes-album",
+    };
+  } catch {
+    return null;
+  }
 }

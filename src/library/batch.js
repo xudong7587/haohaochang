@@ -165,3 +165,57 @@ export async function standardizeBatch(songs, request, onProgress = () => {}) {
   }
   return results;
 }
+
+export async function completeMetadataBatch(
+  entries,
+  artist,
+  request,
+  onProgress = () => {},
+) {
+  const rows = entries.map((entry) => ({ ...entry.row }));
+  const results = rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    artist,
+    status: "pending",
+    message: "等待整理",
+  }));
+  onProgress([...results]);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    try {
+      if (row.processing) {
+        results[i] = {
+          ...results[i],
+          status: "skipped",
+          message: "文件正在处理",
+        };
+      } else if (!row.inbox && !row.localIntakeAvailable) {
+        results[i] = {
+          ...results[i],
+          status: "skipped",
+          message: "此项不是本地待整理文件，请使用歌曲编辑／整理",
+        };
+      } else {
+        await request(
+          "/admin/inbox/complete-metadata",
+          {
+            file: row.file,
+            reviewId: row.inbox ? undefined : row.id,
+            artistOverride: artist,
+          },
+          "POST",
+        );
+        results[i] = {
+          ...results[i],
+          status: "success",
+          message: "已指定歌手，正在重命名并移入半标准曲库",
+        };
+      }
+    } catch (error) {
+      results[i] = { ...results[i], status: "failed", message: error.message };
+    }
+    onProgress([...results]);
+  }
+  return results;
+}

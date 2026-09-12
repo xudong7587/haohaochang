@@ -77,6 +77,7 @@ export async function metadata(file, roots) {
     } catch {}
   }
   for (const name of [
+    stem + "-album.jpg",
     stem + "-poster.png",
     stem + "-thumb.png",
     stem + "-poster.jpg",

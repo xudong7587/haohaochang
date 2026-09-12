@@ -1,5 +1,7 @@
+import { findAlbumPoster, downloadPoster } from "./poster-source.js";
+import { savePosterImage } from "./poster-image.js";
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, constants } from "node:fs";
 import {
   stat,
@@ -9,6 +11,9 @@ import {
   link,
   copyFile,
   unlink,
+  writeFile,
+  rename,
+  rm,
 } from "node:fs/promises";
 import { safeMedia, inside } from "./media-utils.js";
 import { metadata, importKey } from "./library.js";
@@ -42,7 +47,8 @@ export function nfoIdentity(xml, filename) {
     )
       .trim()
       .slice(0, 120);
-  const raw = field("title") || filename;
+  const raw =
+    field("title") || filename.replace(/\s*[-–—]?\s*S\d+E\d+\s*$/i, "");
   const cleaned = raw
     .replace(
       /^(?:【(?:[^】]*(?:4K|1080P|高清|超清|修复|官方|MV|字幕|音质)[^】]*)】\s*)+/i,
@@ -66,6 +72,7 @@ export function nfoIdentity(xml, filename) {
     title,
     artist,
     metadata_source: field("title") ? "同名 NFO" : "文件名",
+    albumHint: field("album") || field("showtitle"),
     needs_review: 1,
   };
 }
@@ -101,6 +108,7 @@ export async function completeLocalMetadata(
   downloads,
   store,
   search = lookupArtists,
+  artistOverride = "",
 ) {
   const base = await metadata(file, [downloads]);
   let xml = "";
@@ -115,6 +123,26 @@ export async function completeLocalMetadata(
     if (error.code !== "ENOENT") throw error;
   }
   const parsed = nfoIdentity(xml, path.parse(file).name);
+  if (artistOverride) {
+    parsed.artist = artistOverride;
+    parsed.metadata_source += " · 手动指定歌手";
+  }
+  if (
+    !parsed.albumHint &&
+    /^season\s*\d+$/i.test(path.basename(path.dirname(file)))
+  ) {
+    try {
+      const tvshow = await safeMedia(
+        path.join(path.dirname(file), "..", "tvshow.nfo"),
+        [downloads],
+      );
+      if ((await stat(tvshow)).size <= 262144)
+        parsed.albumHint = nfoIdentity(
+          await readFile(tvshow, "utf8"),
+          "",
+        ).title;
+    } catch {}
+  }
   const candidates = [
     ...catalogSeed,
     ...store.get("catalog", []),
@@ -159,6 +187,7 @@ export async function moveLocalFile(source, target, roots, expected) {
   if (!(await lstat(source)).isFile()) throw new Error("只能移动普通文件");
   await safeMedia(source, roots);
   await safeMedia(path.dirname(target), roots);
+  if (path.resolve(source) === path.resolve(target)) return;
   const before = await stat(source);
   if (expected && signature(before) !== expected)
     throw new Error("文件仍在变化，请稍后重试");
@@ -213,8 +242,8 @@ export async function stageLocalFile(job, payload, context) {
     let plan = saved?.status === "moving" ? saved : null;
     if (!plan) {
       const file = await safeMedia(payload.file, [downloads]);
-      if (inside(intakeRoot(downloads), file))
-        throw new Error("该文件已在半标准曲库");
+      if (inside(intakeRoot(downloads), file) && saved?.status !== "staged")
+        throw new Error("该半标准文件没有可恢复的整理记录");
       const info = await stat(file);
       if (payload.signature !== signature(info))
         throw new Error("文件已变化，请刷新后重试");
@@ -223,7 +252,15 @@ export async function stageLocalFile(job, payload, context) {
         downloads,
         store,
         context.localMetadataSearch,
+        payload.artistOverride,
       );
+      if (saved?.status === "staged") {
+        // A user-confirmed staged title takes precedence over the original NFO pair.
+        meta.title = saved.metadata.title;
+        if (!payload.artistOverride) meta.artist = saved.metadata.artist;
+        meta.albumHint ||= saved.metadata.albumHint;
+        meta.poster = saved.metadata.poster || meta.poster;
+      }
       const id = (await fileHash(file)).slice(0, 24);
       await mkdir(intakeRoot(downloads), { recursive: true });
       await safeMedia(intakeRoot(downloads), [downloads]);
@@ -245,22 +282,32 @@ export async function stageLocalFile(job, payload, context) {
           component(meta.title) +
           path.extname(file).toLowerCase(),
       );
+      const sameTarget = path.resolve(target) === path.resolve(file);
       const stem = path.join(path.dirname(file), path.parse(file).name);
       const out = path.join(dir, path.parse(target).name);
       const moves = [];
       for (const suffix of [
-        ".nfo",
-        ".lrc",
-        ".jpg",
-        ".png",
-        "-poster.jpg",
-        "-poster.png",
-        "-thumb.jpg",
-        "-thumb.png",
+        ...new Set([
+          ...[...(saved?.moves || []), ...(saved?.generated || [])]
+            .filter(
+              (entry) => entry.target !== file && entry.target.startsWith(stem),
+            )
+            .map((entry) => entry.target.slice(stem.length)),
+          ".nfo",
+          "-album.jpg",
+          ".lrc",
+          ".jpg",
+          ".png",
+          "-poster.jpg",
+          "-poster.png",
+          "-thumb.jpg",
+          "-thumb.png",
+        ]),
       ]) {
         try {
           const source = await safeMedia(stem + suffix, [downloads]);
           const sideInfo = await stat(source);
+          if (sameTarget) continue;
           moves.push({
             source,
             target: out + suffix,
@@ -271,19 +318,30 @@ export async function stageLocalFile(job, payload, context) {
           if (error.code !== "ENOENT") throw error;
         }
       }
-      moves.push({
-        source: file,
-        target,
-        signature: payload.signature,
-        hash: await fileHash(file),
-      });
+      if (!sameTarget)
+        moves.push({
+          source: file,
+          target,
+          signature: payload.signature,
+          hash: await fileHash(file),
+        });
       plan = {
         status: "moving",
         id,
         file: target,
         metadata: meta,
         moves,
-        sourceKey: importKey(file, info),
+        ...(sameTarget
+          ? {
+              generated: [
+                ...(saved?.moves || []).filter(
+                  (entry) => entry.target !== file,
+                ),
+                ...(saved?.generated || []),
+              ],
+            }
+          : {}),
+        sourceKey: sameTarget ? saved.sourceKey : importKey(file, info),
       };
       store.set(intakeKey(file), plan);
     }
@@ -306,6 +364,56 @@ export async function stageLocalFile(job, payload, context) {
         move.signature,
       );
     }
+    if (
+      !plan.albumPosterAttempted &&
+      plan.metadata.albumHint &&
+      plan.metadata.artist !== "未知歌手"
+    ) {
+      const outputBase = path.join(
+        path.dirname(plan.file),
+        path.parse(plan.file).name + "-album",
+      );
+      const temporaryBase = outputBase + ".tmp-" + randomUUID();
+      const temporary = temporaryBase + ".image",
+        converted = temporaryBase + ".jpg";
+      try {
+        const source = await (context.albumPosterFind || findAlbumPoster)(
+          plan.metadata.artist,
+          plan.metadata.albumHint,
+        );
+        if (source) {
+          const data = await (context.albumPosterDownload || downloadPoster)(
+            source.imageUrl,
+          );
+          await writeFile(temporary, data, { flag: "wx" });
+          await savePosterImage(temporary, converted);
+          const output =
+            outputBase +
+            "-" +
+            (await fileHash(converted)).slice(0, 16) +
+            ".jpg";
+          await rename(converted, output);
+          plan.metadata.poster = output;
+          plan.metadata.albumPoster = source;
+          plan.generated = [
+            ...(plan.generated || []).filter(
+              (entry) => entry.target !== output,
+            ),
+            { target: output, hash: await fileHash(output) },
+          ];
+        }
+      } catch {
+        plan.metadata.note += "；专辑封面未匹配或暂不可用，原有图片保留";
+      } finally {
+        await rm(temporary, { force: true });
+        await rm(converted, { force: true });
+      }
+      plan.albumPosterAttempted = true;
+    }
+    const movedPoster = plan.moves.find(
+      (move) => move.source === plan.metadata.poster,
+    );
+    if (movedPoster) plan.metadata.poster = movedPoster.target;
     plan.status = "staged";
     store.set(intakeKey(plan.file), plan);
     store.set(intakeKey(payload.file), plan);
@@ -319,7 +427,12 @@ export async function intakeCleanupSources(store, file, downloads) {
   if (intake?.status !== "staged" || !inside(intakeRoot(downloads), file))
     return [];
   const result = [];
-  for (const move of intake.moves) {
+  for (const move of new Map(
+    [...intake.moves, ...(intake.generated || [])].map((entry) => [
+      entry.target,
+      entry,
+    ]),
+  ).values()) {
     if (move.target === file) continue;
     const target = await safeMedia(move.target, [downloads]);
     const info = await stat(target);

@@ -93,6 +93,7 @@ export async function scrapePoster(
         } else {
           source = await find(song, {
             source: store.get("source:" + id, {}),
+            albumHint: store.get("album-hint:" + id, ""),
             sourceUrl:
               store.get("video-source:" + id)?.url ||
               store.get("download-quality:" + id)?.sourceUrl ||

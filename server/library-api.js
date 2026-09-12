@@ -388,7 +388,14 @@ export function libraryApi({
   });
   app.post("/api/admin/inbox/complete-metadata", admin, async (req, res) => {
     const file = await safeMedia(String(req.body.file || ""), [downloads]);
-    if (inside(intakeRoot(downloads), file))
+    const artistOverride = String(req.body.artistOverride || "").trim();
+    if (
+      artistOverride.length > 120 ||
+      /[\x00-\x1f]/.test(artistOverride) ||
+      artistOverride === "未知歌手"
+    )
+      throw new Error("请填写有效的歌手名字");
+    if (inside(intakeRoot(downloads), file) && !artistOverride)
       throw new Error("文件已在半标准曲库，请核对后确认入库");
     if (req.body.reviewId) {
       const job = db
@@ -417,6 +424,7 @@ export function libraryApi({
     const id = addJob("local-intake", {
       file,
       signature: info.size + ":" + info.mtimeMs,
+      artistOverride,
     });
     if (req.body.reviewId)
       db.prepare("UPDATE jobs SET status='cancelled' WHERE id=?").run(
@@ -468,6 +476,17 @@ export function libraryApi({
         replacementUrl,
         approved: true,
         metadata: {
+          ...(localIntake
+            ? {
+                albumHint: get(intakeKey(file))?.metadata?.albumHint,
+                ...(artist === get(intakeKey(file))?.metadata?.artist
+                  ? {
+                      poster: get(intakeKey(file))?.metadata?.poster,
+                      albumPoster: get(intakeKey(file))?.metadata?.albumPoster,
+                    }
+                  : {}),
+              }
+            : {}),
           title,
           artist,
           lyrics: replacementUrl

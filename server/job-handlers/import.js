@@ -154,6 +154,10 @@ export async function importJob(job, payload, context) {
       roots[0],
       meta,
     );
+    if (meta.albumPoster && !get("poster-source:" + id))
+      set("poster-source:" + id, meta.albumPoster);
+    if (meta.albumHint && !get("album-hint:" + id))
+      set("album-hint:" + id, meta.albumHint);
     await withSongWrite(
       store,
       id,

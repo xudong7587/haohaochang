@@ -20,7 +20,7 @@ window.request=async(url,body,method)=>{
  if(url==='/admin/library?hidden=true')return structuredClone(window.hiddenSongs);
  if(url==='/admin/reviews')return [structuredClone(window.videoReview)];
  if(url==='/admin/inbox')return structuredClone(window.inbox);
- if(url==='/admin/inbox/complete-metadata'){Object.assign(window.inbox.find(row=>row.file===body.file),{intakeStage:'staged',tier:'audio',title:'已补齐歌名',artist:'测试歌手'});return {id:'local-task'};}
+ if(url==='/admin/inbox/complete-metadata'){Object.assign(window.inbox.find(row=>row.file===body.file),{intakeStage:'staged',tier:'audio',title:'已补齐歌名',artist:body.artistOverride||'测试歌手'});return {id:'local-task'};}
  if(url==='/admin/lyrics-batch')return {results:(body.all?window.songs.filter(row=>!row.lyrics):body.items.map(item=>window.songs.find(row=>row.id===item.id))).map(row=>({id:row.id,title:row.title,status:'success',message:'已加入歌词补充任务'}))};
  if(url==='/admin/organize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已加入整理队列'}))};
  if(url==='/admin/standardize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已排队检查格式并回收旧版本'}))};
@@ -627,6 +627,51 @@ try {
       ),
     ),
   );
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.evaluate(() => {
+    window.inbox = ["a", "b"].map((id) => ({
+      id: "bulk-" + id,
+      file: "/isolated/download/" + id + ".mp4",
+      inbox: true,
+      title: "唱片歌曲" + id,
+      artist: "未知歌手",
+    }));
+  });
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await page.getByRole("button", { name: /^待整理曲库/ }).click();
+  const bulkButton = page.getByRole("button", {
+    name: "统一歌手并自动整理",
+    exact: true,
+  });
+  assert.equal(await bulkButton.isDisabled(), true);
+  await page.getByLabel("批量指定歌手").fill("专辑歌手");
+  await page.locator('[data-song-id="bulk-a"]').getByRole("checkbox").check();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await bulkButton.click();
+  assert.equal(
+    await page.evaluate(
+      () => window.inbox.filter((row) => row.artist === "专辑歌手").length,
+    ),
+    0,
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await bulkButton.click();
+  await page.waitForFunction(() => window.inbox[0].artist === "专辑歌手");
+  assert.equal(await page.evaluate(() => window.inbox[1].artist), "未知歌手");
+  await page.getByRole("button", { name: /^半标准曲库/ }).click();
+  await page.locator('[data-song-id="bulk-a"]').waitFor();
+  for (const css of ["style.css", "library/controls.css"]) {
+    await page.addStyleTag({
+      content: await readFile(
+        new URL("../src/" + css, import.meta.url),
+        "utf8",
+      ),
+    });
+  }
+  await page.screenshot({
+    path: "test-results/library-bulk-artist.png",
+    fullPage: true,
+  });
   assert.deepEqual(errors, []);
   console.log(
     "Library component browser contracts passed: drafts, candidates, lyrics, hide/restore/permanent delete, six sorting orders with persistence, and SD/HD video labels.",

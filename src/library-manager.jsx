@@ -20,6 +20,7 @@ import { VideoReview } from "./library/video-review.jsx";
 import { SourceImport } from "./library/source-import.jsx";
 import { BatchResults } from "./library/batch-results.jsx";
 import {
+  completeMetadataBatch,
   refreshMetadataBatch,
   organizeBatch,
   standardizeBatch,
@@ -36,6 +37,7 @@ export function LibraryManager({ request, notify, onEdit }) {
     [tasks, setTasks] = useState([]),
     [hiddenSongs, setHiddenSongs] = useState([]),
     [reviews, setReviews] = useState([]);
+  const [batchArtist, setBatchArtist] = useState("");
   const [tab, setTab] = useState("pending"),
     [query, setQuery] = useState(""),
     [busy, setBusy] = useState(false),
@@ -480,6 +482,52 @@ export function LibraryManager({ request, notify, onEdit }) {
             </div>
           )}
         </div>
+        {["pending", "audio"].includes(tab) && (
+          <div className="batch-toolbar">
+            <label>
+              统一歌手{" "}
+              <input
+                aria-label="批量指定歌手"
+                value={batchArtist}
+                maxLength={120}
+                placeholder="例如：周杰伦"
+                onChange={(e) => setBatchArtist(e.target.value)}
+              />
+            </label>
+            <button
+              disabled={
+                busy ||
+                !batchArtist.trim() ||
+                !batchEntries.some(
+                  (e) => e.row.inbox || e.row.localIntakeAvailable,
+                )
+              }
+              onClick={() => {
+                const snapshot = [...batchEntries];
+                const singer = batchArtist.trim();
+                if (
+                  window.confirm(
+                    `将${chosen.length ? "已选" : "当前筛选"}的 ${snapshot.length} 项本地文件统一为歌手“${singer}”，按各自 NFO 歌名整理到半标准曲库？`,
+                  )
+                )
+                  batch(() =>
+                    completeMetadataBatch(
+                      snapshot,
+                      singer,
+                      request,
+                      setResults,
+                    ),
+                  );
+              }}
+            >
+              统一歌手并自动整理
+            </button>
+            <small>
+              范围：{chosen.length ? "已选" : "当前筛选"} {batchEntries.length}{" "}
+              项；各自保留歌名，核对后再入标准曲库。
+            </small>
+          </div>
+        )}
         {tab !== "hidden" && (
           <div className="batch-toolbar">
             <span>

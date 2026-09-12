@@ -277,6 +277,24 @@ test("inbox API stages local files, protects online review workflow and deletes 
   const staged = service.store.get(intakeKey(file)).file;
   const list = await (await call("/admin/inbox", null, "GET")).json();
   assert.equal(list.find((row) => row.file === staged).intakeStage, "staged");
+  const invalid = await call("/admin/inbox/complete-metadata", {
+    file: staged,
+    artistOverride: "未知歌手",
+  });
+  assert.equal(invalid.status, 400);
+  const restage = await call("/admin/inbox/complete-metadata", {
+    file: staged,
+    artistOverride: "统一歌手",
+  });
+  assert.equal(restage.status, 200);
+  const restageId = (await restage.json()).id;
+  const queued = service.store.db
+    .prepare("SELECT payload FROM jobs WHERE id=?")
+    .get(restageId);
+  assert.equal(JSON.parse(queued.payload).artistOverride, "统一歌手");
+  service.store.db
+    .prepare("UPDATE jobs SET status='done' WHERE id=?")
+    .run(restageId);
   const plan = await (
     await call("/admin/inbox/delete-preview", { file: staged })
   ).json();
