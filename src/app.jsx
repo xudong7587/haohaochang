@@ -68,6 +68,16 @@ const route = ["/", "/admin"].includes(location.pathname)
   : ["/mobile", "/control"].includes(location.pathname)
     ? "mobile"
     : "tv";
+const SongSelection = route === "tv" ? "button" : React.Fragment;
+function InitialResults({ value, onChange, children }) {
+  if (route !== "tv") return children;
+  return (
+    <div className="initial-results-layout">
+      <InitialPicker value={value} onChange={onChange} />
+      {children}
+    </div>
+  );
+}
 const isWebRoom = location.pathname === "/play";
 if (isWebRoom) document.title = "好好唱 · 网页歌房";
 const duration = (n) =>
@@ -669,11 +679,13 @@ export function App() {
                   返回歌手
                 </button>
               )}
-              <div className="initial-results-layout">
-                <InitialPicker
-                  value={initialQuery}
-                  onChange={setInitialQuery}
-                />
+              <InitialResults
+                value={initialQuery}
+                onChange={(value) => {
+                  setInitialQuery(value);
+                  setQuery("");
+                }}
+              >
                 <div className="song-poster-grid song-search-grid">
                   {songs.map((song) => {
                     const added = state.queue.some(
@@ -681,11 +693,15 @@ export function App() {
                     );
                     return (
                       <article className="song-poster-card" key={song.id}>
-                        <button
-                          className="song-poster-select"
-                          disabled={song.status === "preparing" || added}
-                          onClick={() => add(song)}
-                          aria-label={`选择歌曲 ${song.title}`}
+                        <SongSelection
+                          {...(route === "tv"
+                            ? {
+                                className: "song-poster-select",
+                                disabled: song.status === "preparing" || added,
+                                onClick: () => add(song),
+                                "aria-label": `选择歌曲 ${song.title}`,
+                              }
+                            : {})}
                         >
                           <div className="song-poster-image">
                             <SongArtwork
@@ -701,7 +717,7 @@ export function App() {
                             <strong>{song.title}</strong>
                             <small>{song.artist}</small>
                           </div>
-                        </button>
+                        </SongSelection>
                         <div className="poster-song-actions">
                           <small>
                             {song.status !== "ready"
@@ -722,7 +738,7 @@ export function App() {
                     );
                   })}
                 </div>
-              </div>
+              </InitialResults>
               {!songs.length && (
                 <Empty
                   icon={Disc3}
@@ -765,11 +781,13 @@ export function App() {
                 </div>
                 <Users size={30} />
               </div>
-              <div className="initial-results-layout">
-                <InitialPicker
-                  value={initialQuery}
-                  onChange={setInitialQuery}
-                />
+              <InitialResults
+                value={initialQuery}
+                onChange={(value) => {
+                  setInitialQuery(value);
+                  setQuery("");
+                }}
+              >
                 <div className="artist-grid">
                   {artists.map((a) => (
                     <button
@@ -795,7 +813,7 @@ export function App() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </InitialResults>
               {!artists.length && (
                 <Empty
                   icon={Users}

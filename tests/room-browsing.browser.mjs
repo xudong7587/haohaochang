@@ -130,6 +130,25 @@ try {
     return route.fulfill({ json: data });
   });
   await page.goto(base + "/mobile#fixture");
+  await page.locator(".song-poster-card").first().waitFor();
+  assert.equal(await page.locator(".initial-picker").count(), 0);
+  assert.equal(
+    await page
+      .getByRole("button", { name: "选择歌曲 青花瓷", exact: true })
+      .count(),
+    0,
+  );
+  assert.equal(
+    await page
+      .locator(".song-poster-grid")
+      .evaluate(
+        (e) => getComputedStyle(e).gridTemplateColumns.split(" ").length,
+      ),
+    2,
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(base + "/play");
+  await page.getByRole("button", { name: "歌名点歌", exact: true }).click();
   await page.getByRole("button", { name: "首字母 Q", exact: true }).click();
   await page
     .getByRole("button", { name: "选择歌曲 青花瓷", exact: true })
@@ -147,7 +166,7 @@ try {
     () => document.querySelectorAll(".artist-card").length === 1,
   );
   await page.screenshot({
-    path: "test-results/room-browsing/initials-mobile.png",
+    path: "test-results/room-browsing/initials-play.png",
     fullPage: true,
   });
   await page.locator(".artist-card").click();
@@ -158,7 +177,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "Room browsing: initials filter, direct enqueue, artist detail, static lyric preview, save and mobile width passed",
+    "Room browsing: initials filter, direct enqueue, artist detail, static lyric preview, save and unchanged mobile input layout passed",
   );
 } finally {
   await browser.close();

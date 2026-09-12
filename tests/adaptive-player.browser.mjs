@@ -326,9 +326,11 @@ try {
   const queueBeforeReload = service.store.db
     .prepare("SELECT id,song_id FROM queue ORDER BY position")
     .all();
-  await tv.getByRole("button", { name: "热更新", exact: true }).focus();
-  await tv.keyboard.press("Enter");
-  await tv.waitForURL(/refresh=\d+/);
+  assert.equal(
+    await tv.getByRole("button", { name: "热更新", exact: true }).count(),
+    0,
+  );
+  await tv.reload();
   await tv.locator(".app.tv").waitFor();
   assert.equal(
     await tv.evaluate(() => localStorage.getItem("roomToken")),
