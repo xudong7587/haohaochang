@@ -56,6 +56,8 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   private boolean closed;
   private final Button more;
   private final Button find;
+  private final Button sort;
+  private boolean randomOrder;
   private final LinearLayout query;
   private int selectedPosition;
   private final LinearLayout initialsPanel;
@@ -68,7 +70,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     this.activity = activity;
     this.session = session;
     setOrientation(VERTICAL);
-    setBackgroundColor(TvStyle.BACKGROUND);
+    setBackgroundColor(0x4d12101b);
     setPadding(dp(24), dp(16), dp(20), dp(12));
     TextView breadcrumb = TvStyle.text(activity, "我的客厅    /    家庭 KTV", 9, TvStyle.MUTED);
     addView(breadcrumb, new LayoutParams(-1, dp(24)));
@@ -95,6 +97,17 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     LayoutParams findParams = new LayoutParams(dp(72), -1);
     findParams.leftMargin = dp(10);
     query.addView(find, findParams);
+    sort =
+        TvStyle.button(
+            activity,
+            "歌名排序",
+            "切换歌名排序或随机",
+            () -> {
+              randomOrder = !randomOrder;
+              load();
+            });
+    TvStyle.subtle(sort);
+    query.addView(sort, new LayoutParams(dp(100), -1));
     search.setOnEditorActionListener(
         (v, id, event) -> {
           if (id == EditorInfo.IME_ACTION_SEARCH) {
@@ -159,7 +172,9 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                   search.setText("");
                   load();
                 });
-        button.setTextSize(12);
+        TvStyle.subtle(button);
+        button.setTextSize(18);
+        if (index == 27) TvStyle.iconOnly(button, "trash");
         button.setPadding(0, 0, 0, 0);
         initialButtons.add(button);
         line.addView(button, new LayoutParams(0, -1, 1));
@@ -285,10 +300,13 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
       focusCard(0);
     } else if (key == KeyEvent.KEYCODE_DPAD_UP && more.hasFocus()) focusCard(rows.length() - 1);
     else if (key == KeyEvent.KEYCODE_DPAD_LEFT) {
-      if (find.hasFocus()) search.requestFocusFromTouch();
+      if (sort.hasFocus()) find.requestFocusFromTouch();
+      else if (find.hasFocus()) search.requestFocusFromTouch();
       else return false;
     } else if (key == KeyEvent.KEYCODE_DPAD_RIGHT && search.hasFocus())
       find.requestFocusFromTouch();
+    else if (key == KeyEvent.KEYCODE_DPAD_RIGHT && find.hasFocus() && sort.isShown())
+      sort.requestFocusFromTouch();
     return true;
   }
 
@@ -303,6 +321,8 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   }
 
   private void load() {
+    sort.setVisibility(page.equals("songs") || !artist.isEmpty() ? VISIBLE : GONE);
+    sort.setText(randomOrder ? "随机" : "歌名排序");
     initialsPanel.setVisibility(page.equals("songs") || page.equals("artists") ? VISIBLE : GONE);
     query.setVisibility(page.equals("queue") ? GONE : VISIBLE);
     initialLabel.setText(initialQuery.isEmpty() ? "拼音首字母" : initialQuery);
@@ -375,7 +395,9 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                     + "&tag="
                     + RoomApi.encode(tag)
                     + "&initials="
-                    + RoomApi.encode(initialQuery);
+                    + RoomApi.encode(initialQuery)
+                    + "&sort="
+                    + (randomOrder ? "random" : "title");
     session.read(
         path,
         value -> {
@@ -433,7 +455,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     }
     if (page.equals("queue")) {
       session.command(
-          "/api/queue/" + RoomApi.encode(row.optString("id")) + "/first",
+          "/api/queue/" + RoomApi.encode(row.optString("id")) + "/top",
           "POST",
           new JSONObject(),
           null);

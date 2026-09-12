@@ -109,7 +109,7 @@ export function LibraryManager({ request, notify, onEdit }) {
       key: `review:${row.inbox ? "inbox" : "review"}:${row.id || row.file}`,
       row,
       review: true,
-      tier: "pending",
+      tier: row.intakeStage === "staged" ? "audio" : "pending",
     })),
     ...songs.map((row) => ({ key: `song:${row.id}`, row, tier: row.tier })),
     ...hiddenSongs.map((row) => ({
@@ -406,7 +406,7 @@ export function LibraryManager({ request, notify, onEdit }) {
             {tab === "pending"
               ? "原始媒体等待整理；歌词未找到也会继续。"
               : tab === "audio"
-                ? "原唱、伴奏可用，等待补充视频画面。"
+                ? "本地歌曲先核对歌名与歌手后入库；已有双音轨的歌曲可继续补充画面。"
                 : tab === "standard"
                   ? "画面、原唱、伴奏已准备，可随时点唱。"
                   : "媒体仍保留，可恢复歌曲，或彻底删除歌曲及对应媒体。"}

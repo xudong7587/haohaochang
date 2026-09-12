@@ -12,19 +12,20 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {LibraryManager} from '/src/library-manager.jsx';
 window.songs=[{id:'song-a',title:'初始歌名',artist:'测试歌手',lyrics:'[00:01]测试歌词',metadataRevision:1,tier:'standard',status:'ready',sourceUrl:'',manifest:{vocal:true,backing:true}}];
-window.hiddenSongs=[];window.calls=[];window.failSave=false;
+window.hiddenSongs=[];window.inbox=[];window.calls=[];window.failSave=false;
 window.videoReview={id:'video-review',kind:'find-video',title:'视频候选',artist:'测试歌手',candidatePath:'isolated/candidate.mp4',expectedRevision:7,candidate:{canonicalUrl:'https://www.bilibili.com/video/BV1gF4m1K7Aa?p=14',provider:'bilibili',externalTitle:'第14P',duration:240}};
 window.request=async(url,body,method)=>{
  window.calls.push({url,body,method});
  if(url==='/admin/library')return structuredClone(window.songs);
  if(url==='/admin/library?hidden=true')return structuredClone(window.hiddenSongs);
  if(url==='/admin/reviews')return [structuredClone(window.videoReview)];
- if(url==='/admin/inbox')return [];
+ if(url==='/admin/inbox')return structuredClone(window.inbox);
+ if(url==='/admin/inbox/complete-metadata'){Object.assign(window.inbox.find(row=>row.file===body.file),{intakeStage:'staged',tier:'audio',title:'已补齐歌名',artist:'测试歌手'});return {id:'local-task'};}
  if(url==='/admin/lyrics-batch')return {results:(body.all?window.songs.filter(row=>!row.lyrics):body.items.map(item=>window.songs.find(row=>row.id===item.id))).map(row=>({id:row.id,title:row.title,status:'success',message:'已加入歌词补充任务'}))};
  if(url==='/admin/organize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已加入整理队列'}))};
  if(url==='/admin/standardize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已排队检查格式并回收旧版本'}))};
  if(url.endsWith('/delete-preview'))return {title:'初始歌名',token:'preview-token',targets:[{path:'/isolated/song-folder',directory:true}]};
- if(url.endsWith('/delete-files')){if(window.failDelete)throw new Error('文件已变化');if(body.token!=='preview-token')throw new Error('无效确认');window.songs=window.songs.filter(row=>row.id!==url.split('/')[3]);window.hiddenSongs=window.hiddenSongs.filter(row=>row.id!==url.split('/')[3]);return {ok:true};}
+ if(url.endsWith('/delete-files')){if(window.failDelete)throw new Error('文件已变化');if(body.token!=='preview-token')throw new Error('无效确认');window.inbox=window.inbox.filter(row=>row.file!==body.file);window.songs=window.songs.filter(row=>row.id!==url.split('/')[3]);window.hiddenSongs=window.hiddenSongs.filter(row=>row.id!==url.split('/')[3]);return {ok:true};}
  if(url==='/admin/source-info')return {title:'可爱女人',artist:'周杰伦',duration:240,candidateId:'retained-preview-id',candidate:{canonicalUrl:body.url,externalTitle:'第14P',page:14}};
  if(url==='/admin/find-lyrics')return {lyrics:'[00:01]本地候选歌词',source:'本地 LRC',provider:'local-lrc',sourceId:'local-1'};
  if(url==='/admin/refresh-metadata')return {title:'识别歌名',artist:'测试歌手',needs_review:body.id==='review'};
@@ -587,6 +588,44 @@ try {
       .getByRole("button", { name: "时间↓" })
       .getAttribute("aria-pressed"),
     "true",
+  );
+  await page.evaluate(() => {
+    window.inbox = [
+      {
+        id: "local-file",
+        file: "/isolated/download/local.mp4",
+        inbox: true,
+        title: "本地待整理",
+        artist: "未知歌手",
+      },
+    ];
+    window.failDelete = false;
+  });
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await page.getByRole("button", { name: /^待整理曲库/ }).click();
+  await page
+    .locator('[data-song-id="local-file"]')
+    .getByRole("button", { name: "自动补齐元数据", exact: true })
+    .click();
+  await page.getByRole("button", { name: /^半标准曲库/ }).click();
+  const localRow = page.locator('[data-song-id="local-file"]');
+  await localRow
+    .getByRole("button", { name: "确认并入库", exact: true })
+    .waitFor();
+  assert.equal(
+    await localRow.getByText("已补齐歌名", { exact: true }).count(),
+    1,
+  );
+  await localRow.getByRole("button", { name: "删除歌曲", exact: true }).click();
+  await page.waitForFunction(() => window.inbox.length === 0);
+  assert.ok(
+    await page.evaluate(() =>
+      window.calls.some(
+        (call) =>
+          call.url === "/admin/inbox/delete-files" &&
+          call.body.file === "/isolated/download/local.mp4",
+      ),
+    ),
   );
   assert.deepEqual(errors, []);
   console.log(

@@ -44,6 +44,20 @@ export function reviewsApi({
               : undefined,
           candidatePath: p.candidatePath || "",
           candidate: p.candidate,
+          file: p.file,
+          ...(p.localIntake && !p.id
+            ? { intakeStage: "staged", tier: "audio" }
+            : {}),
+          localIntakeAvailable:
+            j.kind === "import" &&
+            !p.localIntake &&
+            !p.id &&
+            !p.existingId &&
+            !p.candidate &&
+            !p.sourceUrl &&
+            !p.url &&
+            !p.onlineSelection &&
+            !p.replacementUrl,
           title: p.metadata?.title || p.title || "",
           artist: p.metadata?.artist || p.artist || "",
           tags: p.metadata?.tags || [],

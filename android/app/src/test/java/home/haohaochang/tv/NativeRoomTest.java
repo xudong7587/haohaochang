@@ -210,6 +210,10 @@ public class NativeRoomTest {
             descendants(room).stream().filter(v -> v instanceof NativeCatalogue).findFirst().get();
     assertEquals("Catalogue covers the main video area", 960, catalogue.getRight());
     assertEquals(144, catalogue.getLeft());
+    assertEquals(
+        77,
+        android.graphics.Color.alpha(
+            ((android.graphics.drawable.ColorDrawable) catalogue.getBackground()).getColor()));
     assertFalse(find("隐藏歌词").isShown());
     assertFalse(
         descendants(room).stream().anyMatch(v -> v.getClass().getName().contains("WebView")));
@@ -256,7 +260,7 @@ public class NativeRoomTest {
 
   @Test
   public void fullscreenQueueStaysOutsideFocusNavigation() throws Exception {
-    assertFalse(find("手机扫码点歌二维码").isShown());
+    assertTrue(find("手机扫码点歌二维码").isShown());
     find("全屏播放").performClick();
     layout(960, 540);
     assertTrue(find("手机扫码点歌二维码").isShown());
@@ -282,8 +286,8 @@ public class NativeRoomTest {
     press(KeyEvent.KEYCODE_DPAD_RIGHT);
     press(KeyEvent.KEYCODE_DPAD_CENTER);
     drain();
-    assertTrue(paths.contains("/api/queue/entry-2/first"));
-    long firstCalls = paths.stream().filter(path -> path.endsWith("/first")).count();
+    assertTrue(paths.contains("/api/queue/entry-2/top"));
+    long firstCalls = paths.stream().filter(path -> path.endsWith("/top")).count();
     activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER));
     Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(650));
     activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER));
@@ -292,10 +296,72 @@ public class NativeRoomTest {
         org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
     assertNotNull(dialog);
     assertTrue(dialog.isShowing());
-    assertEquals(firstCalls, paths.stream().filter(path -> path.endsWith("/first")).count());
+    assertEquals(firstCalls, paths.stream().filter(path -> path.endsWith("/top")).count());
     dialog.getListView().performItemClick(dialog.getListView().getChildAt(0), 0, 0);
     drain();
     assertTrue(paths.contains("/api/queue/entry-2"));
+  }
+
+  @Test
+  public void compactControlsAndPersistentQrFitNormalAndFullScreen() throws Exception {
+    View qr = find("手机扫码点歌二维码");
+    android.graphics.Rect bounds = new android.graphics.Rect();
+    qr.getDrawingRect(bounds);
+    room.offsetDescendantRectToMyCoords(qr, bounds);
+    assertTrue(bounds.left >= 12 && bounds.right <= 144);
+    assertTrue(bounds.top > 280 && bounds.bottom < 440);
+    View pause = find("暂停");
+    pause.getDrawingRect(bounds);
+    room.offsetDescendantRectToMyCoords(pause, bounds);
+    assertEquals(480, bounds.centerX(), 2);
+    find("歌名点歌").performClick();
+    drain();
+    layout(960, 540);
+    assertTrue(qr.isShown());
+    Button letter = (Button) find("首字母 A");
+    assertTrue(letter.getTextSize() >= 18);
+    assertEquals("", ((Button) find("清空")).getText().toString());
+    find("全屏播放").performClick();
+    layout(960, 540);
+    find("歌词延后 10 秒").getDrawingRect(bounds);
+    room.offsetDescendantRectToMyCoords(find("歌词延后 10 秒"), bounds);
+    assertTrue(bounds.left > 240);
+    find("歌词提前 10 秒").getDrawingRect(bounds);
+    room.offsetDescendantRectToMyCoords(find("歌词提前 10 秒"), bounds);
+    assertTrue(bounds.right < 720);
+    find("退出全屏").performClick();
+    layout(960, 540);
+    assertTrue(qr.isShown());
+    assertFalse(find("全屏已点歌单").isShown());
+    capture("native-tv-persistent-qr.png");
+  }
+
+  @Test
+  public void remoteSortToggleLoadsOnceAndHalfSecondStepsSurviveLargeOffsets() throws Exception {
+    find("歌名点歌").performClick();
+    drain();
+    layout(960, 540);
+    assertTrue(paths.stream().anyMatch(path -> path.contains("sort=title")));
+    find("搜索").requestFocusFromTouch();
+    press(KeyEvent.KEYCODE_DPAD_RIGHT);
+    assertTrue(find("切换歌名排序或随机").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_CENTER);
+    drain();
+    assertEquals(1, paths.stream().filter(path -> path.contains("sort=random")).count());
+    find("全屏播放").performClick();
+    room.state(
+        RoomApi.object(
+            "queue",
+            new JSONArray().put(song),
+            "playback",
+            RoomApi.object("paused", false, "lyricsOffsetMs", 3000000500L)));
+    layout(960, 540);
+    find("歌词延后 0.5 秒").performClick();
+    drain();
+    assertEquals(-500, commands.get(commands.size() - 1).optInt("deltaMs"));
+    find("歌词提前 0.5 秒").performClick();
+    drain();
+    assertEquals(500, commands.get(commands.size() - 1).optInt("deltaMs"));
   }
 
   private void capture(String name) throws Exception {

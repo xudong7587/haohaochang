@@ -26,13 +26,19 @@ import {
   identifyVideo,
 } from "../shared/catalog.js";
 import { findLyrics } from "./lyrics-source.js";
-import { searchText, safeMedia } from "./media-utils.js";
+import { searchText, safeMedia, inside } from "./media-utils.js";
 import { filesUnder, importKey, metadata } from "./library.js";
 import { enrichSong } from "./enrichment.js";
 import { hdUpgradeSource } from "./split-video.js";
 import { queueMissingLyrics } from "./lyrics-batch.js";
 import { recordingSource } from "./recording-source.js";
 import { canonicalBiliRecording } from "../shared/video-refresh.js";
+import {
+  intakeKey,
+  intakeRoot,
+  assertLocalFileIdle,
+  intakeCleanupSources,
+} from "./local-intake.js";
 
 async function posterAvailable(file) {
   if (!file) return false;
@@ -333,7 +339,7 @@ export function libraryApi({
   app.get("/api/admin/inbox", admin, async (req, res) => {
     const handled = db
       .prepare(
-        "SELECT id,payload,status,stage FROM jobs WHERE kind='import' AND status IN ('review','running','queued','waiting-worker')",
+        "SELECT id,payload,status,stage FROM jobs WHERE kind IN ('import','local-intake') AND status IN ('review','running','queued','waiting-worker')",
       )
       .all()
       .map((j) => ({ ...j, payload: JSON.parse(j.payload) }));
@@ -342,6 +348,9 @@ export function libraryApi({
       try {
         const info = await stat(file);
         const job = handled.find((j) => j.payload.file === file);
+        const intake = get(intakeKey(file));
+        if (inside(intakeRoot(downloads), file) && intake?.status !== "staged")
+          continue;
         if (get(importKey(file, info)) || job?.status === "review") continue;
         rows.push({
           id: importKey(file, info),
@@ -349,6 +358,9 @@ export function libraryApi({
           inbox: true,
           ...(await metadata(file, [downloads])),
           ...(job?.payload.metadata || {}),
+          ...(intake?.status === "staged"
+            ? { ...intake.metadata, intakeStage: "staged", tier: "audio" }
+            : {}),
           processing: !!job,
           status: job?.status || "import",
           jobId: job?.id,
@@ -358,7 +370,7 @@ export function libraryApi({
                 running: "正在整理，完成后自动更新",
                 "waiting-worker": "等待 PC 上线后继续",
               }[job.status]
-            : "下载工作区 · 等待信息完整和文件稳定",
+            : intake?.metadata?.note || "下载工作区 · 等待信息完整和文件稳定",
           lyrics: "",
         });
       } catch (error) {
@@ -374,9 +386,52 @@ export function libraryApi({
     }
     res.json(rows);
   });
+  app.post("/api/admin/inbox/complete-metadata", admin, async (req, res) => {
+    const file = await safeMedia(String(req.body.file || ""), [downloads]);
+    if (inside(intakeRoot(downloads), file))
+      throw new Error("文件已在半标准曲库，请核对后确认入库");
+    if (req.body.reviewId) {
+      const job = db
+        .prepare(
+          "SELECT payload FROM jobs WHERE id=? AND kind='import' AND status='review'",
+        )
+        .get(req.body.reviewId);
+      const p = job ? JSON.parse(job.payload) : null;
+      if (
+        !p ||
+        p.file !== file ||
+        p.id ||
+        p.existingId ||
+        p.candidate ||
+        p.sourceUrl ||
+        p.url ||
+        p.onlineSelection ||
+        p.replacementUrl
+      )
+        throw new Error("该项目不是待核对的本地文件");
+    }
+    assertLocalFileIdle(store, file, req.body.reviewId);
+    const info = await stat(file);
+    if (get(importKey(file, info)))
+      throw new Error("该文件已经导入，请刷新列表");
+    const id = addJob("local-intake", {
+      file,
+      signature: info.size + ":" + info.mtimeMs,
+    });
+    if (req.body.reviewId)
+      db.prepare("UPDATE jobs SET status='cancelled' WHERE id=?").run(
+        req.body.reviewId,
+      );
+    res.json({ id });
+  });
   const submitInbox = async (req, res) => {
     const file = await safeMedia(String(req.body.file || ""), [downloads]),
       info = await stat(file);
+    if (
+      inside(intakeRoot(downloads), file) &&
+      get(intakeKey(file))?.status !== "staged"
+    )
+      throw new Error("文件还在移动，请等待元数据整理完成");
     const existing = db
       .prepare(
         "SELECT id,payload,status FROM jobs WHERE kind='import' AND status IN ('queued','running','review','waiting-worker')",
@@ -399,9 +454,16 @@ export function libraryApi({
     const replacementUrl = req.body.sourceUrl
       ? canonicalVideo(req.body.sourceUrl)
       : undefined;
+    const localIntake =
+      get(intakeKey(file))?.status === "staged" && !replacementUrl;
+    const cleanupSources = localIntake
+      ? await intakeCleanupSources(store, file, downloads)
+      : undefined;
+    assertLocalFileIdle(store, file);
     res.json({
       id: addJob("import", {
         file,
+        ...(localIntake ? { localIntake: true, cleanupSources } : {}),
         signature: info.size + ":" + info.mtimeMs,
         replacementUrl,
         approved: true,

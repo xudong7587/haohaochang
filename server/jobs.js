@@ -17,8 +17,10 @@ import { upgradeHd } from "./job-handlers/upgrade-hd.js";
 import { compatibleVideo } from "./job-handlers/compatible-video.js";
 import { cleanImportedDownloads } from "./download-cleanup.js";
 import { refreshVideo } from "./job-handlers/refresh-video.js";
+import { stageLocalFile } from "./local-intake.js";
 
 const handlers = {
+  "local-intake": stageLocalFile,
   "refresh-video": refreshVideo,
   lyrics: supplementLyrics,
   poster: (_job, payload, context) =>

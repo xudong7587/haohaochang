@@ -50,7 +50,8 @@ public class NativeRoomOverlayTest {
         assertEquals(View.VISIBLE, panel.getVisibility());
         overlay.fullscreen(false);
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(31));
-        assertEquals(View.GONE, overlay.getVisibility());
+        assertEquals(View.VISIBLE, overlay.getVisibility());
+        assertEquals(View.GONE, panel.getVisibility());
       } finally {
         overlay.close();
         session.close();

@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import { queueMissingPosters } from "./poster-backfill.js";
 import { filesUnder, importKey } from "./library.js";
 import { inside } from "./media-utils.js";
+import { intakeRoot, intakeKey } from "./local-intake.js";
 export function startBackgroundTasks({
   store,
   roots,
@@ -51,6 +52,11 @@ export function startBackgroundTasks({
     checking = true;
     try {
       for (const file of await filesUnder(downloads)) {
+        if (
+          inside(intakeRoot(downloads), file) ||
+          get(intakeKey(file))?.status === "moving"
+        )
+          continue;
         if (roots.some((root) => inside(root, file)) || inside(cache, file))
           continue;
         const info = await stat(file),
@@ -61,13 +67,15 @@ export function startBackgroundTasks({
           continue;
         if (get(importKey(file, info))) continue;
         const handled = db
-          .prepare("SELECT payload FROM jobs WHERE kind='import'")
+          .prepare(
+            "SELECT payload FROM jobs WHERE kind IN ('import','local-intake')",
+          )
           .all()
           .some((j) => {
             const p = JSON.parse(j.payload);
             return p.file === file && p.signature === signature;
           });
-        if (!handled) addJob("import", { file, signature });
+        if (!handled) addJob("local-intake", { file, signature });
       }
     } catch (e) {
       console.error("下载目录检查失败:", e.message);

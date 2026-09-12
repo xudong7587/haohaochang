@@ -17,7 +17,7 @@ final class NativeRoomOverlay extends LinearLayout implements AutoCloseable {
   private final RoomSession session;
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final ImageView qr;
-  private final LinearLayout queuePanel;
+  private final LinearLayout queuePanel, code;
   private JSONArray queue = new JSONArray();
   private String queueKey = "";
   private boolean full, closed, loading, loaded;
@@ -39,7 +39,7 @@ final class NativeRoomOverlay extends LinearLayout implements AutoCloseable {
     setGravity(Gravity.RIGHT);
     setFocusable(false);
     setContentDescription("扫码点歌与已点歌单");
-    LinearLayout code = new LinearLayout(context);
+    code = new LinearLayout(context);
     code.setOrientation(VERTICAL);
     code.setGravity(Gravity.CENTER);
     code.setPadding(dp(8), dp(8), dp(8), dp(6));
@@ -68,9 +68,16 @@ final class NativeRoomOverlay extends LinearLayout implements AutoCloseable {
   }
 
   void fullscreen(boolean value) {
-    if (full == value) return;
+    setVisibility(VISIBLE);
+    qr.setLayoutParams(new LayoutParams(dp(value ? 96 : 84), dp(value ? 96 : 84)));
+    code.setPadding(dp(8), dp(value ? 8 : 4), dp(8), dp(value ? 6 : 2));
+    loadQr();
+    if (full == value) {
+      if (!full) queuePanel.setVisibility(GONE);
+      return;
+    }
     full = value;
-    setVisibility(full ? VISIBLE : GONE);
+    if (!full) queuePanel.setVisibility(GONE);
     handler.removeCallbacks(cycle);
     handler.removeCallbacks(hideQueue);
     if (full) {
@@ -82,7 +89,12 @@ final class NativeRoomOverlay extends LinearLayout implements AutoCloseable {
   private void loadQr() {
     if (loaded || loading || closed) return;
     loading = true;
-    handler.postDelayed(() -> loading = false, 15000);
+    handler.postDelayed(
+        () -> {
+          loading = false;
+          if (!loaded && !closed) loadQr();
+        },
+        15000);
     session.read(
         "/api/join?origin=" + RoomApi.encode(session.api.server),
         value -> {

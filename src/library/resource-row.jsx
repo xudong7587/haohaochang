@@ -45,7 +45,7 @@ export function ResourceRow({
   }, [collapseKey, hidden, dialogOnly]);
   const [deletion, setDeletion] = useState(null);
   busy = busy || row.processing;
-  const deleteSongId = review ? row.songId : row.id;
+  const deleteSongId = row.inbox ? undefined : review ? row.songId : row.id;
   const deleteBase = deleteSongId
     ? "/admin/library/" + deleteSongId
     : "/admin/inbox";
@@ -60,9 +60,12 @@ export function ResourceRow({
     [conflictLoaded, setConflictLoaded] = useState(true);
   const form = draft.values,
     changedUrl = !!form.url && form.url !== row.sourceUrl;
-  const hasDualAudio = row.manifest
-    ? row.manifest.vocal && row.manifest.backing
-    : ["audio", "standard"].includes(row.tier);
+  const hasDualAudio =
+    row.intakeStage === "staged"
+      ? false
+      : row.manifest
+        ? row.manifest.vocal && row.manifest.backing
+        : ["audio", "standard"].includes(row.tier);
   useEffect(() => {
     dispatch({ type: "refresh", row });
     setConflictLoaded(true);
@@ -270,13 +273,61 @@ export function ResourceRow({
           </p>
         </div>
         <div className="actions row-primary-actions">
+          {(row.inbox || row.localIntakeAvailable) &&
+            row.intakeStage !== "staged" && (
+              <button
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await request(
+                      "/admin/inbox/complete-metadata",
+                      {
+                        file: row.file,
+                        reviewId: row.inbox ? undefined : row.id,
+                      },
+                      "POST",
+                    );
+                    notify("已开始补齐元数据，完成后移动到半标准曲库等待核对");
+                  })
+                }
+              >
+                自动补齐元数据
+              </button>
+            )}
+          {row.tier !== "standard" &&
+            (!review || row.songId || row.inbox || row.kind === "import") && (
+              <button
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    const plan = await request(
+                      deleteBase + "/delete-preview",
+                      deleteSongId ? undefined : deletePayload,
+                      deleteSongId ? "GET" : "POST",
+                    );
+                    await request(
+                      deleteBase + "/delete-files",
+                      { ...deletePayload, token: plan.token },
+                      "POST",
+                    );
+                    notify("歌曲及对应媒体已删除");
+                  })
+                }
+              >
+                删除歌曲
+              </button>
+            )}
           {row.tier !== "standard" && (
             <button
               className="primary"
               disabled={busy || draft.conflict}
               onClick={organize}
             >
-              {row.tier === "audio" ? "整理 / 查找 MV" : "开始整理"}
+              {row.intakeStage === "staged"
+                ? "确认并入库"
+                : row.tier === "audio"
+                  ? "整理 / 查找 MV"
+                  : "开始整理"}
             </button>
           )}
           <button

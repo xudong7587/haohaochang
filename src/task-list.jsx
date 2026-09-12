@@ -4,6 +4,7 @@ import { Pagination } from "./workbench-controls.jsx";
 export const completedTask = (job) =>
   ["done", "cancelled"].includes(job.status);
 export const taskKindNames = {
+  "local-intake": "补齐本地歌曲元数据",
   lyrics: "补充歌词",
   poster: "刮削歌曲封面",
   "attach-video": "补充视频",

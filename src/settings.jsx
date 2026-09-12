@@ -176,6 +176,52 @@ function ConnectionSettings({ kind, onSaved }) {
             />
           </label>
           <p>需要 ktv-separation-v1 音源分离接口，普通聊天模型 API 不适用。</p>
+          <details>
+            <summary>音源分离 API 供应商与接入说明</summary>
+            <p>
+              以下服务可作为云端分离的候选，需要适配为本项目的 ktv-separation-v1
+              接口后使用，不能直接把文档地址填入上方。
+            </p>
+            <ul>
+              <li>
+                <a
+                  href="https://help.aliyun.com/zh/ims/user-guide/audio-and-video-intelligent-production-overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  阿里云 IMS · MusicDemix 声伴分离
+                </a>
+                ：国内服务，输出人声和伴奏；通过 SubmitIProductionJob
+                提交任务。未承诺采用 htdemucs 模型。
+              </li>
+              <li>
+                <a
+                  href="https://cloud.tencent.com/document/product/436/100113"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  腾讯云 COS／数据万象 · 人声分离 API
+                </a>
+                ：通过 VoiceSeparate 任务分离人声与背景音。未承诺采用 htdemucs
+                模型。
+              </li>
+              <li>
+                <a
+                  href="https://replicate.com/cjwbw/demucs/api"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Replicate · Demucs API
+                </a>
+                ：托管 Demucs，通过 API
+                提交音频并取回分轨结果；接入时核对模型版本、费用和网络可达性。
+              </li>
+            </ul>
+            <p>
+              也可在国内 GPU 服务器部署现有分离器，继续使用
+              htdemucs。选择供应商前，可用相同歌曲比较伴奏中的人声残留、乐器损失与处理耗时。
+            </p>
+          </details>
         </>
       )}
       {error && <p role="alert">{error}</p>}

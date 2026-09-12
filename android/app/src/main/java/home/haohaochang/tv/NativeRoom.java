@@ -133,7 +133,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
         });
     sidebar = new LinearLayout(activity);
     sidebar.setOrientation(LinearLayout.VERTICAL);
-    sidebar.setPadding(dp(12), dp(18), dp(12), dp(10));
+    sidebar.setPadding(dp(12), dp(12), dp(12), dp(10));
     sidebar.setBackgroundColor(TvStyle.PANEL);
     addView(sidebar);
     LinearLayout brand = new LinearLayout(activity);
@@ -157,11 +157,11 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     roomBadge.setPadding(dp(10), 0, dp(8), 0);
     roomBadge.setLineSpacing(dp(5), 1);
     roomBadge.setBackground(TvStyle.shape(activity, TvStyle.SURFACE, 9));
-    sidebar.addView(roomBadge, new LinearLayout.LayoutParams(-1, dp(43)));
+    sidebar.addView(roomBadge, new LinearLayout.LayoutParams(-1, dp(32)));
     TextView label = TvStyle.text(activity, "发现你的下一首", 9, TvStyle.MUTED);
     label.setGravity(Gravity.CENTER_VERTICAL);
     label.setPadding(dp(6), 0, 0, 0);
-    sidebar.addView(label, new LinearLayout.LayoutParams(-1, dp(28)));
+    sidebar.addView(label, new LinearLayout.LayoutParams(-1, dp(22)));
     nav("音乐现场", "stage");
     nav("歌名点歌", "songs");
     nav("歌星点歌", "artists");
@@ -169,9 +169,6 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     queueButton = nav("已点歌曲", "queue");
     nav("在线找歌", "online");
     sidebar.addView(new View(activity), new LinearLayout.LayoutParams(1, 0, 1));
-    Button join = TvStyle.button(activity, "扫码点歌", "手机扫码加入歌房", this::join);
-    TvStyle.icon(join, "qr");
-    sidebar.addView(join, new LinearLayout.LayoutParams(-1, dp(34)));
     Button settings = TvStyle.button(activity, "设置", "设置", actions::settings);
     TvStyle.icon(settings, "settings");
     LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(-1, dp(32));
@@ -222,7 +219,8 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     TvStyle.iconOnly(lyricToggle, "lyrics");
     controls.addView(lyricToggle, new LinearLayout.LayoutParams(dp(44), -1));
     leftAdjust = adjustGroup(new double[] {10, 3, .5}, false);
-    controls.addView(leftAdjust, new LinearLayout.LayoutParams(0, -1, 1));
+    controls.addView(new View(activity), new LinearLayout.LayoutParams(0, 1, 1));
+    controls.addView(leftAdjust, new LinearLayout.LayoutParams(dp(132), -1));
     LinearLayout mainControls = new LinearLayout(activity);
     mainControls.setGravity(Gravity.CENTER);
     LinearLayout.LayoutParams centerParams = new LinearLayout.LayoutParams(dp(148), -1);
@@ -243,7 +241,8 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     TvStyle.iconOnly(next, "next");
     mainControls.addView(next, new LinearLayout.LayoutParams(dp(44), -1));
     rightAdjust = adjustGroup(new double[] {.5, 3, 10}, true);
-    controls.addView(rightAdjust, new LinearLayout.LayoutParams(0, -1, 1));
+    controls.addView(rightAdjust, new LinearLayout.LayoutParams(dp(132), -1));
+    controls.addView(new View(activity), new LinearLayout.LayoutParams(0, 1, 1));
     fullscreen = TvStyle.button(activity, "全屏", "全屏播放", () -> setFull(!full));
     TvStyle.iconOnly(fullscreen, "screen");
     controls.addView(fullscreen, new LinearLayout.LayoutParams(dp(44), -1));
@@ -359,15 +358,30 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     lyricInfo.setLayoutParams(adjustmentParams);
     FrameLayout.LayoutParams controlsParams =
         new FrameLayout.LayoutParams(-1, dp(44), full ? Gravity.BOTTOM : Gravity.CENTER_VERTICAL);
-    controlsParams.leftMargin = full ? dp(16) : dp(284);
+    controlsParams.leftMargin = dp(16);
     controlsParams.rightMargin = dp(16);
     controlsParams.bottomMargin = full ? dp(7) : 0;
     controls.setLayoutParams(controlsParams);
     sidebar.setVisibility(full ? GONE : VISIBLE);
     catalogue.setVisibility(!full && !tab.equals("stage") ? VISIBLE : GONE);
     lyrics.setVisibility(lyricsVisible && full ? VISIBLE : GONE);
+    ViewGroup overlayParent = full ? stage : sidebar;
+    if (overlay.getParent() != overlayParent) {
+      ((ViewGroup) overlay.getParent()).removeView(overlay);
+      if (full) {
+        FrameLayout.LayoutParams p =
+            new FrameLayout.LayoutParams(dp(176), -2, Gravity.TOP | Gravity.RIGHT);
+        p.topMargin = dp(20);
+        p.rightMargin = dp(22);
+        stage.addView(overlay, p);
+      } else {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(112), -2);
+        p.gravity = Gravity.CENTER_HORIZONTAL;
+        sidebar.addView(overlay, sidebar.getChildCount() - 1, p);
+      }
+    }
     overlay.fullscreen(full);
-    lyricToggle.setVisibility(full ? VISIBLE : GONE);
+    lyricToggle.setVisibility(full ? VISIBLE : INVISIBLE);
     stage.setContentDescription(full ? "演唱画面，按下键打开控制，左右键微调歌词" : "演唱画面，确认键全屏");
     updateAdjustmentVisibility();
   }
@@ -753,7 +767,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
                 + (current.optBoolean("ambient") ? "随机播放 · " : "")
                 + voice
             : "点一首歌，开启今晚的好时光");
-    int offset = playback.optInt("lyricsOffsetMs");
+    long offset = playback.optLong("lyricsOffsetMs");
     offsetLabel.setText(
         offset == 0
             ? "歌词原始时间"
@@ -792,7 +806,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
               ? "客厅的舞台，留给你"
               : current.optString("title") + "\n" + current.optString("artist"));
     }
-    lyrics.offset(lyricBaseOffset + playback.optInt("lyricsOffsetMs") / 1000.0);
+    lyrics.offset(lyricBaseOffset + playback.optLong("lyricsOffsetMs") / 1000.0);
     queueButton.setText("已点歌曲  " + queueCount);
     catalogue.queue(state);
     overlay.queue(queue);
@@ -833,7 +847,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     lyrics.lyrics(
         timeline,
         current.optDouble("duration"),
-        lyricBaseOffset + playback.optInt("lyricsOffsetMs") / 1000.0,
+        lyricBaseOffset + playback.optLong("lyricsOffsetMs") / 1000.0,
         color,
         (float) style.optDouble("size", 48),
         style.optString("font", "sans-serif"));

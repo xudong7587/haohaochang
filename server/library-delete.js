@@ -3,6 +3,7 @@ import { lstat, realpath, readdir, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { inside, safeMedia } from "./media-utils.js";
 import { currentSong, withSongWrite } from "./song-writes.js";
+import { intakeCleanupSources } from "./local-intake.js";
 
 export async function deletionPlan(store, id, roots, cache, legacyCache) {
   const song = currentSong(store, id);
@@ -111,6 +112,7 @@ export function libraryDeleteApi({
   cache,
   legacyCache,
   emit,
+  snapshot,
 }) {
   const allowed = [...roots, downloads, cache, legacyCache].filter(Boolean);
   async function inboxPlan(body) {
@@ -139,6 +141,16 @@ export function libraryDeleteApi({
     const targets = [
       { path: file, directory: false, size: info.size, modified: info.mtimeMs },
     ];
+    for (const sidecar of await intakeCleanupSources(store, file, downloads)) {
+      const sideInfo = await lstat(sidecar.file);
+      if (!sideInfo.isFile()) throw new Error("附属文件不是普通文件");
+      targets.push({
+        path: sidecar.file,
+        directory: false,
+        size: sideInfo.size,
+        modified: sideInfo.mtimeMs,
+      });
+    }
     return {
       title: path.basename(file),
       targets,
@@ -152,9 +164,11 @@ export function libraryDeleteApi({
     const plan = await inboxPlan(req.body);
     if (req.body.token !== plan.token)
       throw new Error("文件已变化，请重新查看删除清单");
-    await rm(plan.targets[0].path);
+    for (const target of plan.targets) await rm(target.path);
     for (const job of store.db
-      .prepare("SELECT id,payload FROM jobs WHERE kind='import'")
+      .prepare(
+        "SELECT id,payload FROM jobs WHERE kind IN ('import','local-intake')",
+      )
       .all()) {
       if (JSON.parse(job.payload).file === plan.targets[0].path)
         store.db.prepare("DELETE FROM jobs WHERE id=?").run(job.id);
@@ -173,6 +187,7 @@ export function libraryDeleteApi({
       req.params.id,
       async (song) => {
         if (
+          snapshot?.().ambient?.song_id === song.id ||
           store.db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
         )
           throw new Error("请先移出播放队列");

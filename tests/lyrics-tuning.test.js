@@ -20,11 +20,11 @@ test("KTV countdown and lyric frame follow seeking and offsets without replacing
   assert.equal(lyricFrame(lines, 0, 25).next.text, "第二句");
   assert.equal(lyricFrame(lines, 16, 25).index, 1);
   assert.equal(lyricFrame(lines, 5, 25).index, -1);
-  assert.equal(clampLyricsOffset(100000), 30000);
-  assert.equal(clampLyricsOffset(-100000), -30000);
+  assert.equal(clampLyricsOffset(100000), 100000);
+  assert.equal(clampLyricsOffset(-100000), -100000);
 });
 
-test("song-specific lyric offset updates are shared, clamped and reject stale queue entries", async (t) => {
+test("song-specific lyric offset updates are shared, persistent beyond thirty seconds and reject stale queue entries", async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-lyric-offset-"));
   const service = createApp({
     dataDir: path.join(dir, "data"),
@@ -85,7 +85,7 @@ test("song-specific lyric offset updates are shared, clamped and reject stale qu
   }
   store.set("lyrics-offset:first", 29900);
   response = await call({ deltaMs: 1000 });
-  assert.equal((await response.json()).playback.lyricsOffsetMs, 30000);
+  assert.equal((await response.json()).playback.lyricsOffsetMs, 30900);
   response = await call({ reset: true });
   assert.equal((await response.json()).playback.lyricsOffsetMs, 0);
   assert.deepEqual(
