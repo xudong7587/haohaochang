@@ -136,7 +136,7 @@ export function createApp(options = {}) {
       onIdle: () => db.close(),
     },
   );
-  const { addJob, work } = scheduler;
+  const { addJob, work, deleteJob } = scheduler;
   const discovery = startDiscovery({
     store,
     work,
@@ -148,6 +148,7 @@ export function createApp(options = {}) {
           process.env.KTV_LOCAL_ONLY !== "1")),
   });
   const routeContext = {
+    deleteJob,
     discovery,
     app,
     admin,

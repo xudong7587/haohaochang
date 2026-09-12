@@ -3,7 +3,7 @@ import { taskProgress } from "./task-progress.js";
 export function taskStatus(store) {
   const rows = store.db
     .prepare(
-      "SELECT * FROM jobs WHERE status IN ('queued','running','waiting-worker','review') OR id IN (SELECT id FROM jobs ORDER BY created DESC LIMIT 100) ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'waiting-worker' THEN 1 WHEN 'queued' THEN 2 WHEN 'review' THEN 3 ELSE 4 END, CASE WHEN status='queued' THEN created ELSE -created END",
+      "SELECT * FROM jobs WHERE status IN ('queued','running','waiting-worker','review','cancelling') OR id IN (SELECT id FROM jobs ORDER BY created DESC LIMIT 100) ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'waiting-worker' THEN 1 WHEN 'queued' THEN 2 WHEN 'review' THEN 3 ELSE 4 END, CASE WHEN status='queued' THEN created ELSE -created END",
     )
     .all();
   const checkpoints = store.db

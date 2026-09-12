@@ -1,0 +1,71 @@
+name: Refresh stable Docker image
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: stable-docker-hotfix
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24', cache: npm}
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Verify current stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(gh api repos/$GITHUB_REPOSITORY/releases/latest --jq .tag_name)" = "v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.release.outputs.image }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+          cache-from: type=gha,scope=ktv
+          cache-to: type=gha,mode=max,scope=ktv
+      - name: Verify container before replacing stable tags
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}:sha-${{ github.sha }}
+        run: |
+          docker run -d --name hotfix -e ADMIN_PASSWORD=ci-hotfix-password-123 -p 3210:3210 "$IMAGE"
+          for n in $(seq 1 30); do
+            if curl -fsS http://localhost:3210/api/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:3210/api/health
+          docker exec hotfix node -e "import('./server/task-cancellation.js').then(m=>{if(!m.cancellableDownload({kind:'download'}))process.exit(1)})"
+          docker exec hotfix ffmpeg -version
+      - name: Refresh the existing version and latest
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          VERSION: ${{ steps.release.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/$GITHUB_REPOSITORY/releases/latest --jq .tag_name)" = "v$VERSION"
+          test "$(gh api repos/$GITHUB_REPOSITORY/commits/main --jq .sha)" = "$GITHUB_SHA"
+          docker buildx imagetools create -t "$IMAGE:$VERSION" -t "$IMAGE:v$VERSION" -t "$IMAGE:latest" "$IMAGE:sha-$GITHUB_SHA"
+      - name: Logs
+        if: always()
+        run: docker logs hotfix || true

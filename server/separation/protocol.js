@@ -1,3 +1,8 @@
+import {
+  taskFetch,
+  taskDelay,
+  checkTaskCancellation,
+} from "../task-cancellation.js";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, openAsBlob } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -10,7 +15,7 @@ export const providerHeaders = (config) =>
   config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
 export async function checkProvider(config, timeout = 15000) {
   if (!config.endpoint) throw new Error("请先填写分离服务地址");
-  const response = await fetch(`${config.endpoint}/health`, {
+  const response = await taskFetch(`${config.endpoint}/health`, {
     headers: providerHeaders(config),
     signal: AbortSignal.timeout(timeout),
     redirect: "error",
@@ -54,7 +59,10 @@ export function hasProviderCheckpoint(store, song, config) {
 }
 async function fingerprint(file) {
   const hash = createHash("sha256");
-  for await (const chunk of createReadStream(file)) hash.update(chunk);
+  for await (const chunk of createReadStream(file)) {
+    checkTaskCancellation();
+    hash.update(chunk);
+  }
   return hash.digest("hex");
 }
 async function saveResult(
@@ -77,7 +85,7 @@ async function saveResult(
     throw Object.assign(new Error("分离结果必须由配置的服务同源提供"), {
       terminal: true,
     });
-  const response = await fetch(url, {
+  const response = await taskFetch(url, {
     headers: providerHeaders(config),
     signal: AbortSignal.timeout(300000),
     redirect: "error",
@@ -176,7 +184,7 @@ export async function runProviderJob(
       form.set("end", String(clip.end));
     }
     form.set("title", `${song.artist} - ${song.title}`);
-    const response = await fetch(
+    const response = await taskFetch(
       `${config.endpoint}/${clip ? "clip" : "separate"}`,
       {
         method: "POST",
@@ -207,10 +215,9 @@ export async function runProviderJob(
     }
     if (Date.now() > deadline)
       throw new Error("AI 分离超过 30 分钟，请在后台重试；将继续查询原任务");
-    if (!firstPoll)
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    if (!firstPoll) await taskDelay(pollInterval);
     firstPoll = false;
-    const poll = await fetch(`${config.endpoint}/jobs/${result.id}`, {
+    const poll = await taskFetch(`${config.endpoint}/jobs/${result.id}`, {
       headers: providerHeaders(config),
       signal: AbortSignal.timeout(20000),
       redirect: "error",

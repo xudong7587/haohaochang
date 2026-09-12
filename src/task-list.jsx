@@ -43,6 +43,7 @@ const stages = {
 };
 const statusLabels = {
   running: "处理中",
+  cancelling: "取消并清理中",
   queued: "排队中",
   uploading: "上传中",
   "waiting-worker": "等待 PC 上线",
@@ -55,7 +56,8 @@ export function taskGroup(job) {
   if (completedTask(job)) return "history";
   if (["failed", "waiting-worker", "review"].includes(job.status))
     return "attention";
-  if (["running", "uploading"].includes(job.status)) return "running";
+  if (["running", "uploading", "cancelling"].includes(job.status))
+    return "running";
   return "queued";
 }
 const groups = [

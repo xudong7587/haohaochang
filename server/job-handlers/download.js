@@ -1,3 +1,5 @@
+import { prepareTaskDirectory } from "../task-files.js";
+import { checkTaskCancellation } from "../task-cancellation.js";
 import path from "node:path";
 import { clipOnPc, waitingWorker } from "../clipping.js";
 import { withBiliCookie } from "../sources.js";
@@ -25,6 +27,8 @@ export async function download(job, payload, context) {
   if (job.kind === "download") {
     const ai = get("ai", {});
     if (payload.onlineSelection && !ai.pcEndpoint) throw waitingWorker();
+    const workspace = await prepareTaskDirectory(downloads, job.id);
+    checkTaskCancellation();
     context.report?.("downloading");
     const split =
       payload.onlineSelection &&
@@ -32,20 +36,13 @@ export async function download(job, payload, context) {
     const downloaded = split
       ? await downloadBiliTracks(
           payload.url,
-          path.join(downloads, ".ktv-online", "dash"),
+          path.join(workspace, "dash"),
           get("favorites", {}).cookie,
           payload.quality,
           payload.expectedHeight,
         )
       : await withBiliCookie(get("favorites", {}).cookie, dir, (file) =>
-          downloadVideo(
-            payload.url,
-            payload.onlineSelection
-              ? path.join(downloads, ".ktv-online", "sources")
-              : downloads,
-            file,
-            payload.quality,
-          ),
+          downloadVideo(payload.url, workspace, file, payload.quality),
         );
     const original = downloaded.file;
     if (payload.clip) context.report?.("clipping");
@@ -57,7 +54,7 @@ export async function download(job, payload, context) {
         job,
         payload,
         videoFile,
-        downloads,
+        workspace,
         true,
       );
       if (payload.clip) {
@@ -79,7 +76,7 @@ export async function download(job, payload, context) {
           file,
         );
       }
-    } else file = await clipOnPc(store, job, payload, original, downloads);
+    } else file = await clipOnPc(store, job, payload, original, workspace);
     const info = await stat(file);
     const cleanupSources = await Promise.all(
       [
@@ -91,6 +88,7 @@ export async function download(job, payload, context) {
         return { file: source, signature: value.size + ":" + value.mtimeMs };
       }),
     );
+    checkTaskCancellation();
     addJob("import", {
       cleanupSources,
       file,

@@ -1,3 +1,4 @@
+import { taskSignal } from "./task-cancellation.js";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { setPriority, constants } from "node:os";
@@ -9,6 +10,8 @@ export function run(
   onOutput,
 ) {
   return new Promise((resolve, reject) => {
+    const task = taskSignal();
+    task?.throwIfAborted();
     const media = /^ffmpeg(?:\.exe)?$/i.test(path.basename(binary));
     if (media) {
       // Bound both decoder and encoder pools on the NAS; demucs runs on PC.
@@ -25,6 +28,7 @@ export function run(
     }
     const child = spawn(binary, args, {
       windowsHide: true,
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
     if (media && child.pid) {
@@ -35,13 +39,34 @@ export function run(
     let out = "",
       err = "",
       failure;
+    const kill = () => {
+      if (process.platform !== "win32" && child.pid) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+          return;
+        } catch {}
+      }
+      child.kill("SIGKILL");
+    };
+    const abort = () => {
+      failure = task.reason;
+      kill();
+    };
+    task?.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(() => {
       failure = new Error("处理超时，请稍后重试");
-      child.kill("SIGKILL");
+      kill();
     }, timeout);
     child.stdout.on("data", (d) => {
+      if (task?.aborted) return;
       out += d;
-      onOutput?.(d.toString());
+      try {
+        onOutput?.(d.toString());
+      } catch (error) {
+        failure = error;
+        kill();
+        return;
+      }
       if (out.length > maxOutput) {
         failure = new Error("工具输出过大");
         child.kill("SIGKILL");
@@ -52,6 +77,7 @@ export function run(
     });
     child.on("error", (e) => {
       clearTimeout(timer);
+      task?.removeEventListener("abort", abort);
       reject(
         new Error(
           e.code === "ENOENT"
@@ -62,6 +88,7 @@ export function run(
     });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
+      task?.removeEventListener("abort", abort);
       code === 0 && !failure
         ? resolve(out)
         : reject(

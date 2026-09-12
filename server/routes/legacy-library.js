@@ -1,3 +1,4 @@
+import { cancellableDownload } from "../task-cancellation.js";
 import { withSongWrite } from "../song-writes.js";
 import { saveSongMetadata } from "../song-metadata.js";
 import { replaceVideo } from "../video-replacement.js";
@@ -22,6 +23,7 @@ export function legacyLibraryApi({
   roots,
   downloads,
   addJob,
+  deleteJob,
   work,
   emit,
   enqueue,
@@ -121,11 +123,10 @@ export function legacyLibraryApi({
     emit("tasks", {});
     res.json({ ok: true });
   });
-  app.delete("/api/admin/jobs/:id", admin, (req, res) => {
-    const job = db
-      .prepare("SELECT status FROM jobs WHERE id=?")
-      .get(req.params.id);
+  app.delete("/api/admin/jobs/:id", admin, async (req, res) => {
+    const job = db.prepare("SELECT * FROM jobs WHERE id=?").get(req.params.id);
     if (!job) throw fail(404, "任务不存在或已删除");
+    if (cancellableDownload(job)) return res.json(await deleteJob(job.id));
     if (job.status !== "failed")
       throw fail(409, "只能删除失败任务记录，请等待正在处理的任务结束");
     db.prepare("DELETE FROM jobs WHERE id=? AND status='failed'").run(

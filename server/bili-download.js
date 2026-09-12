@@ -1,3 +1,8 @@
+import {
+  taskSignal,
+  taskFetch,
+  checkTaskCancellation,
+} from "./task-cancellation.js";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
@@ -34,7 +39,7 @@ export async function downloadBiliTracks(
 ) {
   quality = videoQuality(quality);
   // Resolve on every attempt: expired credentials must not reuse an old low-quality cache.
-  const streams = await resolve(url, cookie, fetch, quality, true);
+  const streams = await resolve(url, cookie, taskFetch, quality, true);
   requireDownloadHeight(streams.previewHeight, quality);
   const id = createHash("sha256")
     .update(
@@ -104,10 +109,11 @@ export async function downloadStream(
   value,
   target,
   maximum,
-  { backups = [], fetcher = fetch } = {},
+  { backups = [], fetcher = taskFetch } = {},
 ) {
   let last;
   for (const url of biliStreamCandidates(value, backups)) {
+    checkTaskCancellation();
     const temporary = target + "." + randomUUID() + ".part";
     const controller = new AbortController();
     const deadline = setTimeout(() => controller.abort(), 1800000);
@@ -115,7 +121,9 @@ export async function downloadStream(
     try {
       const response = await openBiliStream(url, {
         fetcher,
-        signal: controller.signal,
+        signal: taskSignal()
+          ? AbortSignal.any([controller.signal, taskSignal()])
+          : controller.signal,
       });
       clearTimeout(stalled);
       stalled = setTimeout(() => controller.abort(), 30000);
@@ -153,7 +161,11 @@ export async function downloadStream(
           },
         }),
         createWriteStream(temporary, { flags: "wx" }),
-        { signal: controller.signal },
+        {
+          signal: taskSignal()
+            ? AbortSignal.any([controller.signal, taskSignal()])
+            : controller.signal,
+        },
       );
       if (
         !bytes ||
@@ -164,6 +176,7 @@ export async function downloadStream(
       await rename(temporary, target);
       return;
     } catch (error) {
+      checkTaskCancellation();
       last = error;
     } finally {
       clearTimeout(deadline);

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import express from "express";
@@ -100,6 +100,20 @@ service.store.db
     "clipping",
     Date.now(),
   );
+const cancelFolder = path.join(
+  dir,
+  "db",
+  "downloads",
+  ".ktv-jobs",
+  "active-download",
+);
+await mkdir(cancelFolder, { recursive: true });
+await writeFile(path.join(cancelFolder, "video.part"), "partial download");
+service.store.db
+  .prepare(
+    "INSERT INTO jobs(id,kind,payload,status,stage,created) VALUES('active-download','download',?, 'running','downloading',?)",
+  )
+  .run(JSON.stringify({ title: "卡住的下载", artist: "测试歌手" }), Date.now());
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.BROWSER_CHANNEL
@@ -150,9 +164,11 @@ try {
   await retryRow.getByRole("button", { name: "重试", exact: true }).click();
   await page.waitForFunction(
     () =>
-      !document.querySelector(
-        '[data-task-id="nas-retry-failure"] .task-actions button',
-      ),
+      ![
+        ...document.querySelectorAll(
+          '[data-task-id="nas-retry-failure"] .task-actions button',
+        ),
+      ].some((button) => button.textContent === "重试"),
   );
   assert.equal(
     service.store.db
@@ -160,9 +176,10 @@ try {
       .get().status,
     "queued",
   );
+  page.once("dialog", (dialog) => dialog.accept());
   await page
     .locator('[data-task-id="nas-delete-failure"]')
-    .getByRole("button", { name: "删除", exact: true })
+    .getByRole("button", { name: "取消并删除", exact: true })
     .click();
   await page.waitForFunction(
     () => !document.querySelector('[data-task-id="nas-delete-failure"]'),
@@ -173,9 +190,42 @@ try {
       .get(),
     undefined,
   );
-  for (const name of ["检查更新", "安装新版", "取消更新"]) assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
+  const activeRow = page.locator('[data-task-id="nas-active-download"]');
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await activeRow
+    .getByRole("button", { name: "取消并删除", exact: true })
+    .click();
+  assert.ok(
+    service.store.db
+      .prepare("SELECT id FROM jobs WHERE id='active-download'")
+      .get(),
+  );
+  assert.ok(await stat(path.join(cancelFolder, "video.part")));
+  page.once("dialog", (dialog) => dialog.accept());
+  await activeRow
+    .getByRole("button", { name: "取消并删除", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => !document.querySelector('[data-task-id="nas-active-download"]'),
+  );
+  assert.equal(
+    service.store.db
+      .prepare("SELECT id FROM jobs WHERE id='active-download'")
+      .get(),
+    undefined,
+  );
+  await assert.rejects(stat(cancelFolder), { code: "ENOENT" });
+  for (const name of ["检查更新", "安装新版", "取消更新"])
+    assert.equal(
+      await page.getByRole("button", { name, exact: true }).count(),
+      0,
+    );
   assert.deepEqual(updateCalls, []);
-  assert.ok(!(await page.locator("body").textContent()).includes("never-forward-update-secret"));
+  assert.ok(
+    !(await page.locator("body").textContent()).includes(
+      "never-forward-update-secret",
+    ),
+  );
   assert.equal(
     await page.getByText("已整理旧歌曲", { exact: true }).isVisible(),
     false,

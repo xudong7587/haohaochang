@@ -1,3 +1,5 @@
+import { cancellableDownload, withTaskSignal } from "./task-cancellation.js";
+import { cleanTaskFiles } from "./task-files.js";
 import { needsPoster } from "./song-poster.js";
 import { randomUUID, createHash } from "node:crypto";
 import { runJob } from "./jobs.js";
@@ -10,6 +12,8 @@ export function createScheduler(
   { enabled = true, execute = runJob, onIdle = () => {} } = {},
 ) {
   const { db, get, set, store, cache, emit, enqueue } = dependencies;
+  const active = new Map(),
+    deleting = new Map();
   let running = 0,
     stopped = false;
   let resolveStop;
@@ -144,6 +148,66 @@ export function createScheduler(
     setImmediate(work);
     return id;
   }
+  async function deleteJob(id) {
+    if (store.readOnlyMedia)
+      throw Object.assign(new Error("只读模式不能清理下载文件"), {
+        status: 409,
+      });
+    if (deleting.has(id)) return deleting.get(id);
+    const job = db.prepare("SELECT * FROM jobs WHERE id=?").get(id);
+    if (!job)
+      throw Object.assign(new Error("任务不存在或已删除"), { status: 404 });
+    if (
+      !cancellableDownload(job) ||
+      !["queued", "running", "waiting-worker", "failed", "cancelling"].includes(
+        job.status,
+      )
+    )
+      throw Object.assign(
+        new Error("此任务不能取消；仅下载任务支持取消并清理"),
+        { status: 409 },
+      );
+    db.prepare(
+      "UPDATE jobs SET status='cancelling',stage='cancelling',error='' WHERE id=?",
+    ).run(id);
+    emit("tasks", {});
+    const operation = (async () => {
+      try {
+        const execution = active.get(id);
+        execution?.controller.abort(
+          Object.assign(new Error("用户取消下载"), { code: "TASK_CANCELLED" }),
+        );
+        if (execution) await execution.done;
+        await cleanTaskFiles(store, dependencies.downloads, id);
+        db.prepare("DELETE FROM settings WHERE key LIKE ?").run(
+          `separation:${id}:%`,
+        );
+        db.prepare("DELETE FROM jobs WHERE id=? AND status='cancelling'").run(
+          id,
+        );
+        emit("tasks", {});
+        return { ok: true };
+      } catch (error) {
+        db.prepare(
+          "UPDATE jobs SET stage='cleanup-failed',error=? WHERE id=?",
+        ).run(error.message, id);
+        emit("tasks", {});
+        throw error;
+      } finally {
+        deleting.delete(id);
+        if (stopped && !running && !deleting.size) finishStop();
+      }
+    })();
+    deleting.set(id, operation);
+    return operation;
+  }
+  // A power loss during cancellation must never restart the cancelled download.
+  for (const job of db
+    .prepare("SELECT * FROM jobs WHERE status='cancelling'")
+    .all()) {
+    if (enabled && cancellableDownload(job))
+      setImmediate(() => deleteJob(job.id).catch(() => {}));
+  }
   async function work() {
     if (running >= 4 || stopped || enabled === false) return;
     const jobSong = (j) => songIdFor(JSON.parse(j.payload));
@@ -168,6 +232,13 @@ export function createScheduler(
       );
     if (!job) return;
     running++;
+    const controller = new AbortController();
+    let finished;
+    const done = new Promise((resolve) => {
+      finished = resolve;
+    });
+    active.set(job.id, { controller, done });
+    const checkCancelled = () => controller.signal.throwIfAborted();
     setImmediate(work);
     db.prepare(
       "UPDATE jobs SET status='running',started=?,finished=NULL WHERE id=?",
@@ -176,6 +247,7 @@ export function createScheduler(
     const payload = JSON.parse(job.payload);
     try {
       const report = (stage) => {
+        checkCancelled();
         db.prepare("UPDATE jobs SET stage=? WHERE id=?").run(stage, job.id);
         emit("tasks", {});
       };
@@ -186,6 +258,7 @@ export function createScheduler(
       const context = {
         ...dependencies,
         addJob: (kind, child) => {
+          checkCancelled();
           const fresh = JSON.parse(
             db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id)
               .payload,
@@ -204,18 +277,19 @@ export function createScheduler(
         report,
       };
       const songId = songIdFor(payload);
+      const invoke = () =>
+        withTaskSignal(
+          cancellableDownload(job) ? controller.signal : undefined,
+          () => execute(job, payload, context),
+        );
       const outcome = songId
-        ? await withSongWrite(
-            store,
-            songId,
-            () => execute(job, payload, context),
-            {
-              expectedRevision: payload.expectedRevision,
-              jobId: job.id,
-              wait: true,
-            },
-          )
-        : await execute(job, payload, context);
+        ? await withSongWrite(store, songId, invoke, {
+            expectedRevision: payload.expectedRevision,
+            jobId: job.id,
+            wait: true,
+          })
+        : await invoke();
+      checkCancelled();
       if (outcome === "review") return;
       db.prepare(
         "UPDATE jobs SET status='done',stage='done',error='' WHERE id=?",
@@ -264,6 +338,7 @@ export function createScheduler(
         }
       }
     } catch (e) {
+      if (controller.signal.aborted) return;
       if (e.code === "WAITING_WORKER") {
         db.prepare(
           "UPDATE jobs SET status='waiting-worker',stage='waiting-worker',error=? WHERE id=?",
@@ -304,20 +379,23 @@ export function createScheduler(
         Date.now(),
         job.id,
       );
+      active.delete(job.id);
+      finished();
       running--;
       emit("library", {});
       emit();
-      if (stopped && !running) finishStop();
+      if (stopped && !running && !deleting.size) finishStop();
       else setImmediate(work);
     }
   }
   return {
     addJob,
+    deleteJob,
     work,
     stop() {
       if (stopped) return stoppedPromise;
       stopped = true;
-      if (!running) finishStop();
+      if (!running && !deleting.size) finishStop();
       return stoppedPromise;
     },
   };

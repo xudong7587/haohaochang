@@ -1,3 +1,4 @@
+import { taskFetch } from "../task-cancellation.js";
 import { videoQuality, qualityChoices } from "../../shared/video-quality.js";
 import { signWbi } from "./bili-wbi.js";
 const headers = (cookie) => ({
@@ -19,7 +20,7 @@ const frameRate = (value) => {
 };
 
 export const bilibiliProvider = {
-  async search(query, cookie = "", fetcher = fetch, page = 1) {
+  async search(query, cookie = "", fetcher = taskFetch, page = 1) {
     const url = new URL("https://api.bilibili.com/x/web-interface/search/type");
     url.search = new URLSearchParams({
       search_type: "video",
@@ -46,7 +47,7 @@ export const bilibiliProvider = {
       provider: "bilibili",
     }));
   },
-  async metadata(url, cookie = "", fetcher = fetch) {
+  async metadata(url, cookie = "", fetcher = taskFetch) {
     const parsed = new URL(url),
       id = parsed.pathname.split("/").filter(Boolean).pop();
     const endpoint = new URL("https://api.bilibili.com/x/web-interface/view");
@@ -83,7 +84,7 @@ export const bilibiliProvider = {
   async preview(
     url,
     cookie = "",
-    fetcher = fetch,
+    fetcher = taskFetch,
     quality = "highest",
     download = false,
   ) {
