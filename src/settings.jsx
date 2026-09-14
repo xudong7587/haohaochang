@@ -310,10 +310,16 @@ function NPUSettings() {
             <input
               type="url"
               value={config.npuEndpoint || ""}
-              placeholder="http://127.0.0.1:8001"
+              placeholder="按下方部署方式填写地址"
+              aria-describedby="npu-endpoint-help"
               onChange={(e) => update("npuEndpoint", e.target.value)}
             />
           </label>
+          <p id="npu-endpoint-help">
+            两个容器都用 host 网络：http://127.0.0.1:8000；同一 Compose
+            桥接网络：http://separator-npu:8000；使用配套 NPU LAN 配置（8001
+            映射到 8000）：http://127.0.0.1:8001。以实际配置为准。
+          </p>
           <label>
             NPU 服务密钥
             <input
