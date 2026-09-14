@@ -1,6 +1,7 @@
 # v1.0.4
 
 - NAS 主服务与普通 CPU 分离镜像支持 amd64／ARM64，同一个标签自动匹配架构；32 位 ARM 不支持。
+- CPU 分离镜像补齐 SoundFile 音频读写后端。
 - Intel NPU 仍仅支持 amd64；ARM64 可使用 PC、CPU 分离或外部 API。
 - 已安装 v1.0.3 APK／PC 的用户无需因 ARM 支持单独更新客户端。
 
