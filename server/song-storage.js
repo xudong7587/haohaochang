@@ -28,7 +28,7 @@ export async function compactSongVideos(
   const result = { files: 0, bytes: 0 };
   const base = store.get("package-base:" + song.id),
     current = store.get("package:" + song.id);
-  if (!base || !current || dryRun || busy()) return result;
+  if (!base || !current || busy()) return result;
   const root = await realpath(cache),
     resolvedBase = path.resolve(base),
     picture = path.join(current, "画面.mp4");
@@ -39,7 +39,9 @@ export async function compactSongVideos(
     !inside(resolvedBase, path.resolve(current))
   )
     return result;
-  const health = await inspectPackage(store, song, current);
+  const health = await inspectPackage(store, song, current, {
+    persist: !dryRun,
+  });
   if (
     !health.video?.available ||
     !health.vocal?.available ||
@@ -69,6 +71,33 @@ export async function compactSongVideos(
     return refs;
   };
   const original = path.resolve(song.path);
+  if (dryRun) {
+    for (const directory of new Set([resolvedBase, path.resolve(current)])) {
+      if ((await realpath(directory)) !== directory) continue;
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const file = path.join(directory, entry.name);
+        if (
+          !ownedVideo.test(entry.name) ||
+          !entry.isFile() ||
+          entry.isSymbolicLink() ||
+          file === picture ||
+          blocked().has(file) ||
+          busy()
+        )
+          continue;
+        if ((await realpath(file)) !== file) continue;
+        // An original video can only retire after its audio is preserved.
+        if (file === original) {
+          const info = await probe(file);
+          if (!info.hasVideo || !info.audio.length) continue;
+        }
+        const info = await lstat(file);
+        result.files++;
+        if (info.nlink === 1) result.bytes += info.size;
+      }
+    }
+    return result;
+  }
   let sourceSignature;
   if (
     inside(resolvedBase, original) &&

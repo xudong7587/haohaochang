@@ -1,4 +1,4 @@
-# NAS Intel NPU 分离 · v1.0.4
+# NAS Intel NPU 分离 · v1.0.5
 
 本版把 v0.4.6.rc1 的实验功能合回主程序。需在本版本发布后使用对应镜像；本地构建与协议测试不等于你的 NAS 已通过模型实测。
 
@@ -10,7 +10,7 @@
 4. 在“设置与任务 → 备用 AI”找到“NAS NPU · 实验功能”，勾选“启用 NAS NPU 后备”，检测并保存。Compose 中的服务地址与密钥会作为默认值；启用 NPU 同时启用分离调度。
 5. 首次启动会检测设备、编译 htdemucs 并运行短音频验证。检测成功后再用一首歌测试伴奏质量；未就绪时查看分离器日志，不要反复重新下载模型。
 
-镜像分别是 `ghcr.io/xudong7587/haohaochang:1.0.4` 与 `ghcr.io/xudong7587/haohaochang-separator-npu:1.0.4`。NPU 使用独立版本标签，不改变普通 CPU／PC 分离器镜像。
+镜像分别是 `ghcr.io/xudong7587/haohaochang:1.0.5` 与 `ghcr.io/xudong7587/haohaochang-separator-npu:1.0.5`。NPU 使用独立版本标签，不改变普通 CPU／PC 分离器镜像。
 
 ## 设备与资源
 

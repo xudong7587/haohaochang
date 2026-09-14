@@ -201,6 +201,7 @@ export async function cleanResourceVersions(store, cache, options = {}) {
     started: Date.now(),
     songs: 0,
     removed: 0,
+    files: 0,
     bytes: 0,
     errors: [],
   };
@@ -209,6 +210,7 @@ export async function cleanResourceVersions(store, cache, options = {}) {
       const result = await cleanSongVersions(store, id, cache, options);
       report.songs++;
       report.removed += result.removed;
+      report.files += (result.sourceFiles || 0) + (result.legacyFiles || 0);
       report.bytes += result.bytes;
     } catch (error) {
       if (error.code !== "SONG_BUSY")

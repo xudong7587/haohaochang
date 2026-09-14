@@ -5,7 +5,7 @@
 # Standalone bridge deployment. Do not combine with the LAN file.
 services:
   ktv:
-    image: ghcr.io/xudong7587/haohaochang:1.0.4
+    image: ghcr.io/xudong7587/haohaochang:1.0.5
     ports: ['3210:3210']
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (12+ characters)}
@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     init: true
   separator-npu:
-    image: ghcr.io/xudong7587/haohaochang-separator-npu:1.0.4
+    image: ghcr.io/xudong7587/haohaochang-separator-npu:1.0.5
     user: '0:0'
     devices: ['/dev/accel/accel0:/dev/accel/accel0']
     environment:

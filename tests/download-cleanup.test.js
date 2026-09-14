@@ -87,6 +87,13 @@ test("download cleanup requires a complete package and unchanged unreferenced so
       "INSERT INTO jobs(id,kind,payload,status,created) VALUES('using','download',?,'running',0)",
     )
     .run(JSON.stringify({ file: files.shared }));
+  const previousReport = store.get("download-cleanup");
+  assert.equal(
+    (await cleanImportedDownloads(store, downloads, { dryRun: true })).removed,
+    1,
+  );
+  await access(files.good);
+  assert.deepEqual(store.get("download-cleanup"), previousReport);
   assert.equal((await cleanImportedDownloads(store, downloads)).removed, 1);
   await assert.rejects(access(files.good));
   for (const name of ["changed", "shared", "failed", "outside"])

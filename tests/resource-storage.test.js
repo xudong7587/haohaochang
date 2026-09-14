@@ -24,6 +24,7 @@ import { stageResources } from "../server/resource-publication.js";
 import { cleanSongVersions } from "../server/resource-cleanup.js";
 import { resourceManifest } from "../server/resource-manifest.js";
 import { probe } from "../server/media-utils.js";
+import { scheduleResourceCleanup } from "../server/resource-cleanup-schedule.js";
 
 process.env.FFMPEG = ffmpeg;
 process.env.FFPROBE = ffprobe.path;
@@ -117,6 +118,15 @@ test("consolidating managed standard songs leaves one video and preserves audio,
   assert.equal((await cleanSongVersions(store, "song", cache)).removed, 0);
   assert.ok((await videos()).length > 2);
   store.db.prepare("DELETE FROM queue").run();
+  const preview = await cleanSongVersions(store, "song", cache, {
+    dryRun: true,
+  });
+  assert.ok(preview.sourceFiles > 0);
+  assert.ok((await videos()).length > 2);
+  assert.equal(
+    store.db.prepare("SELECT path FROM songs WHERE id='song'").get().path,
+    source,
+  );
   await cleanSongVersions(store, "song", cache);
   assert.equal((await videos()).length, 1);
   song = store.db.prepare("SELECT * FROM songs WHERE id='song'").get();
@@ -207,6 +217,44 @@ async function fixture(t) {
     });
   return { root, cache, source, store, song, dir, edit, clean };
 }
+
+test("periodic cleanup queues only reclaimable work and does not repeat after cleanup", async (t) => {
+  const f = await fixture(t);
+  const jobs = [];
+  const check = (options = {}) =>
+    scheduleResourceCleanup({
+      store: f.store,
+      cache: f.cache,
+      downloads: path.join(f.root, "downloads"),
+      addJob: (kind) => {
+        jobs.push(kind);
+        f.store.db
+          .prepare(
+            "INSERT INTO jobs(id,kind,payload,status,created) VALUES('cleanup',?,'{}','queued',0)",
+          )
+          .run(kind);
+      },
+      ...options,
+    });
+  assert.equal(await check(), false);
+  const old = f.dir();
+  await f.edit("[00:00.00]new lyrics");
+  assert.equal(await check({ isPlaying: () => true }), false);
+  assert.equal(await check({ stopped: () => true }), false);
+  assert.equal(await check(), true);
+  assert.ok((await readdir(old)).length > 0, "preflight must not delete");
+  assert.equal(
+    f.store.get("resource-cleanup"),
+    undefined,
+    "preflight must not write reports",
+  );
+  assert.equal(await check(), false, "pending work must not duplicate");
+  await f.clean();
+  f.store.db.prepare("UPDATE jobs SET status='done' WHERE id='cleanup'").run();
+  assert.equal(await check(), false);
+  assert.equal(await check(), false);
+  assert.deepEqual(jobs, ["resource-cleanup"]);
+});
 
 test("metadata revisions share immutable audio; lyrics and failed writes remain isolated", async (t) => {
   const f = await fixture(t),

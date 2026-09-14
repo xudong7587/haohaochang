@@ -16,7 +16,12 @@ async function bounded(action) {
     waiting.shift()?.();
   }
 }
-export async function inspectPackage(store, song, directory) {
+export async function inspectPackage(
+  store,
+  song,
+  directory,
+  { persist = true } = {},
+) {
   const previous = store.get("package-health:" + song.id, {}),
     result = {};
   for (const [kind, name] of Object.entries(resourceNames)) {
@@ -114,6 +119,7 @@ export async function inspectPackage(store, song, directory) {
       };
   }
   if (
+    persist &&
     store.get("package:" + song.id) === directory &&
     JSON.stringify(previous) !== JSON.stringify(result)
   )

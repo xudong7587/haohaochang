@@ -11,7 +11,11 @@ function paths(value, found = new Set()) {
     Object.values(value).forEach((v) => paths(v, found));
   return found;
 }
-export async function cleanImportedDownloads(store, downloads, { id } = {}) {
+export async function cleanImportedDownloads(
+  store,
+  downloads,
+  { id, dryRun = false } = {},
+) {
   const result = { removed: 0, bytes: 0, skipped: 0 };
   let root;
   try {
@@ -37,7 +41,9 @@ export async function cleanImportedDownloads(store, downloads, { id } = {}) {
           inside(root, path.resolve(song.path))
         )
           return;
-        const health = await inspectPackage(store, song, directory);
+        const health = await inspectPackage(store, song, directory, {
+          persist: !dryRun,
+        });
         if (
           !health.vocal?.available ||
           !health.backing?.available ||
@@ -106,7 +112,7 @@ export async function cleanImportedDownloads(store, downloads, { id } = {}) {
               result.skipped++;
               continue;
             }
-            await unlink(absolute);
+            if (!dryRun) await unlink(absolute);
             result.removed++;
             result.bytes += info.size;
           } catch (e) {
@@ -119,6 +125,7 @@ export async function cleanImportedDownloads(store, downloads, { id } = {}) {
       result.error = e.message.slice(0, 300);
     }
   }
-  store.set("download-cleanup", { ...result, checkedAt: Date.now() });
+  if (!dryRun)
+    store.set("download-cleanup", { ...result, checkedAt: Date.now() });
   return result;
 }

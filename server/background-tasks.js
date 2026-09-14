@@ -9,11 +9,14 @@ import { queueMissingPosters } from "./poster-backfill.js";
 import { filesUnder, importKey } from "./library.js";
 import { inside } from "./media-utils.js";
 import { intakeRoot, intakeKey } from "./local-intake.js";
+import { scheduleResourceCleanup } from "./resource-cleanup-schedule.js";
 export function startBackgroundTasks({
   store,
   roots,
   downloads,
   cache,
+  legacyCache,
+  isPlaying,
   addJob,
   enabled,
 }) {
@@ -38,15 +41,22 @@ export function startBackgroundTasks({
   setImmediate(schedulePosters);
   const posterTimer = setInterval(schedulePosters, 60000);
   posterTimer.unref();
+  let cleanupPromise;
   const scheduleCleanup = () => {
-    if (stopped || !enabled) return;
-    if (
-      !db
-        .prepare("SELECT id FROM songs WHERE created < ? LIMIT 1")
-        .get(Date.now() - 10 * 60 * 1000)
-    )
-      return;
-    addJob("resource-cleanup", {});
+    if (stopped || !enabled || cleanupPromise) return;
+    cleanupPromise = scheduleResourceCleanup({
+      store,
+      cache,
+      downloads,
+      addJob,
+      legacyCache,
+      isPlaying,
+      stopped: () => stopped,
+    })
+      .catch((error) => console.error("旧资源检查失败:", error.message))
+      .finally(() => {
+        cleanupPromise = null;
+      });
   };
   setImmediate(scheduleCleanup);
   const cleanupTimer = setInterval(scheduleCleanup, 15 * 60 * 1000);
@@ -83,6 +93,10 @@ export function startBackgroundTasks({
     try {
       const files = await filesUnder(downloads),
         settled = new Set();
+      // Imported or removed files must not remain in this process-wide history.
+      const present = new Set(files);
+      for (const file of observed.keys())
+        if (!present.has(file)) observed.delete(file);
       for (const file of files) {
         const info = await stat(file),
           signature = info.size + ":" + info.mtimeMs;
@@ -149,7 +163,7 @@ export function startBackgroundTasks({
       clearInterval(favoritesTimer);
       clearInterval(cleanupTimer);
       clearInterval(posterTimer);
-      return Promise.all([recoveryPromise, credentialsPromise]);
+      return Promise.all([recoveryPromise, credentialsPromise, cleanupPromise]);
     },
   };
 }

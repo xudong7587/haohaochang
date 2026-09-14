@@ -233,6 +233,8 @@ export function createApp(options = {}) {
     roots,
     downloads,
     cache,
+    legacyCache,
+    isPlaying: (id) => snapshot().ambient?.song_id === id,
     addJob,
     enabled: options.worker !== false && !store.readOnlyMedia,
   });
