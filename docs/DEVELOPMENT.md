@@ -123,3 +123,7 @@ B站流帧率可能来自整毫秒时间间隔（62.5 vs 60、30.303 vs 30）；
 Android `SongCache` 是当前歌曲专用缓存，复用 Media3 CacheDataSource；停止播放器后取消预取，等待网络写入退出再释放与删除，不能在仍读取时删除。不可用缓存回退直读。租约容忍仅限服务端租约有效期内，认证、接管、后台静音和看门狗仍保留。新增 `SongCacheTest`、RoomSession 网络抖动测试和网页租约回归。
 
 可选 NPU 安装见 [NPU.md](NPU.md)，普通镜像及 PC 不加载 NPU 依赖；NPU 镜像独立构建。恢复代码后保留任务取消的 taskFetch／taskSignal 逻辑。`tests/bili-credentials.test.js` 使用协议替身，不能把它称为真实长期凭证维护验收。
+
+## 多架构发布
+
+`publish.yml` 用 ubuntu-latest 和 ubuntu-24.04-arm 原生构建 amd64／arm64 主服务及 CPU 分离镜像。每个架构先发布 SHA 加架构的临时标签并启动验证；CPU 分离额外运行 `scripts/check-separator-runtime.py`，不下载模型，仅验证原生依赖、音频读写和小模型推理。全部通过后合并版本 manifest、校验架构列表，再更新 latest；Intel NPU 只构建 amd64。workflow_dispatch 可在打标签前验证当前分支，不更新 latest。

@@ -5,7 +5,7 @@
 # Standalone Linux LAN deployment. Keep original data/media/download paths.
 services:
   ktv:
-    image: ghcr.io/xudong7587/haohaochang:1.0.3
+    image: ghcr.io/xudong7587/haohaochang:1.0.4
     network_mode: host
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (12+ characters)}
@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     init: true
   separator-npu:
-    image: ghcr.io/xudong7587/haohaochang-separator-npu:1.0.3
+    image: ghcr.io/xudong7587/haohaochang-separator-npu:1.0.4
     user: '0:0'
     devices: ['/dev/accel/accel0:/dev/accel/accel0']
     ports: ['127.0.0.1:8001:8000']

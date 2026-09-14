@@ -12,5 +12,5 @@ RUN python npu_model.py /opt/models
 COPY DEMUCS-LICENSE.txt INTEL-MODEL-CARD.md /opt/models/
 COPY app.py job_store.py inference.py upload_guard.py clipping.py video_encoding.py npu_inference.py npu_detection.py smoke_npu.py ./
 ENV SEPARATION_BACKEND=openvino-npu SEPARATION_DEVICE=NPU SEPARATION_CONCURRENCY=1 NPU_MODEL_PATH=/opt/models/htdemucs_fwd.xml NPU_CACHE_DIR=/data/npu-cache
-LABEL org.opencontainers.image.version="1.0.3" org.opencontainers.image.description="Experimental Intel NPU htdemucs worker"
+LABEL org.opencontainers.image.version="1.0.4" org.opencontainers.image.description="Experimental Intel NPU htdemucs worker"
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

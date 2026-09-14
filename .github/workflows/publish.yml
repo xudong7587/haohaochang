@@ -9,19 +9,36 @@ permissions:
 jobs:
   publish:
     if: ${{ !contains(github.ref_name, '.rc') }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - context: .
             suffix: ''
             dockerfile: Dockerfile
+            arch: amd64
+            runner: ubuntu-latest
+          - context: .
+            suffix: ''
+            dockerfile: Dockerfile
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - context: ./separator
             suffix: '-separator'
             dockerfile: separator/Dockerfile
+            arch: amd64
+            runner: ubuntu-latest
+          - context: ./separator
+            suffix: '-separator'
+            dockerfile: separator/Dockerfile
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - context: ./separator
             suffix: '-separator-npu'
             dockerfile: separator/Dockerfile.npu
+            arch: amd64
+            runner: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Image name
@@ -37,29 +54,31 @@ jobs:
         id: meta
         with:
           images: ${{ steps.image.outputs.name }}
-          flavor: latest=false
+          flavor: |
+            latest=false
+            suffix=-${{ matrix.arch }}
           tags: |
-            type=ref,event=tag
-            type=match,pattern=v(.*),group=1
             type=sha,format=long
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
+          platforms: linux/${{ matrix.arch }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.suffix || 'ktv' }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.suffix || 'ktv' }}
+          cache-from: type=gha,scope=${{ matrix.suffix || 'ktv' }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.suffix || 'ktv' }}-${{ matrix.arch }}
       - name: Verify published container
         env:
-          IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}-${{ matrix.arch }}
           KIND: ${{ matrix.suffix }}
+          ARCH: ${{ matrix.arch }}
         run: |
           docker pull "$IMAGE"
+          test "$(docker image inspect "$IMAGE" --format '{{.Architecture}}')" = "$ARCH"
           if [ -z "$KIND" ]; then
-            docker run -d --name verify -e ADMIN_PASSWORD=ci-smoke-password-123 -p 3210:3210 "$IMAGE"
+            docker run -d --name verify -e ADMIN_PASSWORD=ci-smoke-password-123 -e KTV_LOCAL_ONLY=1 -p 127.0.0.1:3210:3210 "$IMAGE"
             for n in $(seq 1 20); do
               if curl -fsS http://localhost:3210/api/health; then break; fi
               sleep 2
@@ -73,12 +92,16 @@ jobs:
             docker exec verify mv /app/check-poster-runtime.mjs /app/scripts/check-poster-runtime.mjs
             docker exec verify node scripts/check-poster-runtime.mjs
           else
-            docker run -d --name verify -p 8000:8000 "$IMAGE"
+            docker run -d --name verify -p 127.0.0.1:8000:8000 "$IMAGE"
             for n in $(seq 1 20); do
               if curl -fsS http://localhost:8000/health; then break; fi
               sleep 2
             done
             curl -fsS http://localhost:8000/health
+            if [ "$KIND" = '-separator' ]; then
+              docker cp scripts/check-separator-runtime.py verify:/app/check-separator-runtime.py
+              docker exec verify python /app/check-separator-runtime.py
+            fi
           fi
       - name: Container logs
         if: always()
@@ -94,10 +117,22 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Promote verified images to latest
+      - name: Publish verified architecture manifests
         run: |
           [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          for suffix in '' '-separator' '-separator-npu'; do
+            image="ghcr.io/${GITHUB_REPOSITORY,,}${suffix}"
+            sources=("$image:sha-$GITHUB_SHA-amd64")
+            if [ "$suffix" != '-separator-npu' ]; then
+              sources+=("$image:sha-$GITHUB_SHA-arm64")
+            fi
+            docker buildx imagetools create -t "$image:$GITHUB_REF_NAME" -t "$image:${GITHUB_REF_NAME#v}" -t "$image:sha-$GITHUB_SHA" "${sources[@]}"
+            docker buildx imagetools inspect "$image:$GITHUB_REF_NAME" --raw > manifest.json
+            expected='["amd64","arm64"]'
+            if [ "$suffix" = '-separator-npu' ]; then expected='["amd64"]'; fi
+            jq -e --argjson expected "$expected" '[.manifests[].platform | select(.os == "linux") | .architecture] | sort | unique == $expected' manifest.json
+          done
           for suffix in '' '-separator'; do
             image="ghcr.io/${GITHUB_REPOSITORY,,}${suffix}"
-            docker buildx imagetools create -t "$image:latest" "$image:sha-$GITHUB_SHA"
+            docker buildx imagetools create -t "$image:latest" "$image:$GITHUB_REF_NAME"
           done
