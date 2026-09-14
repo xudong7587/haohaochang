@@ -118,6 +118,27 @@ try {
   console.log("lease: opening web");
   const web1 = await open("/play");
   await playing(web1);
+  // One transient heartbeat failure must not interrupt an otherwise valid lease.
+  let failedBeat;
+  const failureSeen = new Promise((resolve) => {
+    failedBeat = resolve;
+  });
+  await web1.route("**/api/player/heartbeat", async (route) => {
+    await route.fulfill({
+      status: 503,
+      json: { error: "temporary NAS failure" },
+    });
+    failedBeat();
+  });
+  await failureSeen;
+  await web1.waitForTimeout(250);
+  assert.equal(
+    await web1.evaluate(() =>
+      document.querySelector("video")?._audioTracks?.some((t) => !t.el.paused),
+    ),
+    true,
+  );
+  await web1.unroute("**/api/player/heartbeat");
   const first = await owner();
   const web2 = await open("/play");
   await playing(web2);

@@ -1,3 +1,8 @@
+import {
+  ensureBiliCredentials,
+  biliCredentialStatus,
+  credentialsFromCookie,
+} from "./bili-credentials.js";
 import QRCode from "qrcode";
 import { randomUUID } from "node:crypto";
 const headers = {
@@ -32,7 +37,13 @@ export async function biliLoginStatus(cookie = "", fetcher = fetch) {
 export function biliLoginApi({ app, admin, store, fetcher = fetch }) {
   const sessions = new Map();
   app.get("/api/admin/bilibili/status", admin, async (req, res) =>
-    res.json(await biliLoginStatus(store.get("favorites", {}).cookie, fetcher)),
+    res.json({
+      ...(await biliLoginStatus(
+        await ensureBiliCredentials(store, { fetcher }),
+        fetcher,
+      )),
+      ...biliCredentialStatus(store),
+    }),
   );
   app.post("/api/admin/bilibili/qr", admin, async (req, res) => {
     for (const [id, value] of sessions)
@@ -111,12 +122,16 @@ export function biliLoginApi({ app, admin, store, fetcher = fetch }) {
       store.set("favorites", {
         ...store.get("favorites", {}),
         cookie,
-        credentials: {},
+        credentials: credentialsFromCookie(
+          cookie,
+          body.data?.refresh_token || "",
+        ),
       });
       sessions.delete(req.params.id);
       return res.json({
         status: "success",
         ...status,
+        ...biliCredentialStatus(store),
         message: "已登录，在线下载和收藏夹同步共用此账号",
       });
     }

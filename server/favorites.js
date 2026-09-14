@@ -1,3 +1,4 @@
+import { credentialsFromCookie } from "./bili-credentials.js";
 export function favoriteConfig(input, old = {}) {
   let id = String(input.favoriteId || "").trim();
   if (id.startsWith("http")) {
@@ -14,15 +15,18 @@ export function favoriteConfig(input, old = {}) {
     "dedeuserid",
     "ac_time_value",
   ];
+  const persisted = old.cookie
+    ? credentialsFromCookie(old.cookie, old.credentials?.ac_time_value || "")
+    : old.credentials || {};
   const credentials = Object.fromEntries(
     fields.map((k) => [
       k,
-      input.clearCookie
-        ? ""
-        : String(input[k] || old.credentials?.[k] || "").trim(),
+      input.clearCookie ? "" : String(input[k] || persisted[k] || "").trim(),
     ]),
   );
-  const supplied = Object.values(credentials).some(Boolean);
+  const supplied = fields.some(
+    (key) => key !== "ac_time_value" && !!input[key],
+  );
   const cookie = input.clearCookie
     ? ""
     : String(input.cookie || old.cookie || "").slice(0, 16000);
@@ -38,7 +42,11 @@ export function favoriteConfig(input, old = {}) {
     enabled: input.enabled === true,
     favoriteId: id,
     cookie: assembled,
-    credentials,
+    credentials: input.clearCookie
+      ? credentials
+      : input.cookie
+        ? credentialsFromCookie(cookie, input.ac_time_value || "")
+        : credentials,
     intervalMinutes: Math.max(
       5,
       Math.min(1440, Number(input.intervalMinutes) || 10),

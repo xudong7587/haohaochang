@@ -1,3 +1,4 @@
+import { ensureBiliCredentials } from "../bili-credentials.js";
 import {
   videoQuality,
   previewDownloadHeight,
@@ -112,7 +113,7 @@ export function onlineApi({
   });
   let loginCache;
   app.get("/api/online/bilibili/status", member, async (req, res) => {
-    const cookie = get("favorites", {}).cookie || "";
+    const cookie = await ensureBiliCredentials(store);
     if (
       !loginCache ||
       loginCache.cookie !== cookie ||
@@ -140,7 +141,12 @@ export function onlineApi({
     if (!title || !Number.isInteger(page) || page < 1 || page > 20)
       throw fail(400, "请填写歌名和有效页码");
     res.json(
-      await searchSongs(title, artist, get("favorites", {}).cookie, page),
+      await searchSongs(
+        title,
+        artist,
+        await ensureBiliCredentials(store),
+        page,
+      ),
     );
   });
   app.post("/api/online/preview", member, async (req, res) => {
@@ -152,7 +158,7 @@ export function onlineApi({
     res.json(
       await previews.create(
         canonicalVideo(req.body.url),
-        get("favorites", {}).cookie,
+        await ensureBiliCredentials(store),
         dir,
         {
           refresh: req.body.refresh === true,

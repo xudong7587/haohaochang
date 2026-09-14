@@ -641,6 +641,36 @@ export function LibraryManager({ request, notify, onEdit }) {
             >
               补充歌曲封面
             </button>
+            <button
+              disabled={busy || !chosen.length || !batchSongs.length}
+              onClick={() =>
+                batch(async () => {
+                  const result = [];
+                  for (const row of [...batchSongs]) {
+                    try {
+                      await request("/admin/library/" + row.id, {}, "DELETE");
+                      result.push({
+                        id: row.id,
+                        title: row.title,
+                        status: "success",
+                        message: "已移出曲库，可恢复",
+                      });
+                    } catch (error) {
+                      result.push({
+                        id: row.id,
+                        title: row.title,
+                        status: "failed",
+                        message: error.message,
+                      });
+                    }
+                    setResults([...result]);
+                  }
+                  return result;
+                })
+              }
+            >
+              移出所选歌曲
+            </button>
             {tab === "standard" && (
               <details className="library-tools">
                 <summary>曲库维护</summary>

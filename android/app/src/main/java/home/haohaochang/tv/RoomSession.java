@@ -73,18 +73,23 @@ final class RoomSession implements AutoCloseable {
     beats.execute(
         () -> {
           try {
+            long sentAt = SystemClock.elapsedRealtime();
             JSONObject result = (JSONObject) api.json("/api/player/heartbeat", body);
             main.post(
                 () -> {
                   if (closed) return;
                   beating = false;
                   if (!active || revoked) return;
+                  if (SystemClock.elapsedRealtime() - sentAt >= 10000) {
+                    listener.permission(false);
+                    return;
+                  }
                   JSONObject owner = result.optJSONObject("owner");
                   if (owner != null && owner.optLong("revision") < ownerRevision) return;
                   ownerRevision = owner == null ? ownerRevision : owner.optLong("revision");
                   owned = true;
                   claiming = false;
-                  lastBeat = SystemClock.elapsedRealtime();
+                  lastBeat = sentAt;
                   listener.permission(true);
                 });
           } catch (Exception error) {
@@ -92,16 +97,23 @@ final class RoomSession implements AutoCloseable {
                 () -> {
                   if (closed) return;
                   beating = false;
-                  listener.permission(false);
                   if (error instanceof RoomApi.Failure) {
                     String code = ((RoomApi.Failure) error).code;
                     if (code.equals("PLAYER_REPLACED")) revoked = true;
                     if (code.equals("PLAYER_BUSY")) claiming = false;
                   }
-                  listener.error(message(error), auth(error));
+                  connectionFailure(error);
                 });
           }
         });
+  }
+
+  private void connectionFailure(Exception error) {
+    boolean rejected = error instanceof RoomApi.Failure && ((RoomApi.Failure) error).status < 500 && ((RoomApi.Failure) error).status != 429;
+    if (rejected || revoked || !active || lastBeat == 0 || SystemClock.elapsedRealtime() - lastBeat >= 10000) {
+      listener.permission(false);
+      listener.error(message(error), auth(error));
+    }
   }
 
   private void poll() {
@@ -123,8 +135,7 @@ final class RoomSession implements AutoCloseable {
                 () -> {
                   if (closed) return;
                   polling = false;
-                  listener.permission(false);
-                  listener.error(message(error), auth(error));
+                  connectionFailure(error);
                 });
           }
         });

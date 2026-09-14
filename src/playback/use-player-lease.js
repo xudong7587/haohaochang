@@ -26,6 +26,7 @@ export function usePlayerLease({ request, token, type = "web", activePlayer }) {
     const beat = async () => {
       if (inFlight || !alive || revoked.current) return;
       inFlight = true;
+      const sentAt = Date.now();
       try {
         const result = await Promise.race([
           latestRequest.current(
@@ -50,17 +51,21 @@ export function usePlayerLease({ request, token, type = "web", activePlayer }) {
             return;
           claiming = false;
           owned.current = true;
-          lastSuccess = Date.now();
+          lastSuccess = sentAt;
           setLease(true);
           setLeaseError("");
         }
       } catch (error) {
         if (alive) {
-          setLease(false);
+          const rejected =
+            error.status >= 400 && error.status < 500 && error.status !== 429;
+          if (rejected || !lastSuccess || Date.now() - lastSuccess >= 10000) {
+            setLease(false);
+            setLeaseError(error.message);
+          }
           if (error.code === "PLAYER_REPLACED") revoked.current = true;
           if (["PLAYER_TV_PRIORITY", "PLAYER_BUSY"].includes(error.code))
             claiming = false;
-          setLeaseError(error.message);
         }
       } finally {
         clearTimeout(deadline);

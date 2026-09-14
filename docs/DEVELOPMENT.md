@@ -114,3 +114,12 @@ TV配对由 `/api/tv-pairing` 创建三分钟内存会话，二维码只携带�
 播放器资源由 `/api/playback-assets/:id` 给出，`/api/assets/:id/:kind` 使用 sendFile 直接提供范围请求，无播放时转码。v0.3.13 删除 controller 的 100ms 校时定时器；不得重新引入持续比较音画差／周期 seek。保持显式状态切换、拖动、错误后备的时间对齐，以及租约撤销后的立即静音。PlayerVisuals 只读音频时钟，不设置 currentTime；UI 的空闲菜单计时与播放租约心跳仍保留。APK UA 使用 CSS 全屏以保留 DOM 控件，浏览器继续原生全屏加 CSS 后备。
 
 PC 更新器优先读取 Release 固定名附件 `haohaochang-pc-update.json`（schema=1），包地址固定到对应 tag。运行 `python scripts/package-release.py` 或 `--pc-only` 会生成该清单；发布时必须与版本化 PC ZIP 一起上传，缺少清单时客户端回退 REST API。对清单格式、版本、下载域名、大小和 SHA-256 的校验失败不会静默回退。
+
+
+## v1.0.3 验证与实现约束
+
+B站流帧率可能来自整毫秒时间间隔（62.5 vs 60、30.303 vs 30）；下载后继续核对真实高度、音轨与有效时长，帧率比较用 1 ms 间隔容差。不要退回固定 0.1 fps 门槛。登录轮换位于 `server/bili-credentials.js`，合并并发检查；后台任务和在线预览取流前使用当前凭证。`bili-refresh-confirm` 含待确认的旧令牌，属于秘密设置，不可返回浏览器或日志。
+
+Android `SongCache` 是当前歌曲专用缓存，复用 Media3 CacheDataSource；停止播放器后取消预取，等待网络写入退出再释放与删除，不能在仍读取时删除。不可用缓存回退直读。租约容忍仅限服务端租约有效期内，认证、接管、后台静音和看门狗仍保留。新增 `SongCacheTest`、RoomSession 网络抖动测试和网页租约回归。
+
+可选 NPU 安装见 [NPU.md](NPU.md)，普通镜像及 PC 不加载 NPU 依赖；NPU 镜像独立构建。恢复代码后保留任务取消的 taskFetch／taskSignal 逻辑。`tests/bili-credentials.test.js` 使用协议替身，不能把它称为真实长期凭证维护验收。

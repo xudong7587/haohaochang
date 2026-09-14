@@ -25,6 +25,7 @@ window.request=async(url,body,method)=>{
  if(url==='/admin/inbox/complete-metadata'){Object.assign(window.inbox.find(row=>row.file===body.file),{intakeStage:'staged',tier:'audio',title:'已补齐歌名',artist:body.artistOverride||'测试歌手'});return {id:'local-task'};}
  if(url==='/admin/lyrics-batch')return {results:(body.all?window.songs.filter(row=>!row.lyrics):body.items.map(item=>window.songs.find(row=>row.id===item.id))).map(row=>({id:row.id,title:row.title,status:'success',message:'已加入歌词补充任务'}))};
  if(url==='/admin/organize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已加入整理队列'}))};
+ if(url==='/admin/poster-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已提交'}))};
  if(url==='/admin/standardize-batch')return {results:body.items.map(item=>({id:item.id,status:'success',message:'已排队检查格式并回收旧版本'}))};
  if(url.endsWith('/delete-preview'))return {title:'初始歌名',token:'preview-token',targets:[{path:'/isolated/song-folder',directory:true}]};
  if(url.endsWith('/delete-files')){if(window.failDelete)throw new Error('文件已变化');if(body.token!=='preview-token')throw new Error('无效确认');window.inbox=window.inbox.filter(row=>row.file!==body.file);window.songs=window.songs.filter(row=>row.id!==url.split('/')[3]);window.hiddenSongs=window.hiddenSongs.filter(row=>row.id!==url.split('/')[3]);return {ok:true};}
@@ -119,6 +120,7 @@ try {
   let row = page.locator('[data-song-id="song-a"]');
   assert.deepEqual(await row.locator("header button").allTextContents(), [
     "编辑歌曲",
+    "移出曲库",
   ]);
   await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
   await row.getByRole("button", { name: "维护操作", exact: true }).click();
@@ -291,8 +293,6 @@ try {
     .getByRole("button", { name: "关闭歌曲详情", exact: true })
     .click();
   await page.getByRole("button", { name: /^标准曲库/ }).click();
-  await row.getByRole("button", { name: "编辑歌曲", exact: true }).click();
-  await row.getByRole("button", { name: "维护操作", exact: true }).click();
   await row.getByRole("button", { name: "移出曲库", exact: true }).click();
   await page.getByRole("button", { name: /^已隐藏/ }).click();
   await page.getByRole("button", { name: "恢复歌曲", exact: true }).click();
@@ -728,6 +728,21 @@ try {
   );
   await page.getByRole("button", { name: /^标准曲库/ }).click();
   assert.equal(await page.locator("[data-bundle-id]").count(), 0);
+  await page.evaluate(() => {
+    window.songs = [1,2,3].map(n => ({id:'selected-'+n,title:'批量歌曲'+n,artist:'测试歌手',tier:'standard',status:'ready',metadataRevision:0}));
+    window.calls=[];
+  });
+  await page.getByRole("button", {name:"刷新列表",exact:true}).click();
+  for (const n of [1,2]) await page.locator('[data-song-id="selected-'+n+'"]').getByRole("checkbox").check();
+  await page.getByRole("button",{name:"补充所选缺失歌词",exact:true}).click();
+  await page.getByRole("button",{name:"补充歌曲封面",exact:true}).click();
+  await page.waitForFunction(() => window.calls.some(c=>c.url==='/admin/poster-batch'));
+  for (const url of ['/admin/lyrics-batch','/admin/poster-batch']) {
+    assert.deepEqual(await page.evaluate(url=>window.calls.find(c=>c.url===url).body.items.map(i=>i.id).sort(),url), ['selected-1','selected-2']);
+  }
+  await page.getByRole("button",{name:"移出所选歌曲",exact:true}).click();
+  await page.waitForFunction(() => window.songs.length === 1);
+  assert.equal(await page.evaluate(()=>window.songs[0].id),'selected-3');
   assert.deepEqual(errors, []);
   console.log(
     "Library component browser contracts passed: drafts, candidates, lyrics, hide/restore/permanent delete, six sorting orders with persistence, and SD/HD video labels.",

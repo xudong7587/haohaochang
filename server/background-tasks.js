@@ -1,3 +1,4 @@
+import { ensureBiliCredentials } from "./bili-credentials.js";
 import {
   resumeFavoriteBundles,
   favoriteBundles,
@@ -18,6 +19,18 @@ export function startBackgroundTasks({
 }) {
   const { db, get } = store;
   let stopped = false;
+  let credentialsPromise;
+  const maintainCredentials = () => {
+    if (stopped || !enabled || credentialsPromise) return;
+    credentialsPromise = ensureBiliCredentials(store)
+      .catch(() => {})
+      .finally(() => {
+        credentialsPromise = null;
+      });
+  };
+  setImmediate(maintainCredentials);
+  const credentialsTimer = setInterval(maintainCredentials, 15 * 60000);
+  credentialsTimer.unref();
   const schedulePosters = () => {
     if (stopped || !enabled) return;
     queueMissingPosters({ store, addJob });
@@ -131,11 +144,12 @@ export function startBackgroundTasks({
   return {
     stop() {
       stopped = true;
+      clearInterval(credentialsTimer);
       clearInterval(importer);
       clearInterval(favoritesTimer);
       clearInterval(cleanupTimer);
       clearInterval(posterTimer);
-      return recoveryPromise;
+      return Promise.all([recoveryPromise, credentialsPromise]);
     },
   };
 }

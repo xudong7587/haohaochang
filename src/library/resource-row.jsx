@@ -339,6 +339,19 @@ export function ResourceRow({
           >
             编辑歌曲
           </button>
+          {!review && !row.inbox && (
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await request("/admin/library/" + row.id, {}, "DELETE");
+                  notify("已移出曲库，可在已隐藏页恢复");
+                })
+              }
+            >
+              移出曲库
+            </button>
+          )}
         </div>
       </header>
       {row.missing?.length > 0 && (
@@ -709,7 +722,7 @@ export function ResourceRow({
                   </p>
                   {lyricsCandidates.map((candidate, index) => (
                     <article
-                      className="lyrics-candidate"
+                      className={`lyrics-candidate ${form.lyricsSource?.provider === candidate.provider && form.lyricsSource?.sourceId === candidate.sourceId ? "selected" : ""}`}
                       key={`${candidate.provider}:${candidate.sourceId}:${index}`}
                     >
                       <div>
@@ -733,9 +746,17 @@ export function ResourceRow({
                       <div className="actions">
                         <button
                           disabled={busy || draft.conflict}
+                          aria-pressed={
+                            form.lyricsSource?.provider ===
+                              candidate.provider &&
+                            form.lyricsSource?.sourceId === candidate.sourceId
+                          }
                           onClick={() => useLyrics(candidate)}
                         >
-                          使用这份歌词
+                          {form.lyricsSource?.provider === candidate.provider &&
+                          form.lyricsSource?.sourceId === candidate.sourceId
+                            ? "已选中这份歌词"
+                            : "使用这份歌词"}
                         </button>
                         <details>
                           <summary>预览歌词</summary>
@@ -775,6 +796,20 @@ export function ResourceRow({
               <p className="muted">
                 导入文件或选择候选后，可直接修改歌手名、文字和时间戳；点击下方保存按钮后生效。仅修改署名时请保留原时间戳。
               </p>
+              {!review && (
+                <button
+                  className="primary"
+                  disabled={busy || draft.conflict || !draft.dirty}
+                  onClick={() =>
+                    run(async () => {
+                      await save(false);
+                      notify("歌词已保存");
+                    })
+                  }
+                >
+                  {draft.dirty ? "保存歌词" : "歌词已保存"}
+                </button>
+              )}
               {row.lyricsAlignment && !review && (
                 <p>
                   已按人声起点自动校准{" "}
@@ -851,18 +886,6 @@ export function ResourceRow({
                       音轨高级设置
                     </button>
                   )}
-                  <button
-                    hidden={pane !== "actions"}
-                    disabled={busy}
-                    onClick={() =>
-                      run(async () => {
-                        await request("/admin/library/" + row.id, {}, "DELETE");
-                        notify("已隐藏歌曲，可在已隐藏页恢复");
-                      })
-                    }
-                  >
-                    移出曲库
-                  </button>
                 </>
               )}
             </div>

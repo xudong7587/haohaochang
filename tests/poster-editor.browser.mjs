@@ -201,13 +201,15 @@ try {
       .lyrics,
     "[00:01]旧歌词",
   );
+  assert.equal(await dialog.locator(".lyrics-candidate.selected").count(), 1);
+  assert.equal(await dialog.getByRole("button", {name:"已选中这份歌词"}).getAttribute("aria-pressed"), "true");
   let saved;
   await page.route(`**/api/admin/library/${id}/save`, async (route) => {
     saved = route.request().postDataJSON();
     await route.fulfill({ json: { ok: true, metadataRevision: 1 } });
   });
-  await dialog.getByRole("button", { name: "仅保存信息", exact: true }).click();
-  await dialog.getByRole("status").filter({ hasText: "已保存信息" }).waitFor();
+  await dialog.getByRole("button", { name: "保存歌词", exact: true }).click();
+  await dialog.getByRole("status").filter({ hasText: "歌词已保存" }).waitFor();
   assert.equal(saved.lyricsSource.candidates, undefined);
   assert.equal(saved.lyricsSource.recording.artist, "测试歌手");
   assert.deepEqual(errors, []);

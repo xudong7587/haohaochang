@@ -25,6 +25,20 @@ export function requireDownloadHeight(actual, quality, expected = 0) {
     );
 }
 
+export function requireDownloadFrameRate(actual, expected) {
+  if (!(expected > 0)) return;
+  // Bilibili can report the reciprocal of an integer-millisecond frame
+  // interval: 60 fps -> 1000/16 = 62.5, 30 fps -> 1000/33 = 30.303.
+  // Compare intervals with that quantization tolerance, not a fixed 0.1 fps.
+  if (
+    !(actual > 0) ||
+    (actual + 0.1 < expected && 1000 / actual - 1000 / expected > 1)
+  )
+    throw new Error(
+      `实际视频帧率 ${actual || 0} fps 与所选流 ${expected} fps 不符，请重新取流后重试`,
+    );
+}
+
 const locks = {};
 export async function downloadBiliTracks(
   url,
@@ -62,8 +76,7 @@ export async function downloadBiliTracks(
     const validate = async (audio, video) => {
       const [a, v] = await Promise.all([probe(audio), probe(video)]);
       requireDownloadHeight(v.height, quality, streams.previewHeight);
-      if (streams.previewFps > 0 && v.videoFps + 0.1 < streams.previewFps)
-        throw new Error("实际视频帧率低于所选视频流，请重试下载");
+      requireDownloadFrameRate(v.videoFps, streams.previewFps);
       if (
         !a.audio.length ||
         a.hasVideo ||

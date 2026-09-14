@@ -19,7 +19,7 @@ for document in ['VALIDATION.md', 'DEVELOPMENT.md', 'PROJECT-STATUS.md']:
 guide = guide.replace('(../pc-worker/README.md)', '(https://github.com/xudong7587/haohaochang/blob/main/pc-worker/README.md)')
 
 bundles = {
-    f'haohaochang-nas-v{version}.zip': ['docker-compose.yaml', 'docker-compose.lan.yaml', 'docker-compose.ai.yaml', f'release/haohaochang-tv-v{version}.apk', 'release/实机测试说明.md'],
+    f'haohaochang-nas-v{version}.zip': ['docker-compose.yaml', 'docker-compose.lan.yaml', 'docker-compose.ai.yaml', 'docker-compose.npu.yaml', 'docker-compose.npu.lan.yaml', 'docs/NPU.md', f'release/haohaochang-tv-v{version}.apk', 'release/实机测试说明.md'],
     f'haohaochang-resource-ai-v{version}.zip': ['pc-worker/open.vbs', 'pc-worker/open.ps1', 'pc-worker/start.cmd', 'pc-worker/start.ps1', 'pc-worker/run.py', 'pc-worker/hardware.py',
         'pc-worker/download_runtime.py', 'pc-worker/desktop.py', 'pc-worker/lan.py', 'pc-worker/version.py', 'pc-worker/updater.py', 'pc-worker/update_source.py', 'pc-worker/update_runner.py', 'pc-worker/tray.ps1', 'pc-worker/README.md', 'separator/app.py', 'separator/clipping.py', 'separator/job_store.py', 'separator/inference.py', 'separator/upload_guard.py', 'separator/requirements.txt',
         'separator/video_encoding.py', 'pc-worker/ui/index.html', 'pc-worker/ui/update.js', 'pc-worker/ui/icon.svg', 'pc-worker/ui/icon.png', 'pc-worker/ui/icon.ico'],

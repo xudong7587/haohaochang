@@ -75,6 +75,16 @@ export function BiliLogin({
           限制。部分超清画质需要大会员，原视频也需要提供该画质。
         </p>
       )}
+      {canLogin && account?.loggedIn && (
+        <p className="muted">
+          {account.autoRefresh
+            ? "已启用登录凭证自动维护"
+            : "当前凭证没有刷新令牌；重新扫码可启用自动维护"}
+          {["retrying", "confirm-pending"].includes(account.refreshStatus)
+            ? "，维护暂未完成，将自动重试，现有登录保留。"
+            : "。"}
+        </p>
+      )}
       <div className="actions">
         {canLogin ? (
           <button

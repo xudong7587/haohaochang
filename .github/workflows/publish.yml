@@ -15,8 +15,13 @@ jobs:
         include:
           - context: .
             suffix: ''
+            dockerfile: Dockerfile
           - context: ./separator
             suffix: '-separator'
+            dockerfile: separator/Dockerfile
+          - context: ./separator
+            suffix: '-separator-npu'
+            dockerfile: separator/Dockerfile.npu
     steps:
       - uses: actions/checkout@v4
       - name: Image name
@@ -40,6 +45,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

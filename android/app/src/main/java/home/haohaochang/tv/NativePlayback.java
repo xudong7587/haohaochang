@@ -50,6 +50,7 @@ final class NativePlayback {
   private final SurfaceView surface;
   private final Handler handler = new Handler(Looper.getMainLooper());
   private ExoPlayer player;
+  private SongCache songCache;
   private String origin = "", session = "", requested = "backing", chosen = "";
   private String decoder = "", failedLoad = "", warning = "", error = "";
   private JSONObject resources = new JSONObject();
@@ -113,6 +114,17 @@ final class NativePlayback {
       decoder = "";
       requested = value.optString("variant", "backing");
       lastCommand = SystemClock.elapsedRealtime();
+      try {
+        songCache = new SongCache(activity, httpFactory());
+        for (String kind : new String[] {requested, "video", requested.equals("vocal") ? "backing" : "vocal"}) {
+          JSONObject resource = resources.optJSONObject(kind);
+          if (resource != null) songCache.prefetch(resource.getString("url"));
+        }
+      } catch (Exception unavailable) {
+        if (songCache != null) songCache.close();
+        songCache = null;
+        warning = "临时缓存不可用，正在直接播放";
+      }
       build(Math.max(0, value.optLong("positionMs", 0)));
       return;
     }
@@ -152,17 +164,18 @@ final class NativePlayback {
     return "";
   }
 
+  private DefaultHttpDataSource.Factory httpFactory() {
+    return new DefaultHttpDataSource.Factory()
+        .setUserAgent("HaohaochangNative/" + BuildConfig.VERSION_NAME)
+        .setConnectTimeoutMs(15000).setReadTimeoutMs(20000)
+        .setAllowCrossProtocolRedirects(false);
+  }
+
   private MediaSource source(String kind, int trackType) throws JSONException {
     JSONObject resource = resources.getJSONObject(kind);
-    DefaultHttpDataSource.Factory http =
-        new DefaultHttpDataSource.Factory()
-            .setUserAgent("HaohaochangNative/" + BuildConfig.VERSION_NAME)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(20000)
-            .setAllowCrossProtocolRedirects(false);
     // Native media URLs are NAS asset routes, never arbitrary external URLs.
     MediaSource source =
-        new ProgressiveMediaSource.Factory(http)
+        new ProgressiveMediaSource.Factory(songCache == null ? httpFactory() : songCache.factory())
             .createMediaSource(MediaItem.fromUri(resource.getString("url")));
     if (!legacy) source = new FilteringMediaSource(source, trackType);
     return new OffsetMediaSource(source, PlaybackPolicy.offsetUs(resource.optDouble("offset", 0)));
@@ -376,6 +389,8 @@ final class NativePlayback {
         || !error.isEmpty()) return;
     ended = true;
     updatePlay();
+    if (player != null) player.stop();
+    if (songCache != null) { songCache.close(); songCache = null; }
     report();
   }
 
@@ -461,6 +476,7 @@ final class NativePlayback {
       player.release();
       player = null;
     }
+    if (songCache != null) { songCache.close(); songCache = null; }
     playGate = null;
     picture.setVisibility(View.INVISIBLE);
     videoWidth = videoHeight = 0;

@@ -181,6 +181,28 @@ public class RoomSessionTest {
   }
 
   @Test
+  public void transientPollFailureKeepsLeaseButExpiredHeartbeatStopsPlayback() throws Exception {
+    Events events = new Events();
+    java.util.concurrent.atomic.AtomicBoolean failing = new java.util.concurrent.atomic.AtomicBoolean();
+    try (LocalNas nas = new LocalNas((path, headers, body) -> {
+      if (failing.get()) return new LocalNas.Reply(503, "{}");
+      return new LocalNas.Reply(200, "{}");
+    }); RoomSession session = new RoomSession(new RoomApi(nas.origin(), "test-token"), events)) {
+      session.start();
+      drain();
+      assertTrue(events.allowed);
+      failing.set(true);
+      Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2));
+      drain();
+      assertTrue(events.allowed);
+      assertTrue(events.errors.isEmpty());
+      Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(10));
+      drain();
+      assertFalse(events.allowed);
+    }
+  }
+
+  @Test
   public void transportDoesNotForwardCredentialsAcrossRedirectsAndBoundsResponses()
       throws Exception {
     AtomicInteger calls = new AtomicInteger();

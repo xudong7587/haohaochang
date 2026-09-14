@@ -13,10 +13,16 @@ from upload_guard import UploadGuard
 ROOT = Path(os.getenv('SEPARATION_DATA_DIR', '/data')) / 'jobs'
 jobs = JobStore(ROOT)
 jobs.recover()
-CONCURRENCY = max(1, min(3, int(os.getenv('SEPARATION_CONCURRENCY', '1'))))
+NPU = os.getenv('SEPARATION_BACKEND') == 'openvino-npu'
+MODELS = ['htdemucs'] if NPU else ['htdemucs', 'htdemucs_ft']
+CONCURRENCY = 1 if NPU else max(1, min(3, int(os.getenv('SEPARATION_CONCURRENCY', '1'))))
 pool = concurrent.futures.ThreadPoolExecutor(max_workers=CONCURRENCY)
 app = FastAPI()
 app.add_middleware(UploadGuard)
+if NPU:
+    from npu_detection import NpuDetection
+    detection = NpuDetection()
+    detection.snapshot()
 
 
 def auth(authorization: str = Header(default='')):
@@ -38,11 +44,15 @@ def health():
     if hasattr(app.state, 'updater'):
         app.state.updater.snapshot()
     pending = jobs.pending()
-    return dict(protocol='ktv-separation-v1', models=['htdemucs', 'htdemucs_ft'],
+    detected = detection.snapshot() if NPU else {}
+    return dict(protocol='ktv-separation-v1', models=MODELS,
+        backend='openvino-npu' if NPU else 'demucs', experimental=NPU,
         lanEnabled=getattr(app.state, 'lan', {}).get('enabled', False),
         device=os.getenv('SEPARATION_DEVICE', 'cpu'), pending=pending, concurrency=CONCURRENCY, busy=not jobs.accepting or pending >= CONCURRENCY,
         max_video_upload_bytes=4 * 1024**3,
-        capabilities=['idempotency-key', 'upload-limit', 'restart-recovery', 'video-clip-v1', 'video-prepare-v1', 'video-prepare-v2'])
+        capabilities=['idempotency-key', 'upload-limit', 'restart-recovery'] +
+            ([] if NPU else ['video-clip-v1', 'video-prepare-v1', 'video-prepare-v2']),
+        **({'qualification': detected, 'ready': detected['ready']} if NPU else {}))
 
 
 @app.post('/separate', dependencies=[Depends(auth)])
@@ -51,7 +61,9 @@ async def submit(file: UploadFile = File(...), model: str = Form(...), title: st
     job = None
     created = False
     try:
-        if model not in ('htdemucs', 'htdemucs_ft'):
+        if NPU and not detection.snapshot()['ready']:
+            raise HTTPException(503, 'NPU model is not ready; retry later or use fallback provider')
+        if model not in MODELS:
             raise HTTPException(400, 'Unsupported model')
         if len(idempotency_key) > 120 or any(not (c.isascii() and (c.isalnum() or c in '_-')) for c in idempotency_key):
             raise HTTPException(400, 'Invalid idempotency key')
@@ -118,5 +130,6 @@ def artifact(job: str):
     return FileResponse(file, media_type='audio/wav')
 
 
-from clipping import register as register_clipping
-register_clipping(app, auth, jobs, pool, job_path)
+if not NPU:
+    from clipping import register as register_clipping
+    register_clipping(app, auth, jobs, pool, job_path)

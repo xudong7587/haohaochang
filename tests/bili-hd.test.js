@@ -282,7 +282,7 @@ test("QR login accepts current official account domain and stores credentials on
       });
     if (url.pathname.endsWith("/poll"))
       return json(
-        { code: 0, data: { code } },
+        { code: 0, data: { code, refresh_token: "qr-refresh-fixture" } },
         {
           "Set-Cookie": [
             "SESSDATA=new-fixture; Path=/; Secure",
@@ -358,7 +358,9 @@ test("QR login accepts current official account domain and stores credentials on
   assert.match(saved.cookie, /SESSDATA=new-fixture/);
   assert.equal(saved.favoriteId, "123");
   assert.equal(saved.enabled, true);
-  assert.deepEqual(saved.credentials, {});
+  assert.equal(saved.credentials.sessdata, "new-fixture");
+  assert.equal(saved.credentials.ac_time_value, "qr-refresh-fixture");
+  assert.equal(success.credentials, undefined);
   assert.deepEqual(
     await biliLoginStatus("expired", async () => json({ code: -101 })),
     { loggedIn: false },

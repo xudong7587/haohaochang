@@ -1,3 +1,4 @@
+import { ensureBiliCredentials } from "./bili-credentials.js";
 import {
   analyzeFavoriteBundle,
   processFavoritePart,
@@ -60,6 +61,22 @@ const handlers = {
   "attach-video": attach,
 };
 export async function runJob(job, payload, context) {
+  if (
+    [
+      "download",
+      "favorite-sync",
+      "favorite-download",
+      "acquire",
+      "find-video",
+      "attach",
+      "attach-video",
+      "refresh-video",
+      "upgrade-hd",
+      "import",
+      "organize",
+    ].includes(job.kind)
+  )
+    await ensureBiliCredentials(context.store);
   if (payload.id)
     await migrateSongAssets(payload.id, context.legacyCache, context.cache);
   const handler = handlers[job.kind];

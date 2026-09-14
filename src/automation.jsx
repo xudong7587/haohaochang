@@ -122,7 +122,8 @@ export function Automation({ request, notify, section }) {
             <summary>按 bili-sync 字段填写凭证</summary>
             <p>
               可从原配置逐项复制。填写这些字段后优先使用字段组；ac_time_value
-              仅保留，当前不自动刷新登录。
+              用于自动维护登录。建议本应用独立扫码；与 bili-sync
+              共用同一组刷新凭证时，一端刷新会让另一端的旧凭证失效。
             </p>
             {[
               ["sessdata", "SESSDATA"],
