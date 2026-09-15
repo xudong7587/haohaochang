@@ -34,7 +34,7 @@ NAS 主镜像支持 amd64 与 ARM64。PC GPU 分离需要支持 CUDA 的 NVIDIA 
 
 设置至少 12 位的管理密码，并映射三个目录：`/data` 保存数据库、任务、设置和模型缓存，`/media` 保存正式曲库，`/download` 暂存导入内容。默认端口为 `43210`，升级时沿用原端口和目录。
 
-镜像仍为 `ghcr.io/xudong7587/haohaochang:latest`，可公开拉取。启动后打开 `http://NAS-IP:端口/admin`，输入管理密码。从 v1.0.7／v1.0.8 升级需替换 Compose 并启动整套服务；保留原 data。以后日常只执行 `docker compose pull ktv` 和 `docker compose up -d --no-deps ktv`。完整步骤见 [NAS 安装与升级](docs/NAS安装与升级.md)。
+镜像仍为 `ghcr.io/xudong7587/haohaochang:latest`，可公开拉取。启动后打开 `http://NAS-IP:端口/admin`，输入管理密码。从 v1.0.7／v1.0.8 升级需替换 Compose、拉取新版 ktv 并启动整套服务；保留原 data。以后日常只执行 `docker compose pull ktv` 和 `docker compose up -d --no-deps ktv`。完整步骤见 [NAS 安装与升级](docs/NAS安装与升级.md)。
 
 ### 2. 导入并整理歌曲
 
@@ -70,7 +70,7 @@ Android 电视、手机和平板使用同一份 `haohaochang-tv-v1.1.0.apk`。�
 
 | 更新部分 | 操作 |
 | --- | --- |
-| NAS | 拉取 `ghcr.io/xudong7587/haohaochang:1.1.0` 或 `latest`，重建原容器，保留目录、密码和端口 |
+| NAS | 本次先更换 Compose、拉取新版 ktv 并启动整套服务；以后只更新 ktv，保留目录、密码和端口 |
 | TV／手机／平板 | 下载本版 APK，同签名覆盖安装，保留登录 |
 | PC 整理器 | 等任务完成后退出，解压新版 ZIP 覆盖，保留 `worker.json`、`runtime`、`.venv` 和 `data`，运行 `start.cmd` |
 

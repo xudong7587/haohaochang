@@ -18,13 +18,15 @@ x86 NAS 没有 Intel NPU 时，NPU 状态显示未就绪，任务自动尝试 CP
 1. 等当前整理、分离任务完成，在原 Compose 项目中替换配置。保留原项目名称，避免启动两个主程序共用数据库。
 2. 填回原管理密码、访问端口和三个实际目录。尤其是 `/data`，必须指向旧数据库所在目录。可以直接修改 Compose，也可以复制 `.env.example` 为 `.env` 后填写。
 3. 原端口是 3210 就继续填 3210，默认新安装端口为 43210。不要把新版示例密码覆盖到现有配置。
-4. 启动整套 Compose。这次迁移需要创建独立分离容器，不能只重建 ktv。
+4. 先拉取新版 ktv 镜像，再启动整套 Compose。这次迁移需要创建独立分离容器，不能只重建 ktv。
 
 ```sh
 # Intel / AMD x86-64 NAS，在本包所在目录执行
+docker compose pull ktv
 docker compose up -d
 
-# ARM64 NAS 使用这一条
+# ARM64 NAS 使用以下两条
+docker compose -f docker-compose.arm64.yaml pull ktv
 docker compose -f docker-compose.arm64.yaml up -d
 ```
 

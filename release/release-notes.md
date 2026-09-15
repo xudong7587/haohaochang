@@ -9,7 +9,7 @@ Compose 自动连接同机服务并持久化内部鉴权密钥；PC → NPU → 
 ## 这次如何更新
 
 1. 下载 `haohaochang-nas-v1.1.0.zip`，阅读包内《NAS安装与升级.md》。x86 NAS 用 `docker-compose.yaml`，ARM64 用 `docker-compose.arm64.yaml`。
-2. 等任务完成，沿用原 Compose 项目、密码、端口和 data／曲库／下载目录，替换配置并启动整套服务。这次需要创建独立 CPU／NPU 容器，不能仅拉取主镜像。
+2. 等任务完成，沿用原 Compose 项目、密码、端口和 data／曲库／下载目录，替换配置、拉取新版 ktv 并启动整套服务。这次需要创建独立 CPU／NPU 容器，不能仅拉取主镜像。
 3. 安装 `haohaochang-tv-v1.1.0.apk`，获得原生歌手卡片修正。同签名覆盖保留登录。
 4. 现有 PC 整理器仍兼容；本版重新生成 `haohaochang-resource-ai-v1.1.0.zip`、`haohaochang-preprocess-v1.1.0.zip` 和完整 NAS 附件。
 

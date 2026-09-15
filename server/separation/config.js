@@ -17,7 +17,8 @@ export function providerConfig(input, old = {}) {
     )
       throw new Error("NPU 服务地址格式错误");
   }
-  if (npuEnabled && !npuEndpoint) throw new Error("请填写 NPU 服务地址");
+  if (npuEnabled && !npuEndpoint && !managedSeparation())
+    throw new Error("请填写 NPU 服务地址");
   const endpoint = String(input.endpoint || "")
     .trim()
     .replace(/\/$/, "");

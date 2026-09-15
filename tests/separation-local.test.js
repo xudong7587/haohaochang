@@ -8,6 +8,7 @@ import { configureLocalSeparation } from "../server/separation/local.js";
 import { startEmbeddedSeparation } from "../server/separation/embedded.js";
 import { providerCandidates, cpuConfig, npuConfig } from "../server/separation/providers.js";
 import { createApp } from "../server/app.js";
+import { providerConfig } from "../server/separation/config.js";
 
 test("local worker key survives main restart and invalid key is never overwritten", async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-local-key-"));
@@ -79,4 +80,7 @@ test("Compose connects with generated auth and preserves user switches and legac
   assert.deepEqual(service.store.get("ai"), { ...saved, cpuEnabled: true, enabled: true });
   delete process.env.KTV_NPU_ENDPOINT;
   assert.equal(npuConfig(saved).endpoint, "", "ARM Compose must not reuse a retired NPU address");
+  const arm = providerConfig({ enabled: true, cpuEnabled: true }, saved);
+  assert.equal(arm.npuEnabled, true, "Keep the saved switch when an ARM host has no NPU container");
+  assert.deepEqual(providerCandidates(arm).map((c) => c.npu ? "npu" : "cpu"), ["cpu"]);
 });

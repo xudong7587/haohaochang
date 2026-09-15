@@ -278,7 +278,7 @@ TV、PC 和网页热更新入口暂时隐藏。TV 从 Release 下载 APK 后交�
 
 ### NAS 手动更新
 
-首次从 v1.0.7／v1.0.8 迁移需按 [NAS 安装与升级](NAS安装与升级.md) 替换 Compose 并启动整套服务。以后在 Docker 管理器只拉取、重建 ktv，保留密码、端口和目录映射。命令行方式：
+首次从 v1.0.7／v1.0.8 迁移需按 [NAS 安装与升级](NAS安装与升级.md) 替换 Compose、拉取新版 ktv 并启动整套服务。以后在 Docker 管理器只拉取、重建 ktv，保留密码、端口和目录映射。命令行方式：
 
 ```sh
 docker compose pull ktv
