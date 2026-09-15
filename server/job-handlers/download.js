@@ -1,7 +1,7 @@
 import { prepareTaskDirectory } from "../task-files.js";
 import { checkTaskCancellation } from "../task-cancellation.js";
 import path from "node:path";
-import { clipOnPc, waitingWorker } from "../clipping.js";
+import { clipOnPc } from "../clipping.js";
 import { withBiliCookie } from "../sources.js";
 import { stat } from "node:fs/promises";
 import { downloadVideo } from "../media.js";
@@ -25,8 +25,6 @@ export async function download(job, payload, context) {
     fail,
   } = context;
   if (job.kind === "download") {
-    const ai = get("ai", {});
-    if (payload.onlineSelection && !ai.pcEndpoint) throw waitingWorker();
     const workspace = await prepareTaskDirectory(downloads, job.id);
     checkTaskCancellation();
     context.report?.("downloading");

@@ -1,0 +1,118 @@
+.room-entry {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #12101b;
+  color: #f5f2ff;
+}
+.room-entry-card {
+  width: min(100%, 520px);
+  padding: 36px;
+  border: 1px solid #393244;
+  border-radius: 22px;
+  background: #191623;
+}
+.room-entry-card > svg {
+  color: #c3b2ff;
+}
+.room-entry h1 {
+  font-size: 28px;
+  line-height: 1.4;
+  margin: 20px 0 10px;
+}
+.room-entry p,
+.room-entry small {
+  color: #b9b1c8;
+  line-height: 1.7;
+}
+.room-entry small {
+  display: block;
+  margin-top: 8px;
+}
+.room-entry button {
+  min-height: 48px;
+  background: #332942;
+  color: #f5f2ff;
+  border-color: #54445f;
+}
+.room-entry button.primary {
+  width: 100%;
+  background: #c3b2ff;
+  color: #21182e;
+  margin-top: 20px;
+}
+.room-entry form {
+  margin-top: 30px;
+  padding-top: 24px;
+  border-top: 1px solid #393244;
+}
+.room-entry form > div {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.room-entry input {
+  min-width: 0;
+  width: 100%;
+  background: #252031;
+  color: #fff;
+  border-color: #54445f;
+}
+.room-entry form button {
+  flex: none;
+}
+.room-entry .room-resume {
+  margin-top: 24px;
+  width: 100%;
+}
+.room-entry [role="alert"] {
+  color: #ffb5ac;
+}
+@media (max-width: 550px) {
+  .room-entry-card {
+    padding: 24px;
+  }
+  .room-entry h1 {
+    font-size: 24px;
+  }
+}
+
+.web-room .switch-room {
+  background: transparent;
+  color: #b9b1c8;
+  font-size: 11px;
+  min-height: 28px;
+  padding: 4px 8px;
+  width: 100%;
+}
+.mobile-room-switch {
+  display: none;
+}
+@media (max-width: 950px) and (max-height: 500px) {
+  .tv.web-room.stage-home main > header {
+    display: flex;
+    position: fixed;
+    top: 4px;
+    right: 8px;
+    width: auto;
+    height: 36px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    z-index: 30;
+  }
+  .tv.web-room.stage-home header .breadcrumb { display: none; }
+}
+@media (max-width: 700px), (max-width: 950px) and (max-height: 500px) {
+  .web-room .mobile-room-switch {
+    display: block;
+    padding: 6px;
+    font-size: 11px;
+    background: transparent;
+    color: #b9b1c8;
+  }
+  .web-room header .connection {
+    display: none;
+  }
+}

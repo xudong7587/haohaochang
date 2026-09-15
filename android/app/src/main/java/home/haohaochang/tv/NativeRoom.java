@@ -46,7 +46,8 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private final FrameLayout stage, footer;
   private final LinearLayout sidebar, controls, leftAdjust, rightAdjust, nowPlaying, lyricInfo;
   private final Map<String, Button> navigation = new LinkedHashMap<>();
-  private final TextView subtitle;
+  private final TextView subtitle, roomBadge;
+  private int layoutWidth, layoutHeight;
   private final NativeCatalogue catalogue;
   private final NativeRoomOverlay overlay;
   private final TextView title, status, offsetLabel, stageTitle;
@@ -54,6 +55,9 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   private final Handler handler = new Handler(Looper.getMainLooper());
   private JSONObject current, playback = new JSONObject(), stats = new JSONObject();
   private String tab = "stage", mediaEntry = "", lastEnded = "", error = "", lastStatus = "";
+  private String roomCode = "";
+
+  String roomName() { return roomCode.isEmpty() ? "家庭默认歌房" : "歌房 " + roomCode; }
   private boolean full,
       controlsVisible = true,
       lyricsVisible,
@@ -96,6 +100,9 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
     setFocusable(false);
     session = new RoomSession(api, this);
+    session.deviceType = (getResources().getConfiguration().uiMode
+        & android.content.res.Configuration.UI_MODE_TYPE_MASK)
+        == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ? "tv" : "web";
     stage = new FrameLayout(activity);
     stage.setBackgroundColor(Color.BLACK);
     stage.setFocusable(true);
@@ -134,14 +141,15 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     sidebar = new LinearLayout(activity);
     sidebar.setOrientation(LinearLayout.VERTICAL);
     sidebar.setPadding(dp(12), dp(12), dp(12), dp(10));
-    sidebar.setBackgroundColor(TvStyle.PANEL);
+    sidebar.setBackground(TvStyle.panel(activity));
     addView(sidebar);
     LinearLayout brand = new LinearLayout(activity);
     brand.setGravity(Gravity.CENTER_VERTICAL);
     ImageView mark = new ImageView(activity);
     mark.setImageDrawable(new TvIcon(activity, "mic", ColorStateList.valueOf(Color.WHITE), 22));
     mark.setPadding(dp(6), dp(6), dp(6), dp(6));
-    mark.setBackground(TvStyle.shape(activity, TvStyle.PURPLE, 10));
+    mark.setBackground(TvStyle.surface(activity, 0xffa086ec, 0xff6651bc, 10, 0x30f2e9ff));
+    mark.setElevation(dp(2));
     brand.addView(mark, new LinearLayout.LayoutParams(dp(34), dp(34)));
     LinearLayout wordmark = new LinearLayout(activity);
     wordmark.setOrientation(LinearLayout.VERTICAL);
@@ -152,11 +160,11 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     wordmark.addView(english);
     brand.addView(wordmark);
     sidebar.addView(brand, new LinearLayout.LayoutParams(-1, dp(46)));
-    TextView roomBadge = TvStyle.text(activity, "我的客厅\n已连接 · NAS", 10, TvStyle.MUTED);
+    roomBadge = TvStyle.text(activity, "我的客厅\n已连接 · NAS", 10, TvStyle.MUTED);
     roomBadge.setGravity(Gravity.CENTER_VERTICAL);
     roomBadge.setPadding(dp(10), 0, dp(8), 0);
     roomBadge.setLineSpacing(dp(5), 1);
-    roomBadge.setBackground(TvStyle.shape(activity, TvStyle.SURFACE, 9));
+    roomBadge.setBackground(TvStyle.surface(activity, 0xff2b2339, 0xff211b2b, 9, 0x14e5d2ff));
     sidebar.addView(roomBadge, new LinearLayout.LayoutParams(-1, dp(32)));
     TextView label = TvStyle.text(activity, "发现你的下一首", 9, TvStyle.MUTED);
     label.setGravity(Gravity.CENTER_VERTICAL);
@@ -178,7 +186,8 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     addView(catalogue);
     catalogue.setVisibility(GONE);
     footer = new FrameLayout(activity);
-    footer.setBackgroundColor(TvStyle.PANEL);
+    footer.setBackground(TvStyle.footer(activity));
+    footer.setElevation(dp(4));
     addView(footer);
     nowPlaying = new LinearLayout(activity);
     nowPlaying.setGravity(Gravity.CENTER_VERTICAL);
@@ -187,7 +196,7 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     record.setImageDrawable(
         new TvIcon(activity, "record", ColorStateList.valueOf(TvStyle.ACCENT), 24));
     record.setPadding(dp(8), dp(8), dp(8), dp(8));
-    record.setBackground(TvStyle.shape(activity, 0xff333240, 24));
+    record.setBackground(TvStyle.surface(activity, 0xff4a3c60, 0xff2a2237, 24, 0x20e6d5ff));
     nowPlaying.addView(record, new LinearLayout.LayoutParams(dp(40), dp(40)));
     LinearLayout track = new LinearLayout(activity);
     track.setOrientation(LinearLayout.VERTICAL);
@@ -247,7 +256,8 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     TvStyle.iconOnly(fullscreen, "screen");
     controls.addView(fullscreen, new LinearLayout.LayoutParams(dp(44), -1));
     status = TvStyle.text(activity, "正在连接播放会话…", 13, TvStyle.INK);
-    status.setBackground(TvStyle.shape(activity, 0xee252031, 8));
+    status.setBackground(TvStyle.surface(activity, 0xfa362b46, 0xf5231c2e, 10, 0x25e4d4fa));
+    status.setElevation(dp(3));
     status.setPadding(dp(12), dp(8), dp(12), dp(8));
     FrameLayout.LayoutParams statusParams =
         new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
@@ -257,7 +267,8 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     controlHint.setContentDescription("播放控制提示");
     controlHint.setGravity(Gravity.CENTER);
     controlHint.setPadding(dp(10), dp(6), dp(10), dp(6));
-    controlHint.setBackground(TvStyle.shape(activity, 0xf53a3149, 8));
+    controlHint.setBackground(TvStyle.surface(activity, 0xfa42354f, 0xfa2b2336, 8, 0x30eadcff));
+    controlHint.setElevation(dp(3));
     controlHint.setVisibility(GONE);
     controlHint.setFocusable(false);
     addView(controlHint);
@@ -327,6 +338,45 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
   }
 
   private void layoutRoom() {
+    if (layoutWidth > 0 && layoutWidth < dp(900)) {
+      layoutCompact();
+      return;
+    }
+    catalogue.compact(false);
+    title.setTextSize(14);
+    subtitle.setTextSize(10);
+    LinearLayout mainControls = (LinearLayout) controls.getChildAt(3);
+    LinearLayout.LayoutParams center = new LinearLayout.LayoutParams(dp(148), -1);
+    center.leftMargin = center.rightMargin = dp(8);
+    mainControls.setLayoutParams(center);
+    for (int i = 0; i < mainControls.getChildCount(); i++) {
+      LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(44), -1);
+      if (i == 1) p.leftMargin = p.rightMargin = dp(8);
+      mainControls.getChildAt(i).setLayoutParams(p);
+    }
+    fullscreen.setLayoutParams(new LinearLayout.LayoutParams(dp(44), -1));
+    sidebar.setOrientation(LinearLayout.VERTICAL);
+    sidebar.setPadding(dp(12), dp(12), dp(12), dp(10));
+    for (int i = 0; i < sidebar.getChildCount(); i++) {
+      View child = sidebar.getChildAt(i);
+      child.setVisibility(VISIBLE);
+      if (child instanceof Button) {
+        Button button = (Button) child;
+        button.setBackground(TvStyle.focus(activity));
+        button.setTextColor(TvStyle.ink());
+        button.setTextSize(12);
+        button.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+        button.setPadding(dp(9), 0, dp(6), 0);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(34));
+        p.bottomMargin = dp(5);
+        button.setLayoutParams(p);
+      }
+    }
+    overlay.setVisibility(VISIBLE);
+    for (LinearLayout group : new LinearLayout[] {leftAdjust, rightAdjust}) {
+      group.setLayoutParams(new LinearLayout.LayoutParams(dp(132), -1));
+      for (int i = 0; i < group.getChildCount(); i++) group.getChildAt(i).setVisibility(VISIBLE);
+    }
     int nav = full ? 0 : dp(144), bar = dp(full ? 84 : 72);
     FrameLayout.LayoutParams stageParams = new FrameLayout.LayoutParams(-1, -1);
     stageParams.leftMargin = nav;
@@ -388,15 +438,100 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
 
   @Override
   protected void onMeasure(int widthSpec, int heightSpec) {
+    int width = MeasureSpec.getSize(widthSpec), height = MeasureSpec.getSize(heightSpec);
+    if (layoutWidth != width || layoutHeight != height) {
+      layoutWidth = width;
+      layoutHeight = height;
+      layoutRoom();
+    }
     FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) catalogue.getLayoutParams();
     p.rightMargin = 0;
     super.onMeasure(widthSpec, heightSpec);
   }
 
+  private void layoutCompact() {
+    boolean portrait = layoutHeight > layoutWidth;
+    catalogue.compact(true);
+    int bar = dp(full ? 80 : portrait ? 56 : 48), nav = portrait ? 0 : dp(88), tabs = portrait ? dp(44) : 0;
+    FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1, -1);
+    sp.leftMargin = full ? 0 : nav;
+    sp.topMargin = full ? 0 : tabs;
+    sp.bottomMargin = full ? 0 : bar;
+    stage.setLayoutParams(sp);
+    sidebar.setOrientation(portrait ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+    sidebar.setPadding(dp(4), dp(4), dp(4), dp(4));
+    for (int i = 0; i < sidebar.getChildCount(); i++) {
+      View child = sidebar.getChildAt(i);
+      boolean button = child instanceof Button;
+      child.setVisibility(button ? VISIBLE : GONE);
+      if (button) {
+        Button b = (Button) child;
+        b.setTextSize(portrait ? 9 : 10);
+        b.setTextColor(TvStyle.INK);
+        TvStyle.phoneTab(b);
+        b.setPadding(dp(2), 0, dp(2), 0);
+        b.setCompoundDrawables(null, null, null, null);
+        b.setGravity(Gravity.CENTER);
+        child.setLayoutParams(portrait
+            ? new LinearLayout.LayoutParams(0, -1, 1)
+            : new LinearLayout.LayoutParams(-1, dp(40)));
+      }
+    }
+    FrameLayout.LayoutParams np = new FrameLayout.LayoutParams(portrait ? -1 : nav, portrait ? tabs : -1);
+    np.bottomMargin = portrait ? 0 : bar;
+    sidebar.setLayoutParams(np);
+    sidebar.setVisibility(full ? GONE : VISIBLE);
+    FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-1, -1);
+    cp.leftMargin = nav;
+    cp.topMargin = tabs;
+    cp.bottomMargin = bar;
+    catalogue.setLayoutParams(cp);
+    catalogue.setVisibility(!full && !tab.equals("stage") ? VISIBLE : GONE);
+    footer.setLayoutParams(new FrameLayout.LayoutParams(-1, bar, Gravity.BOTTOM));
+    FrameLayout.LayoutParams track = new FrameLayout.LayoutParams(-1, dp(full ? 26 : 42), full ? Gravity.TOP : Gravity.CENTER_VERTICAL);
+    track.leftMargin = dp(10);
+    track.rightMargin = dp(full ? 130 : 190);
+    nowPlaying.setLayoutParams(track);
+    nowPlaying.getChildAt(0).setVisibility(GONE);
+    title.setTextSize(12);
+    subtitle.setVisibility(full ? GONE : VISIBLE);
+    subtitle.setTextSize(9);
+    FrameLayout.LayoutParams info = new FrameLayout.LayoutParams(-2, dp(30), Gravity.TOP | Gravity.RIGHT);
+    lyricInfo.setLayoutParams(info);
+    offsetLabel.setTextSize(9);
+    FrameLayout.LayoutParams buttons = new FrameLayout.LayoutParams(full ? -1 : dp(180), dp(44), full ? Gravity.BOTTOM : Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+    buttons.leftMargin = dp(4);
+    buttons.rightMargin = dp(4);
+    buttons.bottomMargin = full ? dp(6) : 0;
+    controls.setLayoutParams(buttons);
+    LinearLayout mainControls = (LinearLayout) controls.getChildAt(3);
+    LinearLayout.LayoutParams center = new LinearLayout.LayoutParams(dp(full ? 148 : 116), -1);
+    center.leftMargin = center.rightMargin = dp(full ? 8 : 4);
+    mainControls.setLayoutParams(center);
+    for (int i = 0; i < mainControls.getChildCount(); i++) {
+      LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(full ? 44 : 36), -1);
+      if (i == 1) p.leftMargin = p.rightMargin = dp(full ? 8 : 4);
+      mainControls.getChildAt(i).setLayoutParams(p);
+    }
+    fullscreen.setLayoutParams(new LinearLayout.LayoutParams(dp(full ? 44 : 36), -1));
+    for (LinearLayout group : new LinearLayout[] {leftAdjust, rightAdjust}) {
+      group.setLayoutParams(new LinearLayout.LayoutParams(dp(portrait ? 44 : 132), -1));
+      for (int i = 0; i < group.getChildCount(); i++) {
+        View child = group.getChildAt(i);
+        child.setVisibility(!portrait || child.getContentDescription().toString().contains("0.5") ? VISIBLE : GONE);
+      }
+    }
+    overlay.setVisibility(GONE);
+    lyrics.setVisibility(lyricsVisible && full ? VISIBLE : GONE);
+    lyricToggle.setVisibility(full ? VISIBLE : GONE);
+    updateAdjustmentVisibility();
+  }
+
   private void updateAdjustmentVisibility() {
     // Keep equal-width flanks when hidden so the shared pause button never moves.
-    leftAdjust.setVisibility(full && lyricsVisible && current != null ? VISIBLE : INVISIBLE);
-    rightAdjust.setVisibility(full && lyricsVisible && current != null ? VISIBLE : INVISIBLE);
+    int hidden = !full && layoutWidth > 0 && layoutWidth < dp(900) ? GONE : INVISIBLE;
+    leftAdjust.setVisibility(full && lyricsVisible && current != null ? VISIBLE : hidden);
+    rightAdjust.setVisibility(full && lyricsVisible && current != null ? VISIBLE : hidden);
     offsetLabel.setVisibility(full && lyricsVisible && current != null ? VISIBLE : GONE);
     reset.setVisibility(offsetLabel.getVisibility());
     lyricInfo.setVisibility(offsetLabel.getVisibility());
@@ -785,6 +920,20 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
 
   @Override
   public void state(JSONObject state) {
+    JSONObject room = state.optJSONObject("room");
+    if (room != null) {
+      String code = room.optString("code");
+      roomCode = code;
+      roomBadge.setText(code.isEmpty() ? "已连接 · NAS" : "歌房 " + code);
+      roomBadge.setContentDescription("歌房号码 " + code);
+      subtitle.setContentDescription("歌房号码 " + code);
+      title.setOnLongClickListener(v -> {
+        new AlertDialog.Builder(activity).setTitle("当前歌房 " + code)
+            .setMessage("其他播放设备输入此号码加入后，可以接管播放。手机遥控请扫描歌房二维码。")
+            .setPositiveButton("知道了", null).show();
+        return true;
+      });
+    }
     JSONArray queue = state.optJSONArray("queue");
     queueCount = queue == null ? 0 : queue.length();
     JSONObject nextEntry = queueCount > 0 ? queue.optJSONObject(0) : state.optJSONObject("ambient");

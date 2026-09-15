@@ -1,3 +1,6 @@
+import express from "express";
+import { LEGACY_ROOM } from "./room-registry.js";
+import { jobRoomTargets } from "./room-targets.js";
 import { createPlayerLease } from "./player-lease.js";
 import { clampLyricsOffset } from "../shared/lyrics.js";
 import { randomUUID } from "node:crypto";
@@ -5,16 +8,46 @@ import path from "node:path";
 import { canEnqueue } from "./resource-manifest.js";
 import { inspectPackage } from "./resource-health.js";
 import { fail, clean } from "./http-utils.js";
-export function createRoom({ app, member, store, cache, emit, addJob }) {
-  const { db, get, set } = store;
-  const playerLease = createPlayerLease();
+function createScopedRoom({
+  app,
+  member,
+  store,
+  cache,
+  emit,
+  addJob,
+  roomId,
+  rooms,
+}) {
+  const { db } = store;
+  const scopedKey = (key) =>
+    roomId !== LEGACY_ROOM &&
+    (key === "playback" || key.startsWith("lyrics-offset:"))
+      ? `room:${roomId}:${key}`
+      : key;
+  const get = (key, fallback) =>
+    store.get(
+      scopedKey(key),
+      key === "playback"
+        ? { paused: false, vocal: false, revision: 0 }
+        : key.startsWith("lyrics-offset:")
+          ? 0
+          : fallback,
+    );
+  const set = (key, value) => store.set(scopedKey(key), value);
+  const playerLease = createPlayerLease({ preferTv: roomId === LEGACY_ROOM });
+  const queued = (id) =>
+    db
+      .prepare(
+        "SELECT q.id FROM queue q LEFT JOIN queue_rooms qr ON qr.entry_id=q.id WHERE q.song_id=? AND COALESCE(qr.room_id,'legacy')=?",
+      )
+      .get(id, roomId);
   let ambient = null;
   function snapshot() {
     const queue = db
       .prepare(
-        "SELECT q.*,s.title,s.artist,s.mode,s.duration,s.status,s.needs_video,s.lyrics,CASE WHEN s.poster!='' THEN 1 ELSE 0 END AS hasPoster FROM queue q JOIN songs s ON q.song_id=s.id ORDER BY position",
+        "SELECT q.*,s.title,s.artist,s.mode,s.duration,s.status,s.needs_video,s.lyrics,CASE WHEN s.poster!='' THEN 1 ELSE 0 END AS hasPoster FROM queue q JOIN songs s ON q.song_id=s.id LEFT JOIN queue_rooms qr ON qr.entry_id=q.id WHERE COALESCE(qr.room_id,'legacy')=? ORDER BY position",
       )
-      .all()
+      .all(roomId)
       .map((song) => ({
         ...song,
         posterVersion: get("poster-source:" + song.song_id)?.hash || "",
@@ -24,6 +57,15 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
         "SELECT id,kind,payload,status FROM jobs WHERE status IN ('queued','running') AND kind NOT IN ('scan','poster') ORDER BY created",
       )
       .all()
+      .filter((j) => {
+        const payload = JSON.parse(j.payload);
+        return (
+          jobRoomTargets(store, payload).some(
+            (target) => target.roomId === roomId,
+          ) ||
+          (!payload.enqueue && (payload.roomId || LEGACY_ROOM) === roomId)
+        );
+      })
       .map((j) => {
         const p = JSON.parse(j.payload);
         return {
@@ -39,6 +81,7 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
         };
       });
     return {
+      room: { id: roomId, code: rooms?.byId(roomId)?.code || "" },
       queue,
       pending,
       ambient: queue.length ? null : ambient,
@@ -62,18 +105,27 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
     const song = db.prepare("SELECT * FROM songs WHERE id=?").get(id);
     if (!canEnqueue(store, song, cache))
       throw fail(409, "歌曲尚未就绪，请先在后台准备播放");
-    if (db.prepare("SELECT id FROM queue WHERE song_id=?").get(id)) return;
-    if (db.prepare("SELECT count(*) AS n FROM queue").get().n >= 100)
-      throw fail(409, "已点列表已满");
+    if (queued(id)) return;
+    if (snapshot().queue.length >= 100) throw fail(409, "已点列表已满");
     const position = db
       .prepare("SELECT COALESCE(MAX(position),0)+1 AS p FROM queue")
       .get().p;
-    db.prepare("INSERT INTO queue VALUES (?,?,?,?)").run(
-      randomUUID(),
-      id,
-      name,
-      position,
-    );
+    const entryId = randomUUID();
+    db.exec("BEGIN");
+    try {
+      db.prepare("INSERT INTO queue VALUES (?,?,?,?)").run(
+        entryId,
+        id,
+        name,
+        position,
+      );
+      if (roomId !== LEGACY_ROOM)
+        db.prepare("INSERT INTO queue_rooms VALUES (?,?)").run(entryId, roomId);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
     if (snapshot().queue.length === 1) revise({ paused: false, vocal: false });
     else emit();
   }
@@ -89,13 +141,12 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
     if (get("hidden:" + id)) throw fail(409, "歌曲已隐藏，请在后台恢复后点歌");
     if (song.status === "ready" && !canEnqueue(store, song, cache))
       throw fail(409, "播放文件缺失，请先在后台重新整理");
-    if (db.prepare("SELECT id FROM queue WHERE song_id=?").get(id))
-      return res.json(snapshot());
+    if (queued(id)) return res.json(snapshot());
     if (
       song.status !== "ready" ||
       (song.mode === "original" && get("ai", {}).enabled)
     ) {
-      addJob("prepare", { id, enqueue: true, name });
+      addJob("prepare", { id, enqueue: true, name, roomId });
       res.json({ ...snapshot(), preparing: true });
     } else {
       enqueue(id, name);
@@ -149,7 +200,10 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
     res.json(snapshot());
   });
   app.delete("/api/queue/:id", member, (req, res) => {
-    if (snapshot().queue[0]?.id === req.params.id)
+    const queue = snapshot().queue;
+    if (!queue.some((entry) => entry.id === req.params.id))
+      throw fail(404, "歌曲不在当前歌房中");
+    if (queue[0]?.id === req.params.id)
       throw fail(409, "请使用切歌结束当前歌曲");
     db.prepare("DELETE FROM queue WHERE id=?").run(req.params.id);
     emit();
@@ -259,7 +313,8 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
         )
         .all()
         .find((s) => !get("hidden:" + s.id));
-      if (candidate) addJob("prepare", { id: candidate.id, ambientOnly: true });
+      if (candidate)
+        addJob("prepare", { id: candidate.id, ambientOnly: true, roomId });
     }
   }
   app.post("/api/reactions", member, (req, res) => {
@@ -268,5 +323,45 @@ export function createRoom({ app, member, store, cache, emit, addJob }) {
     emit("reaction", { emoji: req.body.emoji, id: randomUUID() });
     res.json({ ok: true });
   });
-  return { snapshot, enqueue };
+  return {
+    snapshot,
+    enqueue,
+    isPlaying: (id) => playerLease.snapshot() && ambient?.song_id === id,
+  };
+}
+
+export function createRoom(options) {
+  const scopes = new Map();
+  function scope(id = LEGACY_ROOM) {
+    if (!scopes.has(id)) {
+      if (options.rooms && !options.rooms.byId(id))
+        throw fail(404, "歌房不存在");
+      const router = express.Router();
+      const controller = createScopedRoom({
+        ...options,
+        roomId: id,
+        app: router,
+        member: (_req, _res, next) => next(),
+        emit: (type, data) => options.emit(type, data, id),
+      });
+      scopes.set(id, { ...controller, router });
+    }
+    return scopes.get(id);
+  }
+  options.app.use((req, res, next) => {
+    if (
+      !/^\/api\/(state|queue|control|reactions|player\/(heartbeat|ended))(\/|$)/.test(
+        req.path,
+      )
+    )
+      return next();
+    options.member(req, res, (error) =>
+      error ? next(error) : scope(req.roomId).router(req, res, next),
+    );
+  });
+  return {
+    snapshot: (roomId) => scope(roomId).snapshot(),
+    enqueue: (id, name, roomId) => scope(roomId).enqueue(id, name),
+    isPlaying: (id) => [...scopes.values()].some((room) => room.isPlaying(id)),
+  };
 }

@@ -1,3 +1,4 @@
+import { deliverJobSong } from "../room-targets.js";
 import path from "node:path";
 import { prepareSong } from "../media.js";
 import { separateSong } from "../separation.js";
@@ -41,9 +42,6 @@ export async function prepare(job, payload, context) {
       context.report?.("separating");
       await separateSong(store, song, cache);
     }
-    const latest = JSON.parse(
-      db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id).payload,
-    );
-    if (latest.enqueue) enqueue(payload.id, latest.name || "家人");
+    deliverJobSong(store, enqueue, job, payload.id);
   }
 }

@@ -18,6 +18,7 @@ final class LocalNas implements AutoCloseable {
   static final class Reply {
     final int status;
     final String body, headers;
+    final byte[] bytes;
 
     Reply(int status, String body) {
       this(status, body, "");
@@ -27,6 +28,14 @@ final class LocalNas implements AutoCloseable {
       this.status = status;
       this.body = body;
       this.headers = headers;
+      this.bytes = body.getBytes(StandardCharsets.UTF_8);
+    }
+
+    Reply(int status, byte[] bytes) {
+      this.status = status;
+      this.body = "";
+      this.headers = "";
+      this.bytes = bytes;
     }
   }
 
@@ -79,7 +88,7 @@ final class LocalNas implements AutoCloseable {
       }
       String path = headers.split(" ")[1];
       Reply response = handler.request(path, headers, new String(body, StandardCharsets.UTF_8));
-      byte[] bytes = response.body.getBytes(StandardCharsets.UTF_8);
+      byte[] bytes = response.bytes;
       client
           .getOutputStream()
           .write(

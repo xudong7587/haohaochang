@@ -1,5 +1,6 @@
 import { bilibiliProvider } from "./providers/bilibili.js";
 import { findLyrics } from "./lyrics-source.js";
+import { onlineCoverPath } from "./online-cover.js";
 
 import { rankVideos } from "../shared/video-ranking.js";
 export { rankVideos } from "../shared/video-ranking.js";
@@ -16,7 +17,10 @@ export async function searchSongs(
   ]);
   const duration = reference?.recording?.duration || null;
   return {
-    results: rankVideos(rows, duration),
+    results: rankVideos(rows, duration).map((row) => ({
+      ...row,
+      coverPath: onlineCoverPath(row.cover),
+    })),
     duration,
     durationSource: duration ? reference.source : null,
     page,

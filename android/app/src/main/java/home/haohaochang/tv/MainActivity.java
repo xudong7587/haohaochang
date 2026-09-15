@@ -28,6 +28,7 @@ import org.json.JSONObject;
 
 /** Native TV entry point. No WebView or Javascript bridge is instantiated. */
 public final class MainActivity extends Activity {
+  private interface Enter { void accept(boolean own); }
   private FrameLayout root;
   private NativeRoom room;
   private RoomApi connectionApi;
@@ -45,7 +46,9 @@ public final class MainActivity extends Activity {
   public void onCreate(Bundle state) {
     super.onCreate(state);
 
-    setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+    setRequestedOrientation(isTelevision()
+        ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
     if (Build.VERSION.SDK_INT >= 33)
       getOnBackInvokedDispatcher()
           .registerOnBackInvokedCallback(
@@ -136,6 +139,83 @@ public final class MainActivity extends Activity {
     return destroyed || generation != current;
   }
 
+  private boolean isTelevision() {
+    return (getResources().getConfiguration().uiMode
+        & android.content.res.Configuration.UI_MODE_TYPE_MASK)
+        == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
+  }
+
+  private void chooseRoom(RoomApi api) {
+    int current = ++generation;
+    handler.removeCallbacksAndMessages(null);
+    root.removeAllViews();
+    LinearLayout panel = new LinearLayout(this);
+    panel.setOrientation(LinearLayout.VERTICAL);
+    panel.setGravity(Gravity.CENTER);
+    panel.setPadding(dp(24), dp(24), dp(24), dp(24));
+    root.addView(panel, new FrameLayout.LayoutParams(-1, -1));
+    panel.addView(TvStyle.text(this, "今天在哪个歌房唱？", 24, TvStyle.INK));
+    TextView hint = TvStyle.text(this, "独立歌房互不打扰；加入已有歌房后可接管播放。", 14, TvStyle.MUTED);
+    hint.setPadding(0, dp(16), 0, dp(20));
+    panel.addView(hint);
+    EditText code = new EditText(this);
+    code.setSingleLine();
+    code.setTextColor(TvStyle.INK);
+    code.setHintTextColor(TvStyle.MUTED);
+    code.setHint("输入 6 位歌房号码");
+    code.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+    code.setFilters(new android.text.InputFilter[] {new android.text.InputFilter.LengthFilter(6)});
+    TextView error = TvStyle.text(this, "", 14, TvStyle.MUTED);
+    Enter enter = own -> {
+      String number = code.getText().toString().trim();
+      if (!own && !number.matches("[0-9]{6}")) {
+        code.setError("请输入 6 位歌房号码");
+        return;
+      }
+      if (Boolean.TRUE.equals(panel.getTag())) return;
+      panel.setTag(true);
+      error.setText("正在进入歌房…");
+      executor.execute(() -> {
+        try {
+          JSONObject selected = null;
+          String saved = preferences.getString("ownRoom:" + server, "");
+          if (own && !saved.isEmpty()) {
+            try (RoomApi previous = new RoomApi(server, saved)) {
+              selected = (JSONObject) previous.json("/api/rooms/current", null);
+              selected.put("token", saved);
+            } catch (Exception failure) {
+              if (!RoomSession.auth(failure)) throw failure;
+            }
+          }
+          if (selected == null) selected = (JSONObject) api.json(
+              own ? "/api/rooms" : "/api/rooms/join",
+              own ? new JSONObject() : RoomApi.object("code", number));
+          String selectedToken = selected.getString("token");
+          handler.post(() -> {
+            if (stale(current)) return;
+            if (own) preferences.edit().putString("ownRoom:" + server, selectedToken).apply();
+            api.close();
+            openRoom(new RoomApi(server, selectedToken));
+          });
+        } catch (Exception failure) {
+          handler.post(() -> {
+            if (stale(current)) return;
+            panel.setTag(false);
+            error.setText(RoomSession.message(failure));
+          });
+        }
+      });
+    };
+    Button own = TvStyle.button(this, "进入我的独立歌房", "进入我的独立歌房", () -> enter.accept(true));
+    panel.addView(own, new LinearLayout.LayoutParams(-1, dp(52)));
+    panel.addView(code, new LinearLayout.LayoutParams(-1, dp(60)));
+    panel.addView(TvStyle.button(this, "加入这个歌房", "加入这个歌房", () -> enter.accept(false)),
+        new LinearLayout.LayoutParams(-1, dp(52)));
+    panel.addView(error);
+    panel.addView(TvStyle.button(this, "连接设置", "连接设置", this::settings));
+    own.requestFocus();
+  }
+
   private void openRoom(RoomApi api) {
     generation++;
     handler.removeCallbacksAndMessages(null);
@@ -196,6 +276,14 @@ public final class MainActivity extends Activity {
     LinearLayout.LayoutParams changeParams = new LinearLayout.LayoutParams(dp(120), dp(44));
     changeParams.leftMargin = dp(12);
     buttons.addView(change, changeParams);
+    if (!isTelevision()) {
+      title.setText("连接家庭歌房");
+      hint.setText("使用 NAS 管理密码登录，也可以用另一台手机扫码确认。");
+      buttons.setOrientation(LinearLayout.VERTICAL);
+      for (int i = 0; i < buttons.getChildCount(); i++)
+        buttons.getChildAt(i).setLayoutParams(new LinearLayout.LayoutParams(dp(220), dp(44)));
+      password.post(password::performClick);
+    }
     refresh.requestFocus();
     executor.execute(
         () -> {
@@ -375,9 +463,9 @@ public final class MainActivity extends Activity {
 
   private void menu() {
     new AlertDialog.Builder(this)
-        .setTitle("好好唱设置 · " + BuildConfig.VERSION_NAME)
+        .setTitle((room == null ? "好好唱设置" : room.roomName()) + " · " + BuildConfig.VERSION_NAME)
         .setItems(
-            new String[] {"重试当前播放", "播放信息", "重新连接歌房", "连接设置", "重新自动发现", "退出歌房登录"},
+            new String[] {"重试当前播放", "播放信息", "返回家庭默认歌房", "连接设置", "重新自动发现", "退出歌房登录", "独立歌房 / 输入号码加入"},
             (d, w) -> {
               if (w == 0 && room != null) room.retry();
               else if (w == 1 && room != null) room.diagnostics();
@@ -387,6 +475,10 @@ public final class MainActivity extends Activity {
               else if (w == 5) {
                 preferences.edit().remove("token:" + server).apply();
                 connect(server);
+              } else if (w == 6) {
+                reset();
+                connectionApi = new RoomApi(server, preferences.getString("token:" + server, ""));
+                chooseRoom(connectionApi);
               }
             })
         .setNegativeButton("关闭", null)

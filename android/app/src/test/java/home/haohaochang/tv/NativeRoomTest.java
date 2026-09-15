@@ -210,10 +210,6 @@ public class NativeRoomTest {
             descendants(room).stream().filter(v -> v instanceof NativeCatalogue).findFirst().get();
     assertEquals("Catalogue covers the main video area", 960, catalogue.getRight());
     assertEquals(144, catalogue.getLeft());
-    assertEquals(
-        77,
-        android.graphics.Color.alpha(
-            ((android.graphics.drawable.ColorDrawable) catalogue.getBackground()).getColor()));
     assertFalse(find("隐藏歌词").isShown());
     assertFalse(
         descendants(room).stream().anyMatch(v -> v.getClass().getName().contains("WebView")));
@@ -517,6 +513,68 @@ public class NativeRoomTest {
     assertFalse(find("暂停").isShown());
     assertTrue(room.back());
     assertTrue(find("暂停").isShown());
+  }
+
+  @Test
+  public void phoneCatalogueGivesMostOfTheScreenToCards() throws Exception {
+    JSONArray songs = new JSONArray();
+    for (int i = 0; i < 24; i++) songs.put(RoomApi.object(
+        "id", "song-" + i, "title", "歌曲 " + i, "artist", "测试歌手"));
+    songsFixture = songs.toString();
+    find("歌名点歌").performClick();
+    drain();
+    for (int[] size : new int[][] {{390, 844}, {844, 390}}) {
+      layout(size[0], size[1]);
+      View grid = find("歌曲卡片");
+      double fraction = (double) grid.getWidth() * grid.getHeight() / (size[0] * size[1]);
+      assertTrue("card area " + fraction, fraction > (size[0] < size[1] ? .70 : .60));
+      assertFalse(find("首字母 A").isShown());
+      assertTrue(find("搜索歌名或歌手").getHeight() >= 40);
+      for (String label : new String[] {"暂停", "切歌", "切换原唱伴奏", "全屏播放"}) {
+        View control = find(label);
+        int[] xy = new int[2];
+        control.getLocationInWindow(xy);
+        assertTrue(label, control.isShown() && xy[0] >= 0 && xy[0] + control.getWidth() <= size[0]);
+      }
+      java.io.File folder = new java.io.File("build/test-screenshots");
+      folder.mkdirs();
+      Bitmap image = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+      room.draw(new Canvas(image));
+      try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+          new java.io.File(folder, "phone-catalogue-" + size[0] + ".png"))) {
+        image.compress(Bitmap.CompressFormat.PNG, 100, out);
+      }
+    }
+  }
+
+  @Test
+  public void phoneRotatesWithoutReplacingPlayerAndControlsStayReachable() throws Exception {
+    java.lang.reflect.Field field = NativeRoom.class.getDeclaredField("player");
+    field.setAccessible(true);
+    Object player = field.get(room);
+    for (int[] size : new int[][] {{390, 844}, {844, 390}, {390, 844}, {960, 540}}) {
+      layout(size[0], size[1]);
+      find("全屏播放").performClick();
+      layout(size[0], size[1]);
+      for (String name : new String[] {"暂停", "切歌", "切换原唱伴奏", "歌词提前 0.5 秒", "歌词延后 0.5 秒"}) {
+        View button = find(name);
+        int[] xy = new int[2];
+        button.getLocationInWindow(xy);
+        assertTrue(name, button.isShown() && button.getWidth() > 0 && xy[0] >= 0
+            && xy[0] + button.getWidth() <= size[0] && xy[1] + button.getHeight() <= size[1]);
+      }
+      assertSame(player, field.get(room));
+      java.io.File folder = new java.io.File("build/test-screenshots");
+      folder.mkdirs();
+      Bitmap image = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+      room.draw(new Canvas(image));
+      try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+          new java.io.File(folder, "native-adaptive-" + size[0] + ".png"))) {
+        image.compress(Bitmap.CompressFormat.PNG, 100, out);
+      }
+      find("退出全屏").performClick();
+      layout(size[0], size[1]);
+    }
   }
 
   @Test

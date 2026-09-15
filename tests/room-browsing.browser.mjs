@@ -147,6 +147,8 @@ try {
     2,
   );
   await page.setViewportSize({ width: 1280, height: 900 });
+  // A scanned remote token stays in that tab; /play has its own NAS login.
+  await page.evaluate(() => localStorage.setItem("roomToken", "fixture"));
   await page.goto(base + "/play");
   await page.getByRole("button", { name: "歌名点歌", exact: true }).click();
   await page.getByRole("button", { name: "首字母 Q", exact: true }).click();

@@ -229,11 +229,15 @@ test("online DASH video and audio are trimmed separately before audio-only separ
     clip: { start: 1.25, end: 2.75 },
   };
   clipFails = true;
-  await assert.rejects(
-    download({ id: "fail", kind: "download" }, payload, context),
-    (e) => e.code === "WAITING_WORKER",
+  await download({ id: "fail", kind: "download" }, payload, context);
+  assert.equal(imports.length, 1);
+  assert.ok(
+    Math.abs((await probe(imports[0].payload.file)).duration - 1.5) < 0.15,
   );
-  assert.equal(imports.length, 0);
+  assert.ok(
+    Math.abs((await probe(imports[0].payload.videoFile)).duration - 1.5) < 0.15,
+  );
+  assert.equal((await probe(imports[0].payload.videoFile)).audio.length, 0);
   assert.equal(events.length, 0);
   clipFails = false;
   for (const [id, clip, duration] of [

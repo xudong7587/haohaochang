@@ -79,6 +79,12 @@ app.post("/api/requests", (q, r) => {
 });
 const submissions = [],
   previewRequests = [];
+const coverRequests = [];
+app.get("/api/online/cover", (q, r) => {
+  coverRequests.push(q.query);
+  if (q.query.url.includes("missing")) return r.sendStatus(502);
+  r.sendFile(path.resolve("public/favicon.png"));
+});
 app.get("/api/online/songs", (q, r) =>
   r.json({
     duration: 12,
@@ -87,6 +93,8 @@ app.get("/api/online/songs", (q, r) =>
     results: [
       {
         title: "测试视频 · 演唱室现场",
+        coverPath:
+          "/api/online/cover?url=https%3A%2F%2Fi0.hdslb.com%2Fcover.png",
         url: "https://www.bilibili.com/video/BVtest1",
         uploader: "合成测试",
         duration: 12,
@@ -94,6 +102,7 @@ app.get("/api/online/songs", (q, r) =>
       },
       {
         title: "测试视频 · 有开场介绍的加长版本",
+        cover: "https://i0.hdslb.com/missing.png",
         url: "https://www.bilibili.com/video/BVtest2",
         uploader: "合成测试",
         duration: 30,
@@ -161,6 +170,23 @@ try {
   await page.getByRole("button", { name: "搜索视频", exact: true }).click();
   await page.waitForSelector(".video-card");
   assert.equal(await page.locator(".video-card").count(), 3);
+  await page.waitForFunction(
+    () => document.querySelector(".video-card img")?.naturalWidth > 0,
+  );
+  await page
+    .locator(".video-card")
+    .filter({ hasText: "有开场介绍" })
+    .getByText("视频预览", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator(".video-card-image img").count(), 1);
+  assert.ok(
+    coverRequests.some((q) => q.url === "https://i0.hdslb.com/cover.png"),
+  );
+  assert.ok(
+    await page
+      .locator(".video-card img")
+      .evaluate((img) => new URL(img.src).origin === location.origin),
+  );
   await page.screenshot({
     path: "test-results/online/waterfall-desktop.png",
     fullPage: true,

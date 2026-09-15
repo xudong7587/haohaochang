@@ -22,6 +22,7 @@ import { Settings } from "./admin-settings.jsx";
 import { Editor } from "./song-editor.jsx";
 import { LibraryManager, LyricsSettings } from "./library-manager.jsx";
 import { Player } from "./playback/player.jsx";
+import { RoomEntry } from "./room-entry.jsx";
 
 import { OnlineSongs } from "./online-songs.jsx";
 import { Automation } from "./automation.jsx";
@@ -92,6 +93,8 @@ function IconButton({ icon: Icon, children, ...props }) {
 }
 
 export function App() {
+  const [roomSession, setRoomSession] = useState({ id: "legacy" });
+  const [choosingRoom, setChoosingRoom] = useState(false);
   const [phonePair, setPhonePair] = useState(
     route === "mobile" ? pendingTvPair : "",
   );
@@ -104,6 +107,7 @@ export function App() {
   const [authenticated, setAuthenticated] = useState(
     route === "admin" ? !!adminToken : !!roomToken,
   );
+  const roomReady = authenticated && !choosingRoom;
   const [password, setPassword] = useState(""),
     [loginBusy, setLoginBusy] = useState(false);
   const [state, setState] = useState({
@@ -123,6 +127,7 @@ export function App() {
     [artist, setArtist] = useState("");
   const [tag, setTag] = useState("");
   const [initialQuery, setInitialQuery] = useState("");
+  const [songSort, setSongSort] = useState("title");
   useEffect(() => setInitialQuery(""), [tab]);
   const [join, setJoin] = useState(null),
     [showQR, setShowQR] = useState(false),
@@ -170,11 +175,13 @@ export function App() {
     return () => clearTimeout(t);
   }, [message]);
   useEffect(() => {
-    if (!authenticated) return;
+    if (!roomReady) return;
+    let alive = true;
     const events = new EventSource(
       `/api/events?token=${encodeURIComponent(roomToken)}`,
     );
     events.addEventListener("state", (e) => {
+      if (!alive) return;
       setState(JSON.parse(e.data));
       setConnected(true);
     });
@@ -190,21 +197,27 @@ export function App() {
     });
     events.onerror = () => setConnected(false);
     api("/join?origin=" + encodeURIComponent(location.origin))
-      .then(setJoin)
+      .then((value) => {
+        if (alive) setJoin(value);
+      })
       .catch((e) => {
+        if (!alive) return;
         if (e.status === 401 && route !== "admin") setAuthenticated(false);
         else notify(e.message);
       });
-    return () => events.close();
-  }, [authenticated]);
+    return () => {
+      alive = false;
+      events.close();
+    };
+  }, [roomReady, roomSession?.id]);
   useEffect(() => {
-    if (!authenticated) return;
+    if (!roomReady) return;
     let alive = true;
     const timer = setTimeout(
       () =>
         Promise.all([
           api(
-            `/songs?q=${encodeURIComponent(query)}&artist=${encodeURIComponent(artist)}&tag=${encodeURIComponent(tag)}&initials=${encodeURIComponent(tab === "songs" ? initialQuery : "")}`,
+            `/songs?q=${encodeURIComponent(query)}&artist=${encodeURIComponent(artist)}&tag=${encodeURIComponent(tag)}&initials=${encodeURIComponent(tab === "songs" ? initialQuery : "")}${isWebRoom ? `&sort=${songSort}` : ""}`,
           ),
           api(
             "/artists?initials=" +
@@ -224,7 +237,17 @@ export function App() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [authenticated, query, artist, tag, refresh, initialQuery, tab]);
+  }, [
+    roomReady,
+    roomSession?.id,
+    query,
+    artist,
+    tag,
+    refresh,
+    initialQuery,
+    tab,
+    songSort,
+  ]);
   useEffect(() => {
     let live = true;
     if (authenticated && route === "admin")
@@ -240,7 +263,7 @@ export function App() {
     };
   }, [authenticated, refresh, taskRefresh]);
   const navigation = useTvNavigation({
-    enabled: route === "tv",
+    enabled: route === "tv" && !choosingRoom,
     nested: route === "tv" && !isWebRoom,
     tab,
     artist,
@@ -362,12 +385,29 @@ export function App() {
         }}
       />
     );
+  if (isWebRoom && choosingRoom)
+    return (
+      <RoomEntry
+        onCancel={() => setChoosingRoom(false)}
+        onEnter={(room) => {
+          setState({ queue: [], playback: { paused: false, vocal: false } });
+          setJoin(null);
+          setReactions([]);
+          setTab("stage");
+          setRoomSession(room);
+          setChoosingRoom(false);
+        }}
+      />
+    );
   return (
     <div
-      className={`app ${route} ${tab === "stage" ? "stage-home" : ""} ${navigation.entered ? "tv-content-entered" : ""}`}
+      className={`app ${route} ${isWebRoom ? "web-room" : ""} ${tab === "stage" ? "stage-home" : ""} ${navigation.entered ? "tv-content-entered" : ""}`}
     >
       <aside className="sidebar">
-        <a className="brand" href={route === "admin" ? "/admin" : "/tv"}>
+        <a
+          className="brand"
+          href={route === "admin" ? "/admin" : isWebRoom ? "/play" : "/tv"}
+        >
           <span className="brandmark">
             <Mic2 size={23} />
           </span>
@@ -378,11 +418,16 @@ export function App() {
         <div className="room">
           <span className={`dot ${connected ? "" : "offline"}`} />
           <span>
-            我的客厅
+            {state.room?.code ? `歌房 ${state.room.code}` : "我的客厅"}
             <small>{connected ? "已连接 · NAS" : "正在重新连接…"}</small>
           </span>
           <Radio size={17} />
         </div>
+        {isWebRoom && (
+          <button className="switch-room" onClick={() => setChoosingRoom(true)}>
+            独立歌房
+          </button>
+        )}
         <p className="nav-label">
           {route === "admin" ? "管理工作台" : "发现你的下一首"}
         </p>
@@ -497,7 +542,8 @@ export function App() {
       <main tabIndex={-1} onFocusCapture={navigation.onContentFocus}>
         <header>
           <div className="breadcrumb">
-            我的客厅 <span>/</span>{" "}
+            {state.room?.code ? `歌房 ${state.room.code}` : "我的客厅"}{" "}
+            <span>/</span>{" "}
             {route === "admin"
               ? "曲库管理"
               : route === "mobile"
@@ -507,6 +553,14 @@ export function App() {
                   : "家庭 KTV"}
           </div>
           <div className="header-right">
+            {isWebRoom && (
+              <button
+                className="mobile-room-switch"
+                onClick={() => setChoosingRoom(true)}
+              >
+                独立歌房
+              </button>
+            )}
             {route === "admin" && (
               <a
                 className="web-room-link"
@@ -656,6 +710,19 @@ export function App() {
               </div>
               <div className="library-search">
                 <SearchBox query={query} setQuery={setQuery} />
+                {isWebRoom && (
+                  <button
+                    className="song-sort"
+                    aria-label="切换歌曲排序"
+                    onClick={() =>
+                      setSongSort((value) =>
+                        value === "title" ? "random" : "title",
+                      )
+                    }
+                  >
+                    {songSort === "title" ? "歌名排序" : "随机"}
+                  </button>
+                )}
                 <select
                   aria-label="按标签筛选"
                   value={tag}
@@ -846,6 +913,15 @@ export function App() {
               <div className="queue-list">
                 {state.queue.map((q, i) => (
                   <div className="queue-row" key={q.id}>
+                    {isWebRoom && (
+                      <span className="queue-artwork">
+                        <SongArtwork
+                          song={{ ...q, id: q.song_id }}
+                          token={roomToken}
+                          size={36}
+                        />
+                      </span>
+                    )}
                     <span className="queue-number">
                       {i === 0 ? (
                         <Volume2 size={21} />
@@ -908,7 +984,7 @@ export function App() {
               initialTitle={query}
               notify={notify}
               canLogin={route === "admin"}
-              mobile={route === "mobile"}
+              mobile={route !== "admin"}
               name={name}
             />
           )}

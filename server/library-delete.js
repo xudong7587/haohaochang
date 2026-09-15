@@ -113,6 +113,7 @@ export function libraryDeleteApi({
   legacyCache,
   emit,
   snapshot,
+  isPlaying,
 }) {
   const allowed = [...roots, downloads, cache, legacyCache].filter(Boolean);
   async function inboxPlan(body) {
@@ -187,6 +188,7 @@ export function libraryDeleteApi({
       req.params.id,
       async (song) => {
         if (
+          isPlaying?.(song.id) ||
           snapshot?.().ambient?.song_id === song.id ||
           store.db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
         )

@@ -124,6 +124,97 @@ try {
   await page.waitForFunction(() =>
     document.querySelector("video")?._audioTracks?.some((t) => !t.el.paused),
   );
+  const stageBounds = await page.locator(".video-stage").boundingBox();
+  const navBounds = await page.locator(".sidebar").boundingBox();
+  const footerBounds = await page.locator(".player-bar").boundingBox();
+  assert.equal(
+    stageBounds.x,
+    navBounds.width,
+    "stage starts at the native-style sidebar",
+  );
+  assert.equal(stageBounds.y, 0);
+  assert.equal(
+    stageBounds.height,
+    footerBounds.y,
+    "stage fills the space above the controls",
+  );
+  assert.equal(
+    await page.locator("main").isVisible(),
+    false,
+    "music scene shows the permanent stage",
+  );
+  await page.screenshot({ path: "test-results/adaptive/play-stage.png" });
+  await page.evaluate(() => {
+    window.permanentVideo = document.querySelector("video");
+  });
+  await page.getByRole("button", { name: "歌名点歌", exact: true }).click();
+  await page.locator(".song-poster-card").first().waitFor();
+  assert.equal(
+    await page.evaluate(
+      () => window.permanentVideo === document.querySelector("video"),
+    ),
+    true,
+  );
+  assert.deepEqual(
+    await page.locator(".video-stage").boundingBox(),
+    stageBounds,
+    "catalogue leaves playback geometry unchanged",
+  );
+  const randomResponse = page.waitForResponse(
+    (r) => r.url().includes("/api/songs?") && r.url().includes("sort=random"),
+  );
+  await page.getByRole("button", { name: "切换歌曲排序" }).click();
+  assert.equal((await randomResponse).status(), 200);
+  await page.getByRole("button", { name: "切换歌曲排序" }).click();
+  await page.waitForResponse(
+    (r) => r.url().includes("/api/songs?") && r.url().includes("sort=title"),
+  );
+  await page.screenshot({ path: "test-results/adaptive/play-catalogue.png" });
+  await page.getByRole("button", { name: "首字母 A", exact: true }).focus();
+  await page.keyboard.press("ArrowRight");
+  assert.equal(
+    await page.evaluate(() =>
+      document.activeElement.getAttribute("aria-label"),
+    ),
+    "首字母 B",
+  );
+  for (const [width, height] of [
+    [1920, 1080],
+    [1024, 600],
+    [768, 1024],
+  ]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    );
+    const stage = await page.locator(".video-stage").boundingBox();
+    const main = await page.locator("main").boundingBox();
+    assert.deepEqual(
+      main,
+      stage,
+      "catalogue and stage remain aligned at every desktop size",
+    );
+    assert.equal(await page.locator(".scan-card").isVisible(), true);
+    const clear = await page
+      .locator(".initial-actions button")
+      .last()
+      .boundingBox();
+    assert.ok(
+      clear.y + clear.height <= main.y + main.height,
+      "alphabet controls fit above the footer",
+    );
+    await page.screenshot({
+      path: `test-results/adaptive/play-catalogue-${width}.png`,
+    });
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole("button", { name: "音乐现场", exact: true }).click();
+  await page.locator(".video-stage").click({ position: { x: 300, y: 180 } });
+  await page.locator(".tv-player.is-full").waitFor();
+  await page.screenshot({ path: "test-results/adaptive/play-fullscreen.png" });
+  await page.getByRole("button", { name: "退出全屏", exact: true }).click();
   const range = await fetch(
     `${base}/api/assets/${"0".repeat(24)}/video?token=${encodeURIComponent(service.store.get("roomToken"))}`,
     { headers: { Range: "bytes=0-15" } },
@@ -273,13 +364,9 @@ try {
     () => document.activeElement?.dataset.playerAction === "pause",
   );
   await tv.keyboard.press("Enter");
-  await tv
-    .locator('[data-player-action="pause"][aria-label="继续"]')
-    .waitFor();
+  await tv.locator('[data-player-action="pause"][aria-label="继续"]').waitFor();
   await tv.keyboard.press("Enter");
-  await tv
-    .locator('[data-player-action="pause"][aria-label="暂停"]')
-    .waitFor();
+  await tv.locator('[data-player-action="pause"][aria-label="暂停"]').waitFor();
   await tv.locator('.tv-player[data-controls="hidden"]').waitFor();
   await tv.keyboard.down("Enter");
   await tv.keyboard.down("Enter");
@@ -368,6 +455,7 @@ try {
       "phone overflow",
     );
     const nav = await mobile.locator(".sidebar").boundingBox();
+    assert.equal(await mobile.locator(".mobile-room-switch").isVisible(), true, "phone can open optional rooms");
     assert.ok(Math.abs(nav.width - width) < 2, "phone nav spans viewport");
     const box = await mobile.locator(".video-stage").boundingBox();
     assert.ok(Math.abs(box.width / box.height - 16 / 9) < 0.03, "video ratio");
@@ -411,6 +499,93 @@ try {
   await broken.locator("#boot-actions").waitFor();
   assert.equal(await broken.locator("#boot-screen").isVisible(), true);
   await broken.close();
+  const multi = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+  });
+  await multi.addInitScript(
+    (token) => localStorage.setItem("roomToken", token),
+    service.store.get("roomToken"),
+  );
+  const independent = [await multi.newPage(), await multi.newPage()];
+  const selected = [];
+  for (const p of independent) {
+    p.on("pageerror", (e) => errors.push(e.message));
+    await p.goto(base + "/play");
+    await p.locator(".app.web-room").waitFor();
+    assert.equal(
+      await p.locator(".room-entry").count(),
+      0,
+      "default room opens directly",
+    );
+    await p.getByRole("button", { name: "独立歌房", exact: true }).click();
+    await p.getByRole("button", { name: "独立开唱" }).click();
+    await p.locator(".app.web-room").waitFor();
+    selected.push(
+      await p.evaluate(() => JSON.parse(sessionStorage.getItem("playRoom"))),
+    );
+  }
+  assert.notEqual(selected[0].id, selected[1].id);
+  const roomCall = (room, url, body) =>
+    fetch(base + "/api" + url, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        Authorization: `Bearer ${room.token}`,
+        "Content-Type": "application/json",
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  for (const room of selected)
+    assert.equal(
+      (
+        await roomCall(room, "/queue", {
+          songId: "0".repeat(24),
+          name: "并发测试",
+        })
+      ).status,
+      200,
+    );
+  const states = await Promise.all(
+    selected.map(async (r) => (await roomCall(r, "/state")).json()),
+  );
+  assert.equal(states[0].queue[0].song_id, states[1].queue[0].song_id);
+  assert.notEqual(states[0].queue[0].id, states[1].queue[0].id);
+  const ranges = await Promise.all(
+    selected.map((r) =>
+      fetch(`${base}/api/assets/${"0".repeat(24)}/video`, {
+        headers: { Authorization: `Bearer ${r.token}`, Range: "bytes=0-99" },
+      }),
+    ),
+  );
+  assert.deepEqual(
+    ranges.map((r) => r.status),
+    [206, 206],
+  );
+  assert.deepEqual(
+    await ranges[0].arrayBuffer(),
+    await ranges[1].arrayBuffer(),
+  );
+  await roomCall(selected[0], "/control", {
+    action: "pause",
+    entryId: states[0].queue[0].id,
+  });
+  assert.equal(
+    (await (await roomCall(selected[1], "/state")).json()).playback.paused,
+    false,
+  );
+  await independent[0]
+    .getByRole("button", { name: "独立歌房", exact: true })
+    .click();
+  await independent[0]
+    .getByRole("button", { name: "返回家庭默认歌房" })
+    .click();
+  await independent[0].locator(".app.web-room").waitFor();
+  assert.equal(
+    await independent[1].evaluate(
+      () => JSON.parse(sessionStorage.getItem("playRoom")).id,
+    ),
+    selected[1].id,
+  );
+  await multi.close();
   assert.deepEqual(errors, []);
   console.log(
     "PASS direct Range streaming without periodic video seeking, fullscreen remote menu, artist editing and enqueue, dark queue, phone orientations, legacy bundle and boot recovery",

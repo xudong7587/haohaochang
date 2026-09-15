@@ -1,0 +1,476 @@
+/* /play follows NativeRoom's permanent stage, catalogue overlay and footer.
+   Small touch screens retain the adaptive player layout. */
+.web-room .queue-artwork {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #44345d;
+}
+.web-room .queue-artwork img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.web-room .song-search-fields input {
+  color: #f5f2ff;
+  background: #252031;
+  border-color: #393244;
+}
+.web-room .song-search-fields label {
+  color: #c2b9d1;
+}
+.web-room .video-card {
+  background: #252031;
+  border-color: #393244;
+  color: #f5f2ff;
+}
+.web-room .video-card-image {
+  background: #30283d;
+  color: #c2b9d1;
+}
+.web-room .video-card small {
+  color: #c2b9d1;
+}
+@media (min-width: 951px), (min-width: 701px) and (min-height: 501px) {
+  .app.tv.web-room {
+    --room-nav: clamp(176px, 15vw, 240px);
+    --room-footer: 96px;
+    display: block;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0;
+    background: #12101b;
+    color: #f5f2ff;
+  }
+  .app.tv.web-room > .sidebar {
+    position: fixed;
+    inset: 0 auto var(--room-footer) 0;
+    width: var(--room-nav);
+    height: auto;
+    padding: 18px 14px 12px;
+    background: #191623;
+    border: 0;
+    z-index: 4;
+    overflow: auto;
+  }
+  .tv.web-room.tv-content-entered > .sidebar > * {
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .tv.web-room.tv-content-entered > .sidebar::after {
+    display: none;
+  }
+  .web-room .brand {
+    font-size: 25px;
+    margin-bottom: 18px;
+    gap: 10px;
+  }
+  .web-room .brandmark {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+  }
+  .web-room .brand small {
+    font-size: 8px;
+    letter-spacing: 2px;
+  }
+  .web-room .room {
+    padding: 10px;
+    font-size: 12px;
+    border-radius: 9px;
+  }
+  .web-room .room small {
+    font-size: 10px;
+  }
+  .web-room .nav-label {
+    font-size: 11px;
+    margin: 16px 6px 8px;
+  }
+  .web-room .sidebar nav {
+    gap: 5px;
+  }
+  .web-room .sidebar nav button {
+    min-height: 46px;
+    padding: 10px;
+    border-radius: 9px;
+    font-size: 15px;
+    gap: 10px;
+  }
+  .web-room .sidebar nav button.selected {
+    background: #453957;
+    color: #f5f2ff;
+  }
+  .web-room .sidebar-bottom {
+    padding-top: 14px;
+  }
+  .web-room .scan-card {
+    padding: 8px;
+    background: #252031;
+    border-radius: 10px;
+  }
+  .web-room .scan-card img {
+    width: 84px;
+    height: 84px;
+  }
+  .web-room .scan-card strong {
+    font-size: 11px;
+    margin-top: 6px;
+  }
+  .web-room .scan-card > span,
+  .web-room .sidebar-bottom > .fine {
+    display: none;
+  }
+  .web-room .endpoint-links {
+    margin-top: 10px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .web-room .endpoint-links a {
+    font-size: 11px;
+  }
+  .app.tv.web-room > .tv-player:not(.is-full) {
+    display: block;
+    position: fixed !important;
+    inset: 0 0 var(--room-footer) var(--room-nav);
+    width: auto;
+    max-width: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #000;
+    z-index: 0;
+  }
+  .web-room > .tv-player:not(.is-full) .video-stage {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    cursor: pointer;
+  }
+  .web-room > .tv-player:not(.is-full) .lyrics-scene {
+    display: none;
+  }
+  .app.tv.web-room > main {
+    position: fixed;
+    inset: 0 0 var(--room-footer) var(--room-nav);
+    width: auto;
+    min-width: 0;
+    overflow: auto;
+    background: #12101b4d;
+    z-index: 1;
+    scrollbar-color: #655874 #191623;
+  }
+  .web-room main > header {
+    display: none;
+  }
+  .app.tv.web-room.stage-home > main {
+    display: none;
+  }
+  .tv.web-room main > .content {
+    padding: 24px 28px 30px;
+  }
+  .web-room .hero {
+    display: none;
+  }
+  .web-room .section-heading {
+    margin: 0 0 20px;
+  }
+  .web-room .section-heading h1,
+  .web-room .section-heading h2 {
+    font-size: 28px;
+  }
+  .web-room .section-heading p {
+    font-size: 14px;
+    color: #c2b9d1;
+  }
+  .web-room .library-search {
+    margin-bottom: 16px;
+    gap: 12px;
+  }
+  .web-room .library-search .search-box {
+    flex: 1;
+  }
+  .web-room .initial-results-layout {
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 22px;
+  }
+  .web-room .initial-picker {
+    padding: 10px;
+    border: 0;
+    background: #191623d9;
+  }
+  .web-room .initial-keys button {
+    background: transparent;
+    border: 0;
+    color: #f5f2ff;
+    min-height: 38px;
+    font-size: 16px;
+  }
+  .web-room .song-poster-grid,
+  .web-room .artist-grid,
+  .web-room .artist-song-masonry.song-poster-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 16px;
+    align-items: stretch;
+  }
+  .web-room .song-poster-card,
+  .web-room .artist-card {
+    min-width: 0;
+    border-radius: 10px;
+    padding: 5px;
+    background: #252031e6;
+    border: 1px solid #393244;
+    box-shadow: none;
+    overflow: hidden;
+  }
+  .web-room .song-poster-image,
+  .web-room .artist-song-masonry .song-poster-image {
+    position: relative;
+    height: 0;
+    padding-top: 66%;
+    aspect-ratio: auto;
+    border-radius: 7px;
+  }
+  .web-room .song-poster-image > img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .web-room .song-poster-image > svg {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .web-room .poster-song-info {
+    padding: 10px 6px 4px;
+  }
+  .web-room .poster-song-info strong,
+  .web-room .artist-song-masonry .song-poster-card strong {
+    display: block;
+    font-size: 15px;
+    line-height: 22px;
+    height: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .web-room .poster-song-info small {
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .web-room .poster-song-actions {
+    padding: 4px 6px;
+    gap: 4px;
+  }
+  .web-room .poster-song-actions button {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .web-room .artist-card-photo {
+    width: 96px;
+    height: 96px;
+    padding: 0;
+    border-radius: 50%;
+    margin: 12px auto 6px;
+    overflow: hidden;
+  }
+  .web-room .artist-card-caption {
+    padding: 10px 6px;
+  }
+  .web-room .artist-card-caption strong {
+    font-size: 15px;
+  }
+  .web-room .artist-card-caption small {
+    font-size: 12px;
+  }
+  .tv.web-room .player-bar {
+    position: fixed;
+    inset: auto 0 0;
+    height: var(--room-footer);
+    padding: 16px 24px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 20px;
+    background: #191623;
+    border-top: 1px solid #393244;
+    z-index: 5;
+  }
+  .web-room .now-playing {
+    width: auto;
+    min-width: 0;
+  }
+  .web-room .now-playing > div:last-child {
+    min-width: 0;
+  }
+  .web-room .now-playing strong,
+  .web-room .now-playing small {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .web-room .now-playing strong {
+    font-size: 16px;
+  }
+  .web-room .now-playing small {
+    font-size: 12px;
+  }
+  .web-room .play-controls {
+    gap: 16px;
+    justify-content: center;
+  }
+  .web-room .play-controls > button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+    background: transparent;
+    border: 0;
+  }
+  .web-room .play-controls button span {
+    display: none;
+  }
+  .web-room .play-controls .play-toggle {
+    width: 52px;
+    height: 52px;
+    background: #ffffff20;
+    color: #f5f2ff;
+  }
+  .web-room .play-controls [data-open-fullscreen] {
+    position: absolute;
+    right: 24px;
+  }
+  .web-room .queue-link {
+    display: none;
+  }
+  .web-room .queue-list {
+    background: #211b2be6;
+  }
+  .web-room .queue-row {
+    padding: 12px 16px;
+    gap: 14px;
+  }
+  .web-room .queue-row > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .web-room .queue-row strong {
+    font-size: 17px;
+  }
+  .web-room .queue-row small {
+    font-size: 12px;
+  }
+  .web-room .toast {
+    bottom: 112px;
+  }
+  .web-room .tv-player.is-full .video-caption {
+    min-height: 112px;
+    padding: 10px 24px;
+    gap: 4px;
+  }
+  .web-room.stage-home > .tv-player.is-full {
+    border: 0;
+    border-radius: 0;
+  }
+  .web-room .tv-player.is-full .video-caption-heading {
+    padding-right: 260px;
+    min-height: 26px;
+  }
+  .web-room .tv-player.is-full .video-caption-heading span,
+  .web-room .tv-player.is-full .video-caption-heading > small {
+    display: none;
+  }
+  .web-room .tv-player.is-full .compact-offset-status {
+    position: absolute;
+    right: 24px;
+    top: 10px;
+  }
+  .web-room .tv-player.is-full .full-controls.tv-style-controls {
+    min-height: 60px;
+  }
+  .web-room .tv-player.is-full .lyrics-save-status {
+    margin: 0;
+  }
+  .web-room .fullscreen-join {
+    background: #221d2de6;
+    color: #f5f2ff;
+    width: 128px;
+  }
+  .web-room .fullscreen-join img {
+    width: 108px;
+    height: 108px;
+  }
+  .web-room .fullscreen-join > span {
+    display: none;
+  }
+  .web-room .fullscreen-queue {
+    background: #221d2dd9;
+  }
+}
+@media (min-width: 951px) and (max-height: 650px) {
+  .app.tv.web-room {
+    --room-footer: 76px;
+  }
+  .app.tv.web-room > .sidebar {
+    padding-top: 10px;
+  }
+  .web-room .brand {
+    margin-bottom: 10px;
+  }
+  .web-room .nav-label {
+    margin-top: 10px;
+  }
+  .web-room .sidebar nav button {
+    min-height: 38px;
+    padding: 7px 10px;
+  }
+  .web-room .scan-card img {
+    width: 64px;
+    height: 64px;
+  }
+  .web-room .sidebar-bottom {
+    padding-top: 8px;
+  }
+  .web-room .initial-picker output {
+    margin: 6px 0;
+    padding: 6px;
+  }
+  .web-room .initial-keys {
+    gap: 3px;
+  }
+  .web-room .initial-keys button {
+    min-height: 26px;
+    font-size: 14px;
+  }
+}
+@media (max-width: 1100px) and (min-width: 701px) and (min-height: 501px) {
+  .web-room .initial-results-layout {
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 14px;
+  }
+  .web-room .play-controls {
+    gap: 8px;
+  }
+  .web-room .mini-record {
+    display: none;
+  }
+}
+@media (max-width: 700px), (max-width: 950px) and (max-height: 500px) {
+  .web-room .queue-artwork {
+    width: 40px;
+    height: 40px;
+  }
+  .web-room .library-search {
+    flex-wrap: wrap;
+  }
+}

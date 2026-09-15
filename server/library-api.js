@@ -61,6 +61,7 @@ export function libraryApi({
   emit,
   resolveReview,
   snapshot,
+  isPlaying,
 }) {
   const { db, get, set } = store;
   const previews = new Map();
@@ -83,6 +84,7 @@ export function libraryApi({
     assertSongIdle(store, song.id);
     checkRevision(song, req.body.expectedRevision, false);
     if (
+      isPlaying?.(song.id) ||
       snapshot().ambient?.song_id === song.id ||
       db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
     )
@@ -615,6 +617,7 @@ export function libraryApi({
         )
           throw new Error("仅整理标准曲库内的歌曲");
         if (
+          isPlaying?.(song.id) ||
           snapshot?.().ambient?.song_id === song.id ||
           db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
         )
@@ -783,6 +786,7 @@ export function libraryApi({
     if (!manifest.vocal || !manifest.backing || !hdUpgradeSource(store, song))
       throw new Error("仅支持有原视频裁剪记录的双音轨歌曲升级高清画面");
     if (
+      isPlaying?.(song.id) ||
       snapshot?.().ambient?.song_id === song.id ||
       db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
     )

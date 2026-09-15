@@ -17,6 +17,11 @@ import { settingsApi } from "./routes/settings.js";
 import { reviewsApi } from "./routes/reviews.js";
 import { legacyLibraryApi } from "./routes/legacy-library.js";
 import { createRoom } from "./room.js";
+import {
+  createRoomRegistry,
+  roomRegistryApi,
+  LEGACY_ROOM,
+} from "./room-registry.js";
 import { createScheduler } from "./scheduler.js";
 import { libraryApi } from "./library-api.js";
 import { libraryDeleteApi } from "./library-delete.js";
@@ -49,6 +54,7 @@ export function createApp(options = {}) {
   if (!adminToken || adminToken.length < 12)
     throw new Error("请设置至少 12 位的 ADMIN_PASSWORD（管理密码）");
   const app = express();
+  const rooms = createRoomRegistry(store);
   const clients = new Set();
   app.disable("x-powered-by");
   // Validate only the optional QR origin hint; API access uses explicit credentials.
@@ -94,23 +100,27 @@ export function createApp(options = {}) {
     equal(token(req), adminToken)
       ? next()
       : next(fail(401, "请输入正确的管理密码"));
-  const member = (req, res, next) =>
-    equal(token(req), get("roomToken")) || equal(token(req), adminToken)
-      ? next()
-      : next(fail(401, "请扫描电视二维码加入客厅"));
+  const member = (req, res, next) => {
+    const room = rooms.byToken(token(req));
+    if (!room && !equal(token(req), adminToken))
+      return next(fail(401, "请登录 NAS 或扫描歌房二维码"));
+    req.roomId = room?.id || LEGACY_ROOM;
+    next();
+  };
   app.use(
     "/api",
     requestLimits({
       authenticated: (req) =>
-        equal(token(req), adminToken) || equal(token(req), get("roomToken")),
+        equal(token(req), adminToken) || !!rooms.byToken(token(req)),
     }),
   );
-  const events = liveEvents(clients, () => snapshot());
+  const events = liveEvents(clients, (roomId) => snapshot(roomId));
   const emit = events.emit;
-  const { snapshot, enqueue } = createRoom({
+  const { snapshot, enqueue, isPlaying } = createRoom({
     app,
     member,
     store,
+    rooms,
     cache,
     emit,
     addJob: (...args) => addJob(...args),
@@ -129,7 +139,7 @@ export function createApp(options = {}) {
       posterOptions: options.posterOptions,
       emit,
       enqueue,
-      isPlaying: (id) => snapshot().ambient?.song_id === id,
+      isPlaying,
       fail,
     },
     {
@@ -149,6 +159,8 @@ export function createApp(options = {}) {
           process.env.KTV_LOCAL_ONLY !== "1")),
   });
   const routeContext = {
+    rooms,
+    isPlaying,
     deleteJob,
     discovery,
     app,
@@ -171,6 +183,7 @@ export function createApp(options = {}) {
     allowedOrigin,
   };
   const resolveReview = reviewsApi(routeContext);
+  roomRegistryApi(routeContext);
   tvPairingApi(routeContext);
   libraryApi({ ...routeContext, resolveReview });
   favoriteBundlesApi(routeContext);
@@ -202,7 +215,10 @@ export function createApp(options = {}) {
     });
     res.flushHeaders();
     clients.add(res);
-    res.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`);
+    res.roomId = req.roomId;
+    res.write(
+      `event: state\ndata: ${JSON.stringify(snapshot(req.roomId))}\n\n`,
+    );
     req.on("close", () => clients.delete(res));
   });
   publicLibraryApi(routeContext);
@@ -234,7 +250,7 @@ export function createApp(options = {}) {
     downloads,
     cache,
     legacyCache,
-    isPlaying: (id) => snapshot().ambient?.song_id === id,
+    isPlaying,
     addJob,
     enabled: options.worker !== false && !store.readOnlyMedia,
   });
