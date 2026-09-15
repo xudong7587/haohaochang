@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 import wave
 from job_store import JobStore
-from inference import validate_waves, vocal_activity
+from inference import validate_waves, vocal_activity, separation_timeout
 import math
 import struct
 from upload_guard import UploadGuard
@@ -27,6 +27,11 @@ class StoreTests(unittest.TestCase):
             result = vocal_activity(file)
             self.assertEqual(result['onsets'], [3.0, 6.0, 9.0])
             self.assertEqual(result['duration'], 12)
+    def test_cpu_timeout_is_bounded_and_can_allow_six_hours(self):
+        for value, expected in [('21600', 21600), ('99999', 21600), ('bad', 1800), ('1', 1800)]:
+            with patch.dict(os.environ, {'SEPARATION_TIMEOUT_SECONDS': value}):
+                self.assertEqual(separation_timeout(), expected)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='ktv-worker-')
         self.addCleanup(self.temp.cleanup)

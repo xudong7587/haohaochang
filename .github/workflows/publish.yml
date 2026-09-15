@@ -78,7 +78,7 @@ jobs:
           docker pull "$IMAGE"
           test "$(docker image inspect "$IMAGE" --format '{{.Architecture}}')" = "$ARCH"
           if [ -z "$KIND" ]; then
-            docker run -d --name verify -e ADMIN_PASSWORD=ci-smoke-password-123 -e KTV_LOCAL_ONLY=1 -p 127.0.0.1:3210:3210 "$IMAGE"
+            docker run -d --name verify -e ADMIN_PASSWORD=ci-smoke-password-123 -e KTV_EMBEDDED_KEY=ci-ephemeral-worker-key -e KTV_LOCAL_ONLY=1 -v /dev/accel:/dev/accel --device-cgroup-rule='c 261:* rmw' -p 127.0.0.1:3210:3210 "$IMAGE"
             for n in $(seq 1 20); do
               if curl -fsS http://localhost:3210/api/health; then break; fi
               sleep 2
@@ -91,6 +91,10 @@ jobs:
             docker exec verify mkdir -p /app/scripts
             docker exec verify mv /app/check-poster-runtime.mjs /app/scripts/check-poster-runtime.mjs
             docker exec verify node scripts/check-poster-runtime.mjs
+            docker cp scripts/check-separator-runtime.py verify:/app/scripts/check-separator-runtime.py
+            docker cp scripts/check-embedded-runtime.mjs verify:/app/scripts/check-embedded-runtime.mjs
+            docker exec verify /opt/separator/bin/python scripts/check-separator-runtime.py
+            docker exec verify node scripts/check-embedded-runtime.mjs
           else
             docker run -d --name verify -p 127.0.0.1:8000:8000 "$IMAGE"
             for n in $(seq 1 20); do

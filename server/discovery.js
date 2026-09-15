@@ -47,7 +47,7 @@ export function startDiscovery(
     status: enabled ? "searching" : "disabled",
     message: enabled
       ? "正在寻找局域网 PC"
-      : "自动发现未启动；Docker 请使用 LAN 配置",
+      : "自动发现未启动；Docker 请使用统一 host 配置",
   };
   const info = () => ({ ...state, worker: store.get("pc-worker", null) });
   async function accept(data, remote) {
@@ -165,7 +165,7 @@ export function startDiscovery(
       state = {
         enabled,
         status: "error",
-        message: "自动发现网络不可用，请检查 LAN 部署配置",
+        message: "自动发现网络不可用，请检查 host 网络配置",
       };
     });
     socket.bind(0, "0.0.0.0", () => {

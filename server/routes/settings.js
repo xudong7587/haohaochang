@@ -4,7 +4,11 @@ import { biliLoginApi } from "../bili-login.js";
 import { enrichmentConfig, enrichSong } from "../enrichment.js";
 import { favoriteConfig } from "../favorites.js";
 import { providerConfig, testProvider } from "../separation.js";
-import { npuConfig } from "../separation/providers.js";
+import {
+  npuConfig,
+  cpuConfig,
+  embeddedSeparation,
+} from "../separation/providers.js";
 
 import { fail, clean } from "../http-utils.js";
 
@@ -85,6 +89,9 @@ export function settingsApi({
       pcEndpoint: config.pcEndpoint || "",
       pcModel: config.pcModel || "htdemucs",
       hasPcKey: !!config.pcApiKey,
+      embeddedSeparation: embeddedSeparation(),
+      cpuEnabled: cpuConfig(config).enabled,
+      cpuAvailable: !!cpuConfig(config).endpoint,
       npuEnabled: npuConfig(config).enabled,
       npuEndpoint: npuConfig(config).endpoint,
       hasNpuKey: !!npuConfig(config).apiKey,
@@ -98,7 +105,7 @@ export function settingsApi({
     set("ai", providerConfig(req.body, get("ai", {})));
     res.json({ ok: true });
   });
-  for (const kind of ["pc", "npu", "cloud"]) {
+  for (const kind of ["pc", "npu", "cpu", "cloud"]) {
     const configFor = (input) => {
       const old = get("ai", {});
       const fields =
@@ -113,16 +120,31 @@ export function settingsApi({
             ]
           : kind === "npu"
             ? ["npuEnabled", "npuEndpoint", "npuApiKey", "clearNpuKey"]
-            : ["enabled", "endpoint", "model", "apiKey", "clearKey"];
+            : kind === "cpu"
+              ? ["cpuEnabled"]
+              : ["enabled", "endpoint", "model", "apiKey", "clearKey"];
       const patch = Object.fromEntries(
         fields.filter((k) => k in input).map((k) => [k, input[k]]),
       );
-      if (kind === "npu" && patch.npuEnabled === true) patch.enabled = true;
+      if (
+        (kind === "npu" && patch.npuEnabled === true) ||
+        (kind === "cpu" && patch.cpuEnabled === true)
+      )
+        patch.enabled = true;
       return providerConfig({ ...old, ...patch }, old);
     };
     app.post("/api/admin/ai/" + kind, admin, (req, res) => {
       set("ai", configFor(req.body));
       if (kind === "pc") discovery.scan();
+      if (
+        ["cpu", "npu"].includes(kind) &&
+        get("ai", {})[kind + "Enabled"] === true
+      ) {
+        db.prepare(
+          "UPDATE jobs SET status='queued',stage='',error='' WHERE status='waiting-worker'",
+        ).run();
+        work();
+      }
       res.json({ ok: true });
     });
     app.post("/api/admin/ai/" + kind + "/test", admin, async (req, res) => {
@@ -132,7 +154,9 @@ export function settingsApi({
           ? { endpoint: c.pcEndpoint, model: c.pcModel, apiKey: c.pcApiKey }
           : kind === "npu"
             ? npuConfig(c)
-            : c;
+            : kind === "cpu"
+              ? cpuConfig(c)
+              : c;
       if (!target.endpoint)
         throw fail(
           400,
@@ -152,7 +176,9 @@ export function settingsApi({
             ? { endpoint: c.pcEndpoint, model: c.pcModel, apiKey: c.pcApiKey }
             : npuConfig(c).enabled
               ? npuConfig(c)
-              : c;
+              : cpuConfig(c).enabled && cpuConfig(c).endpoint
+                ? cpuConfig(c)
+                : c;
         })(),
       ),
     ),

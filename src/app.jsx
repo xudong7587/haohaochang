@@ -61,7 +61,7 @@ import {
   Disc3,
 } from "lucide-react";
 
-import { AISettings } from "./settings.jsx";
+import { SeparationSettings } from "./separation-settings.jsx";
 import { PcDashboard } from "./pc-dashboard.jsx";
 
 const route = ["/", "/admin"].includes(location.pathname)
@@ -491,7 +491,7 @@ export function App() {
                 className={tab === "ai" ? "selected" : ""}
                 onClick={() => setTab("ai")}
               >
-                备用 AI
+                人声分离
               </IconButton>
               <IconButton
                 icon={Settings2}
@@ -1002,11 +1002,11 @@ export function App() {
             <>
               <div className="section-heading">
                 <div>
-                  <h1>备用 AI</h1>
-                  <p>配置分离服务，并独立检测其连接。</p>
+                  <h1>人声分离</h1>
+                  <p>管理电脑与 NAS 的分离服务，自动选择可用设备。</p>
                 </div>
               </div>
-              <AISettings />
+              <SeparationSettings />
             </>
           )}
           {route === "mobile" && (

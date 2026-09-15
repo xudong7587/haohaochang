@@ -36,6 +36,17 @@ worker.post("/desktop/update/:action", (q, r) => {
 });
 let mode = "online",
   requests = 0;
+worker.get("/health", (req, res) => {
+  assert.equal(req.get("authorization"), "Bearer worker-test-secret");
+  if (mode === "offline") return res.sendStatus(503);
+  res.json({
+    protocol: "ktv-separation-v1",
+    backend: "demucs",
+    device: "cuda",
+    models: ["htdemucs"],
+    pending: 0,
+  });
+});
 worker.get("/desktop/status", (q, r) => {
   requests++;
   assert.equal(q.headers.authorization, "Bearer worker-test-secret");
@@ -293,28 +304,62 @@ try {
     await page.getByRole("link", { name: "返回管理页面" }).count(),
     0,
   );
-  await page
-    .locator("summary")
-    .filter({ hasText: /^PC 连接设置$/ })
-    .click();
-  await page
-    .getByLabel("PC 地址", { exact: true })
-    .fill("http://192.168.11.155:8000");
-  assert.equal(await page.getByLabel("自动发现并连接 PC").isChecked(), false);
-  assert.equal(
-    await page.getByLabel("分离服务地址", { exact: true }).count(),
-    0,
-  );
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: "test-results/pc-dashboard/admin-tab.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "备用 AI", exact: true }).click();
-  await page.getByRole("heading", { name: "备用 AI 分离服务" }).waitFor();
+  await page.getByRole("button", { name: "人声分离", exact: true }).click();
+  await page.getByRole("heading", { name: "NAS CPU", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "NAS NPU", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "PC 分离器", exact: true }).waitFor();
+  assert.equal(
+    await page.locator('input:not([type="checkbox"]):visible').count(),
+    0,
+  );
+  await page.getByLabel("启用NAS CPU", { exact: true }).check();
+  await page.getByRole("status").filter({ hasText: "设置已保存" }).waitFor();
+  await page.screenshot({
+    path: "test-results/pc-dashboard/separation-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(
+    await page
+      .locator(".separation-provider")
+      .evaluateAll((cards) =>
+        cards.every(
+          (card) => card.getBoundingClientRect().right <= window.innerWidth + 1,
+        ),
+      ),
+  );
+  await page.screenshot({
+    path: "test-results/pc-dashboard/separation-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page
+    .locator("summary")
+    .filter({ hasText: "高级：外部备用 API" })
+    .click();
   assert.equal(await page.getByLabel("PC 地址", { exact: true }).count(), 0);
   await page.getByRole("button", { name: "检测备用 AI" }).click();
   await page.getByRole("alert").filter({ hasText: "未配置备用 AI" }).waitFor();
+  await page.getByLabel("自动分离伴奏", { exact: true }).uncheck();
+  await page
+    .getByLabel("自动分离伴奏", { exact: true })
+    .waitFor({ state: "visible" });
+  await page
+    .getByLabel("分离服务地址", { exact: true })
+    .fill(`http://127.0.0.1:${remote.address().port}`);
+  await page.getByLabel("分离模型", { exact: true }).fill("htdemucs");
+  await page.getByRole("button", { name: "保存备用 AI 配置" }).click();
+  await page
+    .getByRole("status")
+    .filter({ hasText: "备用 AI 设置已保存" })
+    .waitFor();
+  assert.equal(service.store.get("ai").enabled, false);
+  assert.equal(service.store.get("ai").pcApiKey, "worker-test-secret");
   await page.screenshot({
     path: "test-results/pc-dashboard/ai-tab.png",
     fullPage: true,

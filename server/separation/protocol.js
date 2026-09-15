@@ -31,6 +31,13 @@ export async function checkProvider(config, timeout = 15000) {
       { code: "INVALID_PROTOCOL" },
     );
   if (
+    config.cpu &&
+    (data.backend !== "demucs" ||
+      data.device !== "cpu" ||
+      !data.models?.includes("htdemucs"))
+  )
+    throw new Error("主容器内置 CPU 分离服务未就绪，请检查容器日志");
+  if (
     config.npu &&
     (data.backend !== "openvino-npu" ||
       data.ready !== true ||
@@ -72,6 +79,19 @@ function checkpointName(song, config) {
 }
 export function hasProviderCheckpoint(store, song, config) {
   return !!store.get(checkpointName(song, config));
+}
+export function resumeCandidates(store, song, candidates) {
+  // Finish an already submitted job before starting another provider's work.
+  const priority = (config) => {
+    const checkpoint = store.get(checkpointName(song, config));
+    if (
+      checkpoint?.result &&
+      ["running", "queued", "done"].includes(checkpoint.result.status)
+    )
+      return 2;
+    return checkpoint ? 1 : 0;
+  };
+  return [...candidates].sort((a, b) => priority(b) - priority(a));
 }
 async function fingerprint(file) {
   const hash = createHash("sha256");
@@ -222,7 +242,7 @@ export async function runProviderJob(
     checkpoint.result = result;
     store.set(checkpointKey, checkpoint);
   }
-  const deadline = Date.now() + 1800000;
+  const deadline = Date.now() + (config.cpu ? 6 * 60 * 60 * 1000 : 1800000);
   let firstPoll = true;
   while (result.status === "queued" || result.status === "running") {
     if (!validId(result.id)) {
@@ -230,7 +250,9 @@ export async function runProviderJob(
       throw new Error("分离服务返回了无效任务 ID");
     }
     if (Date.now() > deadline)
-      throw new Error("AI 分离超过 30 分钟，请在后台重试；将继续查询原任务");
+      throw new Error(
+        `${config.cpu ? "NAS CPU 分离超过 6 小时" : "AI 处理超过 30 分钟"}，请在后台重试；将继续查询原任务`,
+      );
     if (!firstPoll) await taskDelay(pollInterval);
     firstPoll = false;
     const poll = await taskFetch(`${config.endpoint}/jobs/${result.id}`, {

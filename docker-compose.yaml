@@ -1,24 +1,22 @@
-# 只需修改管理密码、左侧端口、三个目录映射；不需要 .env 文件。
+# Linux NAS 统一配置：docker compose up -d
+# 升级时沿用原密码、端口和目录。PC 自动发现需要 host 网络。
 services:
   ktv:
     image: ghcr.io/xudong7587/haohaochang:latest
-    ports:
-      - "3210:3210" # 左侧为 NAS 访问端口，右侧保持 3210
+    network_mode: host
     environment:
-      ADMIN_PASSWORD: "change-this-password-123" # 请改为至少 12 位的管理密码
+      ADMIN_PASSWORD: "change-this-password-123"
+      PORT: "43210" # 升级时填写原 NAS 访问端口，如 3210
+      KTV_DISCOVERY_ENABLED: "1"
+      KTV_TV_DISCOVERY_ENABLED: "1"
     volumes:
-      - ./data:/data # 持久化目录，自动生成 settings.json、数据库和任务记录
-      - /volume1/media/ktv:/media # 正式曲库，自动整理需要写入权限
-      - ./download:/download # 下载暂存目录，完成后自动复制整理到正式曲库
+      - ./data:/data
+      - /volume3/V3 Media/Haohaochang/media:/media
+      - /volume3/V3 Media/Haohaochang/download:/download
+      # 没有 NPU 时目录可为空，主容器自动使用 CPU。
+      - /dev/accel:/dev/accel
+    device_cgroup_rules:
+      - "c 261:* rmw"
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
-
-# 显式指定容器子网，避免 NAS 的 Docker 默认地址池耗尽时无法创建网络。
-# 这是容器内部网络，不是 NAS 的局域网地址；如与现有 LAN/VPN/Docker 子网重叠，请更换。
-networks:
-  default:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 10.253.231.0/24
