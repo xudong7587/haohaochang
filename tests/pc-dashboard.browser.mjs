@@ -36,6 +36,17 @@ worker.post("/desktop/update/:action", (q, r) => {
 });
 let mode = "online",
   requests = 0;
+worker.get("/health", (req, res) => {
+  assert.equal(req.get("authorization"), "Bearer worker-test-secret");
+  if (mode === "offline") return res.sendStatus(503);
+  res.json({
+    protocol: "ktv-separation-v1",
+    backend: "demucs",
+    device: "cuda",
+    models: ["htdemucs"],
+    pending: 0,
+  });
+});
 worker.get("/desktop/status", (q, r) => {
   requests++;
   assert.equal(q.headers.authorization, "Bearer worker-test-secret");
@@ -308,6 +319,25 @@ try {
   );
   await page.getByLabel("启用NAS CPU", { exact: true }).check();
   await page.getByRole("status").filter({ hasText: "设置已保存" }).waitFor();
+  await page.screenshot({
+    path: "test-results/pc-dashboard/separation-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(
+    await page
+      .locator(".separation-provider")
+      .evaluateAll((cards) =>
+        cards.every(
+          (card) => card.getBoundingClientRect().right <= window.innerWidth + 1,
+        ),
+      ),
+  );
+  await page.screenshot({
+    path: "test-results/pc-dashboard/separation-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page
     .locator("summary")
     .filter({ hasText: "高级：外部备用 API" })
@@ -315,6 +345,21 @@ try {
   assert.equal(await page.getByLabel("PC 地址", { exact: true }).count(), 0);
   await page.getByRole("button", { name: "检测备用 AI" }).click();
   await page.getByRole("alert").filter({ hasText: "未配置备用 AI" }).waitFor();
+  await page.getByLabel("自动分离伴奏", { exact: true }).uncheck();
+  await page
+    .getByLabel("自动分离伴奏", { exact: true })
+    .waitFor({ state: "visible" });
+  await page
+    .getByLabel("分离服务地址", { exact: true })
+    .fill(`http://127.0.0.1:${remote.address().port}`);
+  await page.getByLabel("分离模型", { exact: true }).fill("htdemucs");
+  await page.getByRole("button", { name: "保存备用 AI 配置" }).click();
+  await page
+    .getByRole("status")
+    .filter({ hasText: "备用 AI 设置已保存" })
+    .waitFor();
+  assert.equal(service.store.get("ai").enabled, false);
+  assert.equal(service.store.get("ai").pcApiKey, "worker-test-secret");
   await page.screenshot({
     path: "test-results/pc-dashboard/ai-tab.png",
     fullPage: true,
