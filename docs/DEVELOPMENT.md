@@ -19,7 +19,7 @@ npm test
 
 开发前端默认在 `5173`，后端在 `3210`。可用 `FFMPEG`、`FFPROBE`、`YTDLP` 指定程序路径，用 `MEDIA_ROOTS` 指定多个媒体目录，目录之间用 `|` 分隔。二维码地址在后台配置并保存到 settings.json。
 
-开发者若需要本地构建 Docker，可使用 `docker compose -f docker-compose.yaml -f docker-compose.build.yaml up -d --build`。NAS 日常部署使用默认 `docker-compose.yaml` 拉镜像。
+开发者使用 `docker build -t haohaochang:dev .` 构建本地镜像。NAS 日常部署只有一份 `docker-compose.yaml`，将 image 改成本地标签即可验证，不再叠加其他 Compose。
 
 `npm test` 包含真实媒体测试，使用开发依赖中的 FFmpeg/ffprobe 二进制。如果包管理器阻止安装脚本，需要先允许 `ffmpeg-static` 的安装脚本或执行 `node node_modules/ffmpeg-static/install.js`。
 
@@ -70,7 +70,7 @@ Python 协议测试需 fastapi==0.115.12、python-multipart==0.0.20 和 httpx，
 
 ## v0.3.0 局域网与在线视频
 
-`docker-compose.lan.yaml` 是独立的 Linux NAS host 网络部署文件，默认 PORT=43210、KTV_DISCOVERY_ENABLED=1。不要与 bridge 主配置叠加，host 模式也不能使用 Docker 内部的 separator 服务名；可配置实际可达的兼容 API 地址。公司环境测试设置 KTV_LOCAL_ONLY=1，createApp({discovery:false})，仅绑定 localhost。
+`docker-compose.yaml` 统一使用 Linux NAS host 网络，默认 PORT=43210、KTV_DISCOVERY_ENABLED=1。内置服务仅监听 loopback，CPU 18002、NPU 18001，由 Node 子进程监督器管理，内部密钥每次启动生成且不写入用户配置。公司环境测试设置 KTV_LOCAL_ONLY=1，createApp({discovery:false})，仅绑定 localhost。
 
 NAS 从 UDP 回复的源 IPv4 推导 PC 地址，检查发现 nonce，再用绑定源 IP 的一次性 challenge 配对；广播不携带工作密钥。发现只支持 RFC1918 IPv4，不跨 VLAN。PC 默认开放工作监听，测试模式显式关闭。在线预览经 NAS 代理，源 URL 仅允许 HTTPS bilivideo.com/cn 域名及其子域，重定向再次校验，凭证不返回浏览器。
 
@@ -122,8 +122,8 @@ B站流帧率可能来自整毫秒时间间隔（62.5 vs 60、30.303 vs 30）；
 
 Android `SongCache` 是当前歌曲专用缓存，复用 Media3 CacheDataSource；停止播放器后取消预取，等待网络写入退出再释放与删除，不能在仍读取时删除。不可用缓存回退直读。租约容忍仅限服务端租约有效期内，认证、接管、后台静音和看门狗仍保留。新增 `SongCacheTest`、RoomSession 网络抖动测试和网页租约回归。
 
-可选 NPU 安装见 [NPU.md](NPU.md)，普通镜像及 PC 不加载 NPU 依赖；NPU 镜像独立构建。恢复代码后保留任务取消的 taskFetch／taskSignal 逻辑。`tests/bili-credentials.test.js` 使用协议替身，不能把它称为真实长期凭证维护验收。
+集成分离安装见 [NPU.md](NPU.md)。主镜像 amd64 使用已验证的 OpenVINO runtime 基础层，同时安装 CPU Demucs；arm64 仅装 CPU。PC 继续独立。旧 separator 镜像保留兼容发布用途，NAS 包不再提供独立分离器 Compose。恢复代码后保留任务取消的 taskFetch／taskSignal 逻辑。`tests/bili-credentials.test.js` 使用协议替身，不能把它称为真实长期凭证维护验收。
 
 ## 多架构发布
 
-`publish.yml` 用 ubuntu-latest 和 ubuntu-24.04-arm 原生构建 amd64／arm64 主服务及 CPU 分离镜像。每个架构先发布 SHA 加架构的临时标签并启动验证；CPU 分离额外运行 `scripts/check-separator-runtime.py`，不下载模型，仅验证原生依赖、音频读写和小模型推理。全部通过后合并版本 manifest、校验架构列表，再更新 latest；Intel NPU 只构建 amd64。workflow_dispatch 可在打标签前验证当前分支，不更新 latest。
+`publish.yml` 用 ubuntu-latest 和 ubuntu-24.04-arm 原生构建 amd64／arm64 主服务及 CPU 分离镜像。每个架构先发布 SHA 加架构的临时标签并启动验证；独立 CPU 镜像运行 `scripts/check-separator-runtime.py`。主容器还运行 `scripts/check-embedded-runtime.mjs`，通过内置服务分离真实短音频，验证 htdemucs 模型、完整伴奏输出、自动选择与鉴权。全部通过后合并版本 manifest、校验架构列表，再更新 latest；Intel NPU 只构建 amd64。workflow_dispatch 可在打标签前验证当前分支，不更新 latest。

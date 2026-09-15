@@ -8,10 +8,12 @@ import {
   checkProvider,
   runProviderJob,
   hasProviderCheckpoint,
+  resumeCandidates,
 } from "./separation/protocol.js";
 import { validateResult } from "./separation/validation.js";
 import { autoAlignLyrics } from "./lyrics-alignment.js";
 import { providerCandidates } from "./separation/providers.js";
+import { checkTaskCancellation } from "./task-cancellation.js";
 export { providerConfig } from "./separation/config.js";
 export { testProvider } from "./separation/protocol.js";
 
@@ -25,7 +27,7 @@ export async function separateSong(store, song, cache) {
       .backing.available
   )
     return true;
-  const candidates = providerCandidates(config);
+  const candidates = resumeCandidates(store, song, providerCandidates(config));
   const pc = candidates.find((c) => c.pc);
   const fallback = candidates.some((c) => !c.pc);
   const resumingPc = pc && hasProviderCheckpoint(store, song, pc);
@@ -57,7 +59,7 @@ export async function separateSong(store, song, cache) {
         );
         reserved = true;
       }
-      if (candidate.npu) await checkProvider(candidate, 3000);
+      if (candidate.npu || candidate.cpu) await checkProvider(candidate, 3000);
       const root = path.join(cache, "separation-tasks");
       await mkdir(root, { recursive: true });
       const staging = await mkdtemp(path.join(root, "task-"));
@@ -96,6 +98,7 @@ export async function separateSong(store, song, cache) {
         await rm(staging, { recursive: true, force: true });
       }
     } catch (error) {
+      checkTaskCancellation();
       last =
         candidate.pc &&
         !fallback &&

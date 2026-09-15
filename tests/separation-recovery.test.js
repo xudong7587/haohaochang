@@ -103,6 +103,145 @@ for (const replacement of [false, true]) {
   }
 }
 
+for (const replacement of [false, true]) {
+  for (const scenario of [
+    "pc",
+    "npu",
+    "cpu",
+    "bad-cpu",
+    "disabled-cpu",
+    "busy-pc",
+  ]) {
+    test(`${replacement ? "replacement" : "new song"} embedded fallback: ${scenario}`, async (t) => {
+      const f = await fixture(t),
+        calls = [];
+      const keys = [
+        "KTV_EMBEDDED_SEPARATION",
+        "KTV_EMBEDDED_CPU_ENDPOINT",
+        "KTV_EMBEDDED_NPU_ENDPOINT",
+      ];
+      const old = keys.map((key) => process.env[key]);
+      Object.assign(process.env, {
+        KTV_EMBEDDED_SEPARATION: "1",
+        KTV_EMBEDDED_CPU_ENDPOINT: f.config.endpoint + "/cpu",
+        KTV_EMBEDDED_NPU_ENDPOINT: f.config.endpoint + "/npu",
+      });
+      t.after(() =>
+        keys.forEach((key, i) => {
+          if (old[i] === undefined) delete process.env[key];
+          else process.env[key] = old[i];
+        }),
+      );
+      for (const kind of ["pc", "npu", "cpu", "cloud"]) {
+        f.remote.get(`/${kind}/health`, (req, res) => {
+          if (kind === "pc" && !["pc", "busy-pc"].includes(scenario))
+            return res.sendStatus(503);
+          res.json({
+            protocol: "ktv-separation-v1",
+            backend: kind === "npu" ? "openvino-npu" : "demucs",
+            device: "cpu",
+            ready: ["pc", "npu", "busy-pc"].includes(scenario),
+            busy: kind === "pc" && scenario === "busy-pc",
+            models: ["htdemucs"],
+          });
+        });
+        f.remote.post(`/${kind}/separate`, (req, res) => {
+          calls.push(kind);
+          res.json({
+            status: "done",
+            instrumental_url:
+              kind === "cpu" && scenario === "bad-cpu"
+                ? "/corrupt"
+                : "/artifact",
+          });
+        });
+      }
+      f.remote.get("/corrupt", (req, res) => res.send("invalid audio"));
+      f.store.set("ai", {
+        enabled: true,
+        pcEndpoint: f.config.endpoint + "/pc",
+        cpuEnabled: scenario !== "disabled-cpu",
+        endpoint: f.config.endpoint + "/cloud",
+        model: "htdemucs",
+      });
+      if (replacement)
+        await separateRecording(f.store, f.song, f.vocal, f.cache);
+      else await separateSong(f.store, f.song, f.cache);
+      assert.deepEqual(
+        calls,
+        {
+          pc: ["pc"],
+          npu: ["npu"],
+          cpu: ["cpu"],
+          "bad-cpu": ["cpu", "cloud"],
+          "disabled-cpu": ["cloud"],
+          "busy-pc": ["npu"],
+        }[scenario],
+      );
+    });
+  }
+}
+
+test("saved CPU task resumes before newly connected PC and uploads only once", async (t) => {
+  const f = await fixture(t),
+    calls = [];
+  const old = process.env.KTV_EMBEDDED_SEPARATION,
+    oldCpu = process.env.KTV_EMBEDDED_CPU_ENDPOINT;
+  process.env.KTV_EMBEDDED_SEPARATION = "1";
+  process.env.KTV_EMBEDDED_CPU_ENDPOINT = f.config.endpoint;
+  t.after(() => {
+    if (old === undefined) delete process.env.KTV_EMBEDDED_SEPARATION;
+    else process.env.KTV_EMBEDDED_SEPARATION = old;
+    if (oldCpu === undefined) delete process.env.KTV_EMBEDDED_CPU_ENDPOINT;
+    else process.env.KTV_EMBEDDED_CPU_ENDPOINT = oldCpu;
+  });
+  let polls = 0;
+  f.remote.get("/health", (req, res) =>
+    res.json({
+      protocol: "ktv-separation-v1",
+      backend: "demucs",
+      device: "cpu",
+      models: ["htdemucs"],
+    }),
+  );
+  f.remote.post("/separate", (req, res) => {
+    calls.push("cpu");
+    res.json({ id: "cpu_existing", status: "running" });
+  });
+  f.remote.get("/jobs/cpu_existing", (req, res) => {
+    if (++polls === 1) return res.sendStatus(503);
+    res.json({ status: "done", instrumental_url: "/artifact" });
+  });
+  f.remote.get("/pc/health", (req, res) => {
+    calls.push("pc");
+    res.json({ protocol: "ktv-separation-v1" });
+  });
+  f.remote.post("/pc/separate", (req, res) => {
+    calls.push("pc-request");
+    res.sendStatus(503);
+  });
+  await assert.rejects(
+    runProviderJob(f.store, f.song, f.vocal, f.cache, {
+      endpoint: f.config.endpoint + "/pc",
+      model: "htdemucs",
+      pc: true,
+    }),
+    /503/,
+  );
+  const cpu = { endpoint: f.config.endpoint, model: "htdemucs", cpu: true };
+  await assert.rejects(
+    runProviderJob(f.store, f.song, f.vocal, f.cache, cpu),
+    /503/,
+  );
+  f.reopen().set("ai", {
+    enabled: true,
+    npuEnabled: false,
+    pcEndpoint: f.config.endpoint + "/pc",
+  });
+  await separateSong(f.store, f.song, f.cache);
+  assert.deepEqual(calls, ["pc-request", "cpu"]);
+});
+
 async function fixture(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-separation-"));
   const cache = path.join(dir, "cache");

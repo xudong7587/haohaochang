@@ -14,6 +14,7 @@ import { publicLibraryApi } from "./routes/public-library.js";
 import { mediaApi } from "./routes/media.js";
 import { onlineApi } from "./routes/online.js";
 import { settingsApi } from "./routes/settings.js";
+import { separationApi } from "./routes/separation.js";
 import { reviewsApi } from "./routes/reviews.js";
 import { legacyLibraryApi } from "./routes/legacy-library.js";
 import { createRoom } from "./room.js";
@@ -225,6 +226,7 @@ export function createApp(options = {}) {
   mediaApi(routeContext);
   onlineApi(routeContext);
   settingsApi(routeContext);
+  separationApi(routeContext);
   pcApi(routeContext);
   legacyLibraryApi(routeContext);
   app.get("/", (req, res) => res.redirect(302, "/admin"));

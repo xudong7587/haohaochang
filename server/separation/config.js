@@ -1,5 +1,6 @@
-import { npuConfig } from "./providers.js";
+import { npuConfig, cpuConfig, embeddedSeparation } from "./providers.js";
 export function providerConfig(input, old = {}) {
+  const cpuEnabled = input.cpuEnabled ?? cpuConfig(old).enabled;
   const previousNpu = npuConfig(old);
   const npuEnabled = input.npuEnabled ?? previousNpu.enabled;
   const npuEndpoint = String(input.npuEndpoint ?? previousNpu.endpoint)
@@ -53,14 +54,21 @@ export function providerConfig(input, old = {}) {
     !(
       pcEndpoint ||
       (npuEnabled && npuEndpoint) ||
+      (cpuEnabled && cpuConfig().endpoint) ||
       (endpoint && String(input.model || "").trim())
     )
   )
     throw new Error("启用 AI 分离前请填写地址和模型");
   return {
+    ...old,
     enabled: input.enabled === true,
+    pcEnabled: input.pcEnabled ?? old.pcEnabled ?? true,
+    cpuEnabled: cpuEnabled === true,
     npuEnabled: npuEnabled === true,
-    npuEndpoint,
+    npuEndpoint:
+      input.npuEndpoint ??
+      old.npuEndpoint ??
+      (embeddedSeparation() ? "" : npuEndpoint),
     npuApiKey: input.clearNpuKey
       ? ""
       : String(input.npuApiKey || old.npuApiKey || "").slice(0, 2000),

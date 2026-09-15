@@ -71,7 +71,12 @@ export function openStore(dir) {
     autoImport: true,
     publicUrl: "",
     onlineEnabled: true,
-    ai: { enabled: false, endpoint: "", model: "", apiKey: "" },
+    ai: {
+      enabled: process.env.KTV_EMBEDDED_SEPARATION === "1",
+      endpoint: "",
+      model: "",
+      apiKey: "",
+    },
   };
   let config;
   try {
@@ -141,5 +146,13 @@ export function openStore(dir) {
   db.prepare(
     "UPDATE jobs SET status='queued',stage='',error='' WHERE status='waiting-worker' AND kind='download' AND (json_extract(payload,'$.onlineSelection')=1 OR json_type(payload,'$.clip')='object')",
   ).run();
+  if (
+    process.env.KTV_EMBEDDED_SEPARATION === "1" &&
+    get("ai", {}).enabled &&
+    get("ai", {}).cpuEnabled !== false
+  )
+    db.prepare(
+      "UPDATE jobs SET status='queued',stage='',error='' WHERE status='waiting-worker'",
+    ).run();
   return { db, get, set, configPath };
 }

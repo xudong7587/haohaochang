@@ -1,7 +1,6 @@
 import { TaskList } from "./task-list.jsx";
 import { TaskActions } from "./task-actions.jsx";
 import React, { useEffect, useState } from "react";
-import { PCSettings } from "./settings.jsx";
 export function PcDashboard({ embedded = false }) {
   const [token, setToken] = useState(
       sessionStorage.getItem("adminToken") || "",
@@ -212,10 +211,7 @@ export function PcDashboard({ embedded = false }) {
           导出诊断日志
         </button>
       </section>
-      <details className="settings-card">
-        <summary>PC 连接设置</summary>
-        <PCSettings onSaved={() => setReload((v) => v + 1)} />
-      </details>
+      <p className="muted">分离服务开关和自动发现设置已集中到管理页面的“人声分离”。</p>
     </Wrapper>
   );
 }

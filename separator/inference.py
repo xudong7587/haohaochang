@@ -58,6 +58,13 @@ def validate_waves(source, output):
         raise ValueError('Separation output duration does not match input')
 
 
+def separation_timeout():
+    try:
+        return max(1800, min(21600, int(os.getenv('SEPARATION_TIMEOUT_SECONDS', '1800'))))
+    except ValueError:
+        return 1800
+
+
 def separate(store, job, model):
     folder = store.root / job
     store.write(job, dict(status='running', stage='decoding'))
@@ -80,7 +87,7 @@ def separate(store, job, model):
             else:
                 command = [sys.executable, '-m', 'demucs', '--two-stems=vocals', '-n', model, '-d', device,
                     '-j', '1', '--segment', os.getenv('SEPARATION_SEGMENT', '7'), '-o', str(folder / 'out'), str(folder / 'input.wav')]
-            subprocess.run(command, check=True, timeout=1800, stdout=log, stderr=log, **flags)
+            subprocess.run(command, check=True, timeout=separation_timeout(), stdout=log, stderr=log, **flags)
             store.write(job, dict(status='running', stage='validating'))
             # Decode once into PCM so a corrupt/truncated or float WAV cannot escape validation.
             subprocess.run([os.getenv('FFMPEG', 'ffmpeg'), '-y', '-v', 'error', '-xerror', '-i',
