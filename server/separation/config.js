@@ -1,4 +1,4 @@
-import { npuConfig, cpuConfig, embeddedSeparation } from "./providers.js";
+import { npuConfig, cpuConfig, managedSeparation } from "./providers.js";
 export function providerConfig(input, old = {}) {
   const cpuEnabled = input.cpuEnabled ?? cpuConfig(old).enabled;
   const previousNpu = npuConfig(old);
@@ -68,7 +68,7 @@ export function providerConfig(input, old = {}) {
     npuEndpoint:
       input.npuEndpoint ??
       old.npuEndpoint ??
-      (embeddedSeparation() ? "" : npuEndpoint),
+      (managedSeparation() ? "" : npuEndpoint),
     npuApiKey: input.clearNpuKey
       ? ""
       : String(input.npuApiKey || old.npuApiKey || "").slice(0, 2000),

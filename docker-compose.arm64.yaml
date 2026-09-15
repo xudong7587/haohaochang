@@ -1,6 +1,7 @@
-# 默认适用于 Intel / AMD x86-64 NAS：docker compose up -d
-# ARM NAS 使用 docker-compose.arm64.yaml；详见 NAS安装与升级.md。
-# 日常仅升级主程序：docker compose pull ktv && docker compose up -d --no-deps ktv
+# 自动生成自 docker-compose.yaml；修改后运行 node scripts/render-compose.mjs。
+# ARM64 NAS：docker compose -f docker-compose.arm64.yaml up -d
+# 包含主程序与 CPU；Intel NPU 镜像仅支持 x86-64。
+# 日常仅升级主程序：docker compose -f docker-compose.arm64.yaml pull ktv && docker compose -f docker-compose.arm64.yaml up -d --no-deps ktv
 x-worker: &worker
   restart: unless-stopped
   init: true
@@ -51,7 +52,6 @@ services:
       KTV_TV_DISCOVERY_ENABLED: "1"
       KTV_LOCAL_SEPARATION: "1"
       KTV_CPU_ENDPOINT: http://127.0.0.1:18002
-      KTV_NPU_ENDPOINT: http://127.0.0.1:18001
     volumes:
       - ${KTV_DATA_DIR:-./data}:/data
       - ${KTV_MEDIA_DIR:-/volume3/V3 Media/Haohaochang/media}:/media
@@ -71,20 +71,3 @@ services:
       SEPARATION_DEVICE: cpu
       SEPARATION_DATA_DIR: /data/separation/demucs
       TORCH_HOME: /data/models
-  separator-npu:
-    <<: *worker
-    image: ghcr.io/xudong7587/haohaochang-separator-npu:1.0.8@sha256:767dfd6f490aa2c0fcbe372acf0bfe415270d523a0df1a06dd7b577070ed377d
-    ports:
-      - "127.0.0.1:18001:8000"
-    environment:
-      <<: *worker-env
-      SEPARATION_BACKEND: openvino-npu
-      SEPARATION_DEVICE: NPU
-      SEPARATION_DATA_DIR: /data/separation/openvino-npu
-      NPU_CACHE_DIR: /data/npu-cache
-    volumes:
-      - ${KTV_DATA_DIR:-./data}:/data
-      # 无 Intel NPU 时允许空目录，自动回退 CPU。
-      - /dev/accel:/dev/accel
-    device_cgroup_rules:
-      - "c 261:* rmw"

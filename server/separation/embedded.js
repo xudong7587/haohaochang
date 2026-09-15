@@ -16,7 +16,8 @@ export async function startEmbeddedSeparation({
   platform = process.platform,
   killGroup = process.kill,
 } = {}) {
-  if (env.KTV_EMBEDDED_SEPARATION !== "1") return { stop: async () => {} };
+  if (env.KTV_LOCAL_SEPARATION === "1" || env.KTV_EMBEDDED_SEPARATION !== "1")
+    return { stop: async () => {} };
   env.KTV_EMBEDDED_KEY ||= randomBytes(32).toString("hex");
   const directory = env.KTV_SEPARATOR_DIR || "/opt/haohaochang-separator";
   const python = env.KTV_SEPARATOR_PYTHON || "/opt/separator/bin/python";

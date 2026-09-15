@@ -19,7 +19,7 @@ npm test
 
 开发前端默认在 `5173`，后端在 `3210`。可用 `FFMPEG`、`FFPROBE`、`YTDLP` 指定程序路径，用 `MEDIA_ROOTS` 指定多个媒体目录，目录之间用 `|` 分隔。二维码地址在后台配置并保存到 settings.json。
 
-开发者使用 `docker build -t haohaochang:dev .` 构建本地镜像。NAS 日常部署只有一份 `docker-compose.yaml`，将 image 改成本地标签即可验证，不再叠加其他 Compose。
+开发者使用 `docker build -t haohaochang:dev .` 构建本地镜像。NAS x86 部署使用 `docker-compose.yaml`，ARM64 使用 `docker-compose.arm64.yaml`。设置 `KTV_IMAGE=haohaochang:dev` 即可测试本地主镜像；分离容器固定使用 deploy/separation-images.json 中的版本和摘要。
 
 `npm test` 包含真实媒体测试，使用开发依赖中的 FFmpeg/ffprobe 二进制。如果包管理器阻止安装脚本，需要先允许 `ffmpeg-static` 的安装脚本或执行 `node node_modules/ffmpeg-static/install.js`。
 
@@ -70,7 +70,7 @@ Python 协议测试需 fastapi==0.115.12、python-multipart==0.0.20 和 httpx，
 
 ## v0.3.0 局域网与在线视频
 
-`docker-compose.yaml` 统一使用 Linux NAS host 网络，默认 PORT=43210、KTV_DISCOVERY_ENABLED=1。内置服务仅监听 loopback，CPU 18002、NPU 18001，由 Node 子进程监督器管理，内部密钥每次启动生成且不写入用户配置。公司环境测试设置 KTV_LOCAL_ONLY=1，createApp({discovery:false})，仅绑定 localhost。
+Compose 的 ktv 使用 Linux host 网络，默认端口 43210、KTV_DISCOVERY_ENABLED=1。CPU／NPU 是独立容器，仅将 18002／18001 绑定到宿主机 loopback；主程序生成并保留 data/separation/internal.key，分离容器读取同一密钥。公司环境测试设置 KTV_LOCAL_ONLY=1，createApp({discovery:false})，仅绑定 localhost。
 
 NAS 从 UDP 回复的源 IPv4 推导 PC 地址，检查发现 nonce，再用绑定源 IP 的一次性 challenge 配对；广播不携带工作密钥。发现只支持 RFC1918 IPv4，不跨 VLAN。PC 默认开放工作监听，测试模式显式关闭。在线预览经 NAS 代理，源 URL 仅允许 HTTPS bilivideo.com/cn 域名及其子域，重定向再次校验，凭证不返回浏览器。
 
@@ -126,4 +126,12 @@ Android `SongCache` 是当前歌曲专用缓存，复用 Media3 CacheDataSource�
 
 ## 多架构发布
 
-`publish.yml` 用 ubuntu-latest 和 ubuntu-24.04-arm 原生构建 amd64／arm64 主服务及 CPU 分离镜像。每个架构先发布 SHA 加架构的临时标签并启动验证；独立 CPU 镜像运行 `scripts/check-separator-runtime.py`。主容器还运行 `scripts/check-embedded-runtime.mjs`，通过内置服务分离真实短音频，验证 htdemucs 模型、完整伴奏输出、自动选择与鉴权。全部通过后合并版本 manifest、校验架构列表，再更新 latest；Intel NPU 只构建 amd64。workflow_dispatch 可在打标签前验证当前分支，不更新 latest。
+`publish.yml` 用 ubuntu-latest 和 ubuntu-24.04-arm 原生构建 amd64／arm64 主镜像。每个架构先发布 SHA 加架构的临时标签，再通过 `scripts/check-compose-runtime.sh` 调用固定的独立分离镜像，验证实际短音频、自动鉴权、CPU 回退及只重建主程序。全部通过后合并主镜像版本 manifest 并更新主镜像 latest。workflow_dispatch 可在打标签前验证当前分支，不更新 latest。
+
+## 主程序与分离镜像发布
+
+主程序标签 `v*` 只触发 `.github/workflows/publish.yml` 的主镜像构建、Compose 实际调用验证和主镜像标签推广。Python、FFmpeg、yt-dlp 留在主程序，模型运行环境留在独立 CPU／NPU 镜像。
+
+CPU／NPU 更新使用 `Publish separation runtime (manual)` 工作流，选择一个 backend 并填写独立版本号。它发布 `runtime-<版本>`，拒绝覆盖已有版本，不更新 latest，不修改 Compose。确认设备实测与协议兼容后，再单独更新 `deploy/separation-images.json`、默认 Compose 的固定版本／摘要，并运行 `node scripts/render-compose.mjs` 同步 ARM 配置。普通 UI Release 不执行该工作流。
+
+`sh scripts/check-compose-runtime.sh` 在隔离临时目录使用发给用户的 Compose，关闭 LAN 自动发现，验证自动鉴权、无 NPU 的 CPU 实际分离、以及只重建 ktv 后分离容器 ID 和密钥不变。不能对生产 NAS 运行这个测试脚本。

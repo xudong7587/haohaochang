@@ -186,6 +186,17 @@ try {
   await page.waitForFunction(
     () => document.querySelectorAll(".artist-card").length === 1,
   );
+  for (const size of [{width:1280,height:900},{width:390,height:844},{width:844,height:390}]) {
+    await page.setViewportSize(size);
+    const geometry = await page.locator(".artist-card").evaluate((card) => {
+      const photo = card.querySelector(".artist-card-photo");
+      const a=card.getBoundingClientRect(), b=photo.getBoundingClientRect();
+      return {top:b.top-a.top,left:b.left-a.left,right:a.right-b.right,bottom:a.bottom-b.bottom,width:b.width,height:b.height};
+    });
+    assert.ok(geometry.top <= 1.1 && geometry.left <= 1.1 && geometry.right <= 1.1 && geometry.bottom <= 1.1, JSON.stringify(geometry));
+    assert.ok(Math.abs(geometry.width / geometry.height - 1.5) < 0.02, JSON.stringify(geometry));
+  }
+  await page.setViewportSize({width:1280,height:900});
   await page.screenshot({
     path: "test-results/room-browsing/initials-play.png",
     fullPage: true,

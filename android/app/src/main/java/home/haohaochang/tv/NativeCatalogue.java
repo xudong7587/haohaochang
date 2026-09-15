@@ -20,6 +20,8 @@ import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.GridView;
+import android.widget.FrameLayout;
+import android.widget.AbsListView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -666,6 +668,12 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   }
 
   private final class Cards extends BaseAdapter {
+    public int getViewTypeCount() { return 2; }
+
+    public int getItemViewType(int position) {
+      return page.equals("artists") && artist.isEmpty() ? 1 : 0;
+    }
+
     public int getCount() {
       return rows.length();
     }
@@ -679,6 +687,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     }
 
     public View getView(int position, View convert, ViewGroup parent) {
+      if (getItemViewType(position) == 1) return artistView(position, convert);
       LinearLayout card;
       ImageView image;
       TextView title, detail, action;
@@ -759,6 +768,61 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                       ? (position == 0 ? "正在播放 · " : "待唱 · ") + row.optString("artist")
                       : row.optString("artist", row.optString("author", "")));
       card.setContentDescription(title.getText() + "，" + detail.getText());
+      bindImage(image, row, artistCard);
+      return card;
+    }
+
+    private View artistView(int position, View convert) {
+      FrameLayout card;
+      ImageView image;
+      TextView title, detail;
+      if (convert == null) {
+        card = new FrameLayout(activity);
+        card.setBackground(TvStyle.shape(activity, TvStyle.SURFACE, 12));
+        card.setClipToOutline(true);
+        card.setForeground(TvStyle.photoCardOutline(activity));
+        image = new ImageView(activity);
+        card.addView(image, new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout caption = new LinearLayout(activity);
+        caption.setOrientation(VERTICAL);
+        caption.setPadding(dp(9), dp(25), dp(9), dp(8));
+        caption.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[] {0x00160e22, 0xee160e22}));
+        title = TvStyle.text(activity, "", 13, TvStyle.INK);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setSingleLine();
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        detail = TvStyle.text(activity, "", 10, 0xffd4c3e0);
+        detail.setSingleLine();
+        caption.addView(title, new LayoutParams(-1, -2));
+        caption.addView(detail, new LayoutParams(-1, -2));
+        card.addView(caption, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        card.setTag(new Object[] {image, title, detail});
+      } else {
+        card = (FrameLayout) convert;
+        Object[] views = (Object[]) card.getTag();
+        image = (ImageView) views[0];
+        title = (TextView) views[1];
+        detail = (TextView) views[2];
+      }
+      int width = Math.max(grid.getColumnWidth(), dp(120));
+      // GridView is already measuring this recycled row. Requesting another
+      // parent layout here would keep restarting its layout pass.
+      ViewGroup.LayoutParams cardParams = card.getLayoutParams();
+      if (cardParams == null)
+        card.setLayoutParams(new AbsListView.LayoutParams(-1, width * 2 / 3));
+      else cardParams.height = width * 2 / 3;
+      card.setActivated(grid.hasFocus() && position == selectedPosition);
+      JSONObject row = rows.optJSONObject(position);
+      title.setText(row.optString("artist"));
+      title.setTextSize(compact ? 12 : 13);
+      detail.setText(row.optInt("count") + " 首歌曲");
+      card.setContentDescription(title.getText() + "，" + detail.getText());
+      bindImage(image, row, true);
+      return card;
+    }
+
+    private void bindImage(ImageView image, JSONObject row, boolean artistCard) {
       String path =
           page.equals("online")
               ? onlineCoverPath(row)
@@ -812,7 +876,6 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
               });
         }
       }
-      return card;
     }
   }
 

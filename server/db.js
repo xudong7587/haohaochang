@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { managedSeparation } from "./separation/providers.js";
 
 export function openStore(dir) {
   mkdirSync(dir, { recursive: true });
@@ -72,7 +73,7 @@ export function openStore(dir) {
     publicUrl: "",
     onlineEnabled: true,
     ai: {
-      enabled: process.env.KTV_EMBEDDED_SEPARATION === "1",
+      enabled: managedSeparation(),
       endpoint: "",
       model: "",
       apiKey: "",
@@ -147,7 +148,7 @@ export function openStore(dir) {
     "UPDATE jobs SET status='queued',stage='',error='' WHERE status='waiting-worker' AND kind='download' AND (json_extract(payload,'$.onlineSelection')=1 OR json_type(payload,'$.clip')='object')",
   ).run();
   if (
-    process.env.KTV_EMBEDDED_SEPARATION === "1" &&
+    managedSeparation() &&
     get("ai", {}).enabled &&
     get("ai", {}).cpuEnabled !== false
   )

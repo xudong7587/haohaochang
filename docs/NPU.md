@@ -1,28 +1,27 @@
-# NAS 人声分离 · v1.0.7
+# NAS 人声分离 · v1.1.0
 
-好好唱主容器同时提供 CPU 和 Intel NPU 分离服务，PC 整理器仍独立运行。调度顺序为 PC → NPU → CPU → 已配置的外部 API。常规设置都在管理页“人声分离”，无需填写分离器地址、密码或密钥。
+主程序、CPU 和 Intel NPU 使用独立容器，PC 整理器保持独立。处理顺序为 PC → NPU → CPU → 已配置的外部 API。常规开关都在管理页“人声分离”，Compose 配好本机地址和共享密钥，无需手动填写连接信息。
 
-## 安装与升级
+## 安装与迁移
 
-1. 使用同版本 NAS 包中唯一的 `docker-compose.yaml`，填写管理密码、访问端口和三个目录映射。升级时保持原值，尤其是 data 的实际目录；不要同时运行两个主容器共用数据库。
-2. 等旧任务结束，停止旧主容器并重建。旧 NPU／CPU 分离容器也可停止，不需要删除它们的 data。PC 原连接、模型选择以及曲库和 NAS 任务记录继续保留。
-3. 打开“人声分离”，查看三个服务的状态。新安装默认开启自动分离；升级保留原来的总开关。可以单独关闭任一分离服务，正在执行的任务继续完成。
-4. 有 Intel NPU 时自动检测、编译并试运行 htdemucs，通过后接收任务。无 NPU、尚未就绪或处理失败时尝试 CPU。首次编译需要等待，状态会自动刷新。
+按 [NAS安装与升级.md](NAS安装与升级.md) 选择配置：Intel／AMD x86 用 docker-compose.yaml，ARM64 用 docker-compose.arm64.yaml。沿用原密码、端口和 data／曲库／下载目录。从 v1.0.7／v1.0.8 迁移时启动整套 Compose，创建独立分离容器；保留原项目名称，避免两个主程序共用数据库。
 
-统一镜像为 `ghcr.io/xudong7587/haohaochang:1.0.7`，Linux amd64 内置 Intel NPU 运行环境，Linux arm64 使用 CPU。Compose 使用 host 网络，默认 PORT 为 43210；从旧 3210 部署升级时保持 PORT=3210，避免影响现有播放端连接。
+主程序不再安装 PyTorch、Demucs 和 OpenVINO。CPU、NPU 复用已经发布的 1.0.8 镜像，并锁定完整 SHA-256 摘要。后续主程序 Release 只更新 ktv；分离镜像有独立发布流程，只有明确的模型、兼容或分离功能改动才更新。
 
 ## 设备与资源
 
-NPU 需要支持 OpenVINO 的 Intel 设备、宿主机驱动和 `/dev/accel` 设备映射。统一 Compose 只映射该设备目录并允许加速器设备访问；目录为空时 CPU 仍可用。AMD／高通 NPU 暂未适配，不会自动安装驱动。
+Intel NPU 需要宿主机已有可用驱动和 /dev/accel/accel0。NPU 容器获得设备目录及对应设备权限；没有 NPU 时状态为未就绪，任务尝试 CPU。AMD／高通 NPU 未适配。ARM64 配置不启动 Intel NPU 容器。
 
-CPU 使用 htdemucs，每次处理一首，推理计算限制为 2 线程并降低进程优先级。单次允许最多 6 小时；慢速 NAS 上可在后台等待。首次 CPU 分离需要联网下载模型，后续复用缓存。NPU 模型随 amd64 镜像提供。
+CPU 使用 htdemucs，每次处理一首，推理限制 2 线程并降低进程优先级，单次最多 6 小时。第一次分离需要联网下载模型，之后复用缓存。NPU 模型随独立 NPU 镜像提供，首次编译需要等待。
 
-CPU 模型默认保存在 `data/models`，如果旧 `data/separator/models` 已存在，则继续使用旧目录。NPU 编译缓存同理，优先复用 `data/npu/npu-cache`，否则使用 `data/npu-cache`。内置服务的任务放在 `data/separation`，不删除旧分离器任务目录。镜像包含模型运行环境，比仅含网页服务的旧镜像更大。
+CPU 模型优先使用 data/separator/models，否则使用 data/models；NPU 缓存优先使用 data/npu/npu-cache，否则使用 data/npu-cache。任务继续保存到 data/separation/demucs 和 data/separation/openvino-npu。内部密钥在 data/separation/internal.key，只重启主程序不会更换它。
 
-## 任务与失败处理
+## 任务与日常更新
 
-已有 PC 或内置分离任务的断点先恢复，避免重试时重复上传。断线后可重试查询原任务；如果分离进程在处理中重启，重新计算该任务。校验成功后才发布伴奏，失败保留此前可用资源。
+已存在的分离任务先恢复原断点。断线后查询原任务，避免重复上传；分离进程重启时，未完成推理按原有策略重试。校验成功后才发布伴奏，失败保留可用资源。
 
-NPU 只负责音频分离。视频裁剪继续优先 PC，失败后使用 NAS FFmpeg CPU。模型来源、许可与 SHA 校验见 `separator/INTEL-MODEL-CARD.md`，镜像保留相关许可证。
+日常执行 docker compose pull ktv，再执行 docker compose up -d --no-deps ktv，CPU／NPU 容器继续运行。ARM64 命令增加 -f docker-compose.arm64.yaml。不要删除旧模型、编译缓存或任务目录。
 
-用户已验证旧独立 NPU 容器能在其 NAS 正常运行。新版主容器的实际 NPU 设备访问、音质与耗时仍需在该 NAS 验证；自动化无 NPU 环境验证 CPU 回退与镜像运行。
+NPU 只负责音频分离。视频裁剪优先 PC，失败后使用主程序中的 FFmpeg。两个分离镜像也保留各自音频处理需要的 FFmpeg。
+
+当前验证包括本机模拟协议、真实 FFmpeg 与云端隔离 Compose 的 CPU 实际分离；新部署的 NPU 设备访问、音质和速度需要在用户 NAS 验证。模型来源与许可见源码 separator/INTEL-MODEL-CARD.md，镜像保留相关许可文件。

@@ -1,3 +1,17 @@
+# 开发状态 · v1.1.0（发布验证）
+
+## 主程序与分离容器拆分
+
+主 Dockerfile 使用 Node slim，保留 Python、FFmpeg 与下载工具；PyTorch／Demucs 和 OpenVINO／NPU 模型由独立容器提供。默认 x86 Compose 启动主程序、CPU、NPU；ARM64 配置启动主程序和 CPU。两份配置锁定 1.0.8 分离镜像及摘要，主程序通过回环端口自动连接。密钥持久保存到 data/separation/internal.key，旧 PC 配置、开关、模型缓存和分离任务目录继续使用。
+
+主程序标签发布只更新主镜像。CPU／NPU 仅通过独立手动工作流发布 runtime 版本，拒绝覆盖已有版本，不改 latest 或 Compose；验证后单独修改固定版本清单。默认 Compose 是源，scripts/render-compose.mjs 生成 ARM 版本。
+
+网页歌手卡片清除原来的照片外边距，统一 3:2 填满；APK 用图片铺满卡片、底部渐变叠加标题和歌曲数，焦点轮廓保留。所有附件按 1.1.0 重新生成，用户明确要求通过 USB 覆盖安装正式签名 APK。
+
+本地 Node 238 项中 237 通过、1 项 Linux 专属跳过，生产前端构建及网页卡片三种尺寸检查通过；本机分离配置／持久密钥回归通过。Android 41 项单测、lint 和构建通过，覆盖三种尺寸歌星照片填满卡片。实际 Compose 和手机实机仍在验证，生产 NAS 未改动。
+
+---
+
 # 开发状态 · v1.0.8（发布验证）
 
 ## v1.0.8 点歌与发布迁移

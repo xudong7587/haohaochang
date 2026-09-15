@@ -38,6 +38,7 @@ public class NativeRoomTest {
   private final List<JSONObject> commands = new CopyOnWriteArrayList<>();
   private volatile String songsFixture =
       "[{\"id\":\"song-1\",\"title\":\"测试歌曲\",\"artist\":\"测试歌手\"}]";
+  private volatile String artistsFixture = "[]";
   private final JSONObject song =
       RoomApi.object(
           "id",
@@ -60,7 +61,7 @@ public class NativeRoomTest {
             (path, headers, body) -> {
               paths.add(path);
               if (path.equals("/api/control")) commands.add(new JSONObject(body));
-              return new LocalNas.Reply(200, path.startsWith("/api/songs") ? songsFixture : "{}");
+              return new LocalNas.Reply(200, path.startsWith("/api/songs") ? songsFixture : path.startsWith("/api/artists") ? artistsFixture : "{}");
             });
     activity = Robolectric.buildActivity(Activity.class).setup().get();
     room =
@@ -122,6 +123,43 @@ public class NativeRoomTest {
   private void press(int key) {
     activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, key));
     activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, key));
+  }
+
+  @Test
+  public void artistPhotoFillsCardAcrossPhoneRotationsAndTv() throws Exception {
+    artistsFixture = "[{\"id\":\"artist-1\",\"artist\":\"测试歌手\",\"count\":12,\"hasPhoto\":true,\"photoVersion\":\"fixture\"}]";
+    NativeCatalogue catalogue = (NativeCatalogue) descendants(room).stream()
+        .filter(v -> v instanceof NativeCatalogue).findFirst().get();
+    java.lang.reflect.Field field = NativeCatalogue.class.getDeclaredField("cache");
+    field.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    android.util.LruCache<String, Bitmap> cache = (android.util.LruCache<String, Bitmap>) field.get(catalogue);
+    Bitmap portrait = Bitmap.createBitmap(160, 240, Bitmap.Config.ARGB_8888);
+    portrait.eraseColor(0xff318ac7);
+    cache.put("/api/artist-photo/artist-1?v=fixture", portrait);
+    find("歌星点歌").performClick();
+    drain();
+    for (int[] size : new int[][] {{390,844},{844,390},{960,540}}) {
+      layout(size[0], size[1]);
+      layout(size[0], size[1]);
+      GridView grid = (GridView) find("歌曲卡片");
+      assertEquals(1, grid.getAdapter().getCount());
+      ViewGroup card = (ViewGroup) grid.getChildAt(0);
+      android.widget.ImageView image = (android.widget.ImageView) card.getChildAt(0);
+      assertEquals(0, image.getLeft());
+      assertEquals(0, image.getTop());
+      assertEquals(card.getWidth(), image.getWidth());
+      assertEquals(card.getHeight(), image.getHeight());
+      assertEquals(android.widget.ImageView.ScaleType.CENTER_CROP, image.getScaleType());
+      assertTrue(Math.abs(card.getWidth() / (double) card.getHeight() - 1.5) < .06);
+      Bitmap screenshot = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+      room.draw(new Canvas(screenshot));
+      java.io.File folder = new java.io.File("build/test-screenshots");
+      folder.mkdirs();
+      try (java.io.FileOutputStream out = new java.io.FileOutputStream(new java.io.File(folder, "artist-filled-" + size[0] + ".png"))) {
+        screenshot.compress(Bitmap.CompressFormat.PNG, 100, out);
+      }
+    }
   }
 
   @Test

@@ -9,6 +9,8 @@ jobs:
         with: {node-version: '24', cache: npm}
       - run: npm ci
       - run: node scripts/check-release-version.mjs
+      - run: node scripts/render-compose.mjs --check
+      - run: docker compose config -q && docker compose -f docker-compose.arm64.yaml config -q
       - run: npm test
         timeout-minutes: 3
       - run: npm run build
@@ -51,19 +53,9 @@ jobs:
       - run: docker build -t haohaochang:test .
       - name: Verify NAS cover processing and TV startup assets
         run: docker run --rm -v "$PWD/scripts:/app/scripts:ro" haohaochang:test node scripts/check-poster-runtime.mjs
-      - name: Verify integrated CPU fallback without NPU
+      - name: Verify split Compose and main-only update
         timeout-minutes: 12
-        run: |
-          docker run -d --name embedded-verify -e ADMIN_PASSWORD=ci-embedded-password-123 -e KTV_EMBEDDED_KEY=ci-ephemeral-worker-key -e KTV_LOCAL_ONLY=1 -v "$PWD/scripts:/app/scripts:ro" -v /dev/accel:/dev/accel --device-cgroup-rule='c 261:* rmw' haohaochang:test
-          for n in $(seq 1 30); do
-            if docker exec embedded-verify node -e "fetch('http://127.0.0.1:3210/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then break; fi
-            sleep 2
-          done
-          docker exec embedded-verify /opt/separator/bin/python scripts/check-separator-runtime.py
-          docker exec embedded-verify node scripts/check-embedded-runtime.mjs
-      - name: Integrated container logs
-        if: always()
-        run: docker logs embedded-verify || true
+        run: sh scripts/check-compose-runtime.sh
   windows-launcher:
     runs-on: windows-latest
     steps:

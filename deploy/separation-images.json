@@ -1,0 +1,14 @@
+{
+  "cpu": {
+    "image": "ghcr.io/xudong7587/haohaochang-separator",
+    "version": "1.0.8",
+    "digest": "sha256:c69112be880d34c31c1366657da5743a4594121428596822036a4b61029ac2d7",
+    "architectures": ["amd64", "arm64"]
+  },
+  "npu": {
+    "image": "ghcr.io/xudong7587/haohaochang-separator-npu",
+    "version": "1.0.8",
+    "digest": "sha256:767dfd6f490aa2c0fcbe372acf0bfe415270d523a0df1a06dd7b577070ed377d",
+    "architectures": ["amd64"]
+  }
+}

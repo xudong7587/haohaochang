@@ -1,6 +1,8 @@
 import { createApp } from "./app.js";
 import { startTvDiscovery } from "./tv-discovery.js";
 import { startEmbeddedSeparation } from "./separation/embedded.js";
+import { configureLocalSeparation } from "./separation/local.js";
+await configureLocalSeparation();
 const embedded = await startEmbeddedSeparation();
 let service;
 try {

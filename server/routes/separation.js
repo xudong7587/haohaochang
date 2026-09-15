@@ -4,6 +4,7 @@ import {
   cpuConfig,
   npuConfig,
   embeddedSeparation,
+  managedSeparation,
 } from "../separation/providers.js";
 import { fail } from "../http-utils.js";
 
@@ -20,6 +21,7 @@ export function separationApi({ app, admin, get, set, db, work, discovery }) {
       cpuEnabled: cpuConfig(c).enabled,
       autoDiscover: c.autoDiscover !== false,
       embedded: embeddedSeparation(),
+      managed: managedSeparation(),
     };
   };
   const probe = async () => {
@@ -41,7 +43,7 @@ export function separationApi({ app, admin, get, set, db, work, discovery }) {
               ready: true,
               busy: health.busy === true,
               pending: Number(health.pending) || 0,
-              source: c.embedded ? "内置服务" : "已有连接",
+              source: c.embedded ? "内置服务" : c.managed ? "本机分离容器" : "已有连接",
               device: String(health.device || "").slice(0, 80),
             };
           } catch {
@@ -53,13 +55,13 @@ export function separationApi({ app, admin, get, set, db, work, discovery }) {
           ready: false,
           busy: false,
           pending: 0,
-          source: choices.some((c) => !c.embedded) ? "已有连接" : "内置服务",
+          source: choices.some((c) => c.embedded) ? "内置服务" : managedSeparation() ? "本机分离容器" : "已有连接",
           message:
             kind === "pc"
               ? "尚未连接，请启动同一网络的 PC 整理器"
               : kind === "npu"
                 ? "NPU 未就绪或未检测到，将使用 CPU"
-                : "内置服务未就绪，请检查主容器日志",
+                : "CPU 服务未就绪，请检查 separator-cpu 容器状态和日志",
         };
       }),
     );

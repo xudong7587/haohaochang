@@ -8,3 +8,5 @@
 - npm test 含真实 FFmpeg 测试，npm run build 构建前端。scripts/ui-check.mjs、scripts/player-check.mjs、tests/library-ui.browser.mjs 和 tests/online-player.browser.mjs 已纳入 CI；scripts/adversarial-check.mjs 退出 0 仅代表观察完成，不代表缺陷已修复。
 - 启动与工具配置见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。按改动验证，区分本地通过、实机通过与已发布。
 - 每次推送 Git 前同步 README 的相关功能和当前版本号；涉及用户操作时一并更新 docs/USER-GUIDE.md。版本、安装包名称和更新步骤应与当次发布一致，从使用者的操作流程组织说明。
+- 主程序、NAS CPU 和 Intel NPU 使用独立镜像。Python、FFmpeg、下载工具留在主程序；PyTorch、Demucs、OpenVINO 与模型留在各自分离镜像。日常主程序 Release 只构建／推广主镜像，不重建或改写 CPU、NPU 标签。
+- CPU／NPU 的固定版本和摘要以 deploy/separation-images.json 为准，Compose 自动连接同机服务并生成共享鉴权密钥。只有明确的分离器改动才手动发布独立 runtime 版本，验证后单独修改该文件和 Compose。修改默认 Compose 后运行 node scripts/render-compose.mjs，同步 ARM 版本。

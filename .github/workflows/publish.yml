@@ -1,4 +1,4 @@
-name: Publish NAS images
+name: Publish NAS main image
 on:
   workflow_dispatch:
   push:
@@ -26,21 +26,6 @@ jobs:
             dockerfile: Dockerfile
             arch: arm64
             runner: ubuntu-24.04-arm
-          - context: ./separator
-            suffix: '-separator'
-            dockerfile: separator/Dockerfile
-            arch: amd64
-            runner: ubuntu-latest
-          - context: ./separator
-            suffix: '-separator'
-            dockerfile: separator/Dockerfile
-            arch: arm64
-            runner: ubuntu-24.04-arm
-          - context: ./separator
-            suffix: '-separator-npu'
-            dockerfile: separator/Dockerfile.npu
-            arch: amd64
-            runner: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Image name
@@ -71,47 +56,16 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.suffix || 'ktv' }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.suffix || 'ktv' }}-${{ matrix.arch }}
-      - name: Verify published container
+      - name: Verify published main image and Compose
         env:
-          IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}-${{ matrix.arch }}
-          KIND: ${{ matrix.suffix }}
+          KTV_TEST_IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}-${{ matrix.arch }}
           ARCH: ${{ matrix.arch }}
         run: |
-          docker pull "$IMAGE"
-          test "$(docker image inspect "$IMAGE" --format '{{.Architecture}}')" = "$ARCH"
-          if [ -z "$KIND" ]; then
-            docker run -d --name verify -e ADMIN_PASSWORD=ci-smoke-password-123 -e KTV_EMBEDDED_KEY=ci-ephemeral-worker-key -e KTV_LOCAL_ONLY=1 -v /dev/accel:/dev/accel --device-cgroup-rule='c 261:* rmw' -p 127.0.0.1:3210:3210 "$IMAGE"
-            for n in $(seq 1 20); do
-              if curl -fsS http://localhost:3210/api/health; then break; fi
-              sleep 2
-            done
-            curl -fsS http://localhost:3210/api/health
-            docker exec verify node -e "const c=JSON.parse(require('fs').readFileSync('/data/settings.json'));if(c.version!==1)process.exit(1);console.log('settings.json initialized')"
-            docker exec verify ffmpeg -version
-            docker exec verify /opt/ytdlp/bin/yt-dlp --version
-            docker cp scripts/check-poster-runtime.mjs verify:/app/check-poster-runtime.mjs
-            docker exec verify mkdir -p /app/scripts
-            docker exec verify mv /app/check-poster-runtime.mjs /app/scripts/check-poster-runtime.mjs
-            docker exec verify node scripts/check-poster-runtime.mjs
-            docker cp scripts/check-separator-runtime.py verify:/app/scripts/check-separator-runtime.py
-            docker cp scripts/check-embedded-runtime.mjs verify:/app/scripts/check-embedded-runtime.mjs
-            docker exec verify /opt/separator/bin/python scripts/check-separator-runtime.py
-            docker exec verify node scripts/check-embedded-runtime.mjs
-          else
-            docker run -d --name verify -p 127.0.0.1:8000:8000 "$IMAGE"
-            for n in $(seq 1 20); do
-              if curl -fsS http://localhost:8000/health; then break; fi
-              sleep 2
-            done
-            curl -fsS http://localhost:8000/health
-            if [ "$KIND" = '-separator' ]; then
-              docker cp scripts/check-separator-runtime.py verify:/app/check-separator-runtime.py
-              docker exec verify python /app/check-separator-runtime.py
-            fi
-          fi
-      - name: Container logs
-        if: always()
-        run: docker logs verify || true
+          docker pull "$KTV_TEST_IMAGE"
+          test "$(docker image inspect "$KTV_TEST_IMAGE" --format '{{.Architecture}}')" = "$ARCH"
+          docker image inspect "$KTV_TEST_IMAGE" --format 'Main image unpacked bytes: {{.Size}}' >> "$GITHUB_STEP_SUMMARY"
+          docker run --rm -v "$PWD/scripts:/app/scripts:ro" "$KTV_TEST_IMAGE" node scripts/check-poster-runtime.mjs
+          sh scripts/check-compose-runtime.sh
   promote:
     if: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '.rc') && !contains(github.ref_name, '-') }}
     needs: publish
@@ -126,19 +80,8 @@ jobs:
       - name: Publish verified architecture manifests
         run: |
           [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
-          for suffix in '' '-separator' '-separator-npu'; do
-            image="${IMAGE_REPOSITORY}${suffix}"
-            sources=("$image:sha-$GITHUB_SHA-amd64")
-            if [ "$suffix" != '-separator-npu' ]; then
-              sources+=("$image:sha-$GITHUB_SHA-arm64")
-            fi
-            docker buildx imagetools create -t "$image:$GITHUB_REF_NAME" -t "$image:${GITHUB_REF_NAME#v}" -t "$image:sha-$GITHUB_SHA" "${sources[@]}"
-            docker buildx imagetools inspect "$image:$GITHUB_REF_NAME" --raw > manifest.json
-            expected='["amd64","arm64"]'
-            if [ "$suffix" = '-separator-npu' ]; then expected='["amd64"]'; fi
-            jq -e --argjson expected "$expected" '[.manifests[].platform | select(.os == "linux") | .architecture] | sort | unique == $expected' manifest.json
-          done
-          for suffix in '' '-separator'; do
-            image="${IMAGE_REPOSITORY}${suffix}"
-            docker buildx imagetools create -t "$image:latest" "$image:$GITHUB_REF_NAME"
-          done
+          image="$IMAGE_REPOSITORY"
+          docker buildx imagetools create -t "$image:$GITHUB_REF_NAME" -t "$image:${GITHUB_REF_NAME#v}" -t "$image:sha-$GITHUB_SHA" "$image:sha-$GITHUB_SHA-amd64" "$image:sha-$GITHUB_SHA-arm64"
+          docker buildx imagetools inspect "$image:$GITHUB_REF_NAME" --raw > manifest.json
+          jq -e '[.manifests[].platform | select(.os == "linux") | .architecture] | sort | unique == ["amd64","arm64"]' manifest.json
+          docker buildx imagetools create -t "$image:latest" "$image:$GITHUB_REF_NAME"

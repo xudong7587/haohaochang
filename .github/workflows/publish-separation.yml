@@ -1,0 +1,126 @@
+name: Publish separation runtime (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: Runtime to update; independent of the main application
+        required: true
+        type: choice
+        options: [cpu, npu]
+      version:
+        description: New runtime version, for example 1.0.0 (publishes runtime-1.0.0)
+        required: true
+        type: string
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: separation-runtime-${{ inputs.backend }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      image: ${{ steps.plan.outputs.image }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        env:
+          BACKEND: ${{ inputs.backend }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re
+          kind=os.environ['BACKEND']; version=os.environ['VERSION']
+          assert kind in ('cpu','npu') and re.fullmatch(r'\d+\.\d+\.\d+',version)
+          arches=['amd64','arm64'] if kind=='cpu' else ['amd64']
+          rows=[dict(arch=a,runner='ubuntu-latest' if a=='amd64' else 'ubuntu-24.04-arm') for a in arches]
+          image='ghcr.io/xudong7587/haohaochang-separator'+('-npu' if kind=='npu' else '')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('matrix='+json.dumps(dict(include=rows))+'\nimage='+image+'\ntag=runtime-'+version+'\n')
+          PY
+      - name: Reject an already published runtime version
+        env:
+          IMAGE: ${{ steps.plan.outputs.image }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: python3 scripts/assert-new-runtime-tag.py
+  publish:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      IMAGE: ${{ needs.prepare.outputs.image }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./separator
+          file: ${{ inputs.backend == 'cpu' && 'separator/Dockerfile' || 'separator/Dockerfile.npu' }}
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ${{ env.IMAGE }}:candidate-${{ github.run_id }}-${{ matrix.arch }}
+          cache-from: type=gha,scope=runtime-${{ inputs.backend }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ inputs.backend }}-${{ matrix.arch }}
+      - name: Verify runtime
+        env:
+          BACKEND: ${{ inputs.backend }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          candidate="$IMAGE:candidate-$GITHUB_RUN_ID-$ARCH"
+          docker pull "$candidate"
+          test "$(docker image inspect "$candidate" --format '{{.Architecture}}')" = "$ARCH"
+          docker run -d --name runtime-verify -p 127.0.0.1:8000:8000 "$candidate"
+          for n in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8000/health
+          if [ "$BACKEND" = cpu ]; then
+            docker cp scripts/check-separator-runtime.py runtime-verify:/app/check-separator-runtime.py
+            docker exec runtime-verify python /app/check-separator-runtime.py
+          else
+            docker exec runtime-verify python -c "import openvino; from pathlib import Path; assert Path('/opt/models/htdemucs_fwd.xml').is_file(); print(openvino.__version__)"
+          fi
+      - name: Runtime logs
+        if: always()
+        run: docker logs runtime-verify || true
+  promote:
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ needs.prepare.outputs.image }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      BACKEND: ${{ inputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish new immutable runtime tag
+        run: |
+          python3 scripts/assert-new-runtime-tag.py
+          sources=("$IMAGE:candidate-$GITHUB_RUN_ID-amd64")
+          expected='["amd64"]'
+          if [ "$BACKEND" = cpu ]; then
+            sources+=("$IMAGE:candidate-$GITHUB_RUN_ID-arm64")
+            expected='["amd64","arm64"]'
+          fi
+          docker buildx imagetools create -t "$IMAGE:$TAG" "${sources[@]}"
+          docker buildx imagetools inspect "$IMAGE:$TAG" --raw > manifest.json
+          jq -e --argjson expected "$expected" '[.manifests[].platform | select(.os == "linux") | .architecture] | sort | unique == $expected' manifest.json
+          docker buildx imagetools inspect "$IMAGE:$TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Review the digest and update deploy/separation-images.json plus Compose in a separate change. No latest tag or NAS deployment was changed.' >> "$GITHUB_STEP_SUMMARY"

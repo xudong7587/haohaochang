@@ -514,10 +514,15 @@
 }
 .app.tv.web-room .artist-card-photo {
   width: 100%;
-  height: auto;
-  aspect-ratio: 3 / 2;
-  border-radius: 10px;
+  height: 0;
+  padding: 66.6667% 0 0;
+  margin: 0;
+  aspect-ratio: auto;
+  border-radius: 0;
   overflow: hidden;
+}
+.app.tv.web-room .artist-grid .artist-photo-card {
+  padding: 0;
 }
 .app.tv.web-room .song-poster-card,
 .app.tv.web-room .artist-card {

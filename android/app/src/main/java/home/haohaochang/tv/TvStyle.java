@@ -58,6 +58,19 @@ final class TvStyle {
     return d;
   }
 
+  static StateListDrawable photoCardOutline(Context c) {
+    StateListDrawable states = new StateListDrawable();
+    GradientDrawable focused = shape(c, Color.TRANSPARENT, 12);
+    focused.setStroke(dp(c, 2), 0xffe1c8ff);
+    states.addState(new int[] {android.R.attr.state_activated}, focused);
+    states.addState(new int[] {android.R.attr.state_focused}, focused);
+    states.addState(new int[] {android.R.attr.state_pressed}, focused);
+    GradientDrawable normal = shape(c, Color.TRANSPARENT, 12);
+    normal.setStroke(dp(c, 1), 0x20efe3ff);
+    states.addState(new int[] {}, normal);
+    return states;
+  }
+
   static StateListDrawable focus(Context c) {
     StateListDrawable d = new StateListDrawable();
     GradientDrawable focused = surface(c, 0xff4b3b64, 0xff33283e, 10, 0);

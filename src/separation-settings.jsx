@@ -165,10 +165,9 @@ export function SeparationSettings() {
             ))}
           </div>
           {message && <p role="status">{message}</p>}
-          {!data.config.embedded && (
+          {!data.config.managed && !data.config.embedded && (
             <p>
-              当前运行环境没有内置分离器。更新完整 NAS 镜像后，即可使用内置 CPU
-              和 NPU。
+              使用 NAS 安装包中的 Compose 启动本机分离容器后，CPU 和 NPU 会自动连接。
             </p>
           )}
           <details className="settings-card">
