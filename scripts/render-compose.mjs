@@ -9,12 +9,15 @@ for (const kind of ["cpu", "npu"]) {
   assert.ok(source.includes(`image: ${item.image}:${item.version}@${item.digest}`),
     `Compose must pin the reviewed ${kind} image`);
 }
-const arm = "# 自动生成自 docker-compose.yaml；修改后运行 node scripts/render-compose.mjs。\n" +
-  source.split("  separator-npu:\n")[0]
-    .replace("# 默认适用于 Intel / AMD x86-64 NAS：docker compose up -d\n# ARM NAS 使用 docker-compose.arm64.yaml；详见 NAS安装与升级.md。",
-      "# ARM64 NAS：docker compose -f docker-compose.arm64.yaml up -d\n# 包含主程序与 CPU；Intel NPU 镜像仅支持 x86-64。")
-    .replace("docker compose pull ktv && docker compose up -d --no-deps ktv",
-      "docker compose -f docker-compose.arm64.yaml pull ktv && docker compose -f docker-compose.arm64.yaml up -d --no-deps ktv")
+assert.ok(source.startsWith("services:\n"), "Public Compose must start with services");
+assert.ok(!/^x-|<<:|\$\{KTV_|\$\{ADMIN_/m.test(source), "Use direct public settings without templates");
+const npuStart = source.indexOf("\n  # 3. Intel NPU");
+assert.ok(npuStart > 0, "Keep the NPU section after the CPU section");
+const arm = source.slice(0, npuStart)
+    .replace("# Intel / AMD x86-64 NAS 使用本文件；ARM64 请用 docker-compose.arm64.yaml。",
+      "# ARM64 NAS 使用本文件，包含主程序和 CPU 分离。")
+    .replaceAll("docker compose ", "docker compose -f docker-compose.arm64.yaml ")
+    .replace("下面 CPU 和 NPU 的两处", "下面 CPU 的一处")
     .replace("      KTV_NPU_ENDPOINT: http://127.0.0.1:18001\n", "");
 if (process.argv.includes("--check"))
   assert.equal((await readFile("docker-compose.arm64.yaml", "utf8")).replaceAll("\r\n", "\n"), arm, "Regenerate ARM Compose");

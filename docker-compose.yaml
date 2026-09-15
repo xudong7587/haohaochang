@@ -1,90 +1,136 @@
-# 默认适用于 Intel / AMD x86-64 NAS：docker compose up -d
-# ARM NAS 使用 docker-compose.arm64.yaml；详见 NAS安装与升级.md。
-# 日常仅升级主程序：docker compose pull ktv && docker compose up -d --no-deps ktv
-x-worker: &worker
-  restart: unless-stopped
-  init: true
-  stop_grace_period: 30s
-  depends_on:
-    ktv:
-      condition: service_healthy
-  volumes:
-    - ${KTV_DATA_DIR:-./data}:/data
-  # 主程序首次启动生成密钥；旧模型、缓存与任务目录继续复用。
-  command:
-    - sh
-    - -ec
-    - |
-      until [ -s /data/separation/internal.key ]; do sleep 1; done
-      export SEPARATION_API_KEY="$$(cat /data/separation/internal.key)"
-      test "$${#SEPARATION_API_KEY}" -eq 64
-      if [ -d /data/separator/models ]; then export TORCH_HOME=/data/separator/models; fi
-      if [ -d /data/npu/npu-cache ]; then export NPU_CACHE_DIR=/data/npu/npu-cache; fi
-      exec nice -n 10 python -m uvicorn app:app --host 0.0.0.0 --port 8000 --no-access-log
-  healthcheck:
-    test:
-      - CMD
-      - python
-      - -c
-      - "from pathlib import Path; import urllib.request; key=Path('/data/separation/internal.key').read_text().strip(); urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/health',headers={'Authorization':'Bearer '+key}),timeout=5)"
-    interval: 30s
-    timeout: 10s
-    start_period: 60s
-    retries: 3
-x-worker-env: &worker-env
-  SEPARATION_CONCURRENCY: "1"
-  SEPARATION_TIMEOUT_SECONDS: "21600"
-  SEPARATION_SEGMENT: "4"
-  OMP_NUM_THREADS: "2"
-  MKL_NUM_THREADS: "2"
-  OPENBLAS_NUM_THREADS: "2"
-  PYTHONUNBUFFERED: "1"
 services:
+  # Intel / AMD x86-64 NAS 使用本文件；ARM64 请用 docker-compose.arm64.yaml。
+  # 全部使用 host 网络，无需创建 Docker 子网；分离服务只在本机开放。
+  # 新安装：修改密码、核对目录后执行 docker compose up -d。
+  # 旧版升级：保留原目录、密码和端口，先执行 docker compose pull ktv。
+
+  # 1. 好好唱主程序——通常只需要修改这一部分
   ktv:
-    image: ${KTV_IMAGE:-ghcr.io/xudong7587/haohaochang:latest}
-    # 保留 PC / TV 自动发现；分离服务只在同机回环地址开放。
+    image: ghcr.io/xudong7587/haohaochang:latest
     network_mode: host
     environment:
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-this-password-123}
-      PORT: ${KTV_PORT:-43210}
+      # 【必须修改】设置自己的管理密码，至少 12 位；升级时填回原密码。
+      ADMIN_PASSWORD: "change-this-password-123"
+      # 【按需修改】网页访问端口；升级时沿用原端口。
+      PORT: "43210"
+
+      # 以下连接参数已配好，无需修改。
       KTV_DISCOVERY_ENABLED: "1"
       KTV_TV_DISCOVERY_ENABLED: "1"
       KTV_LOCAL_SEPARATION: "1"
       KTV_CPU_ENDPOINT: http://127.0.0.1:18002
       KTV_NPU_ENDPOINT: http://127.0.0.1:18001
     volumes:
-      - ${KTV_DATA_DIR:-./data}:/data
-      - ${KTV_MEDIA_DIR:-/volume3/V3 Media/Haohaochang/media}:/media
-      - ${KTV_DOWNLOAD_DIR:-/volume3/V3 Media/Haohaochang/download}:/download
+      # 【核对目录】只改冒号左边，右边保持不变。升级时必须使用原目录。
+      # ./ 表示本 Compose 所在目录；也可填写 NAS 的完整路径。
+      # 数据库、配置和模型：如改 ./data，下面 CPU 和 NPU 的两处也要同步修改。
+      - "./data:/data"
+      # 下载暂存目录，例如 "/volume1/ktv/download:/download"。
+      - "./download:/download"
+      # 正式曲库目录，例如 "/volume1/ktv/media:/media"。
+      - "./media:/media"
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
+
+  # 2. CPU 人声分离
   separator-cpu:
-    <<: *worker
-    # 独立固定版本和摘要，日常 Release 不更新此镜像。
+    # 分离镜像版本已固定，无需随主程序升级修改。
     image: ghcr.io/xudong7587/haohaochang-separator:1.0.8@sha256:c69112be880d34c31c1366657da5743a4594121428596822036a4b61029ac2d7
-    ports:
-      - "127.0.0.1:18002:8000"
+    volumes:
+      # 【同步目录】冒号左边必须与上面 ktv 的 /data 映射相同。
+      - "./data:/data"
+
+    # 以下为自动连接、运行参数和健康检查，无需修改。
+    network_mode: host
     environment:
-      <<: *worker-env
+      SEPARATION_CONCURRENCY: "1"
+      SEPARATION_TIMEOUT_SECONDS: "21600"
+      SEPARATION_SEGMENT: "4"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
       SEPARATION_BACKEND: demucs
       SEPARATION_DEVICE: cpu
       SEPARATION_DATA_DIR: /data/separation/demucs
       TORCH_HOME: /data/models
+    depends_on:
+      ktv:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        until [ -s /data/separation/internal.key ]; do sleep 1; done
+        export SEPARATION_API_KEY="$$(cat /data/separation/internal.key)"
+        test "$${#SEPARATION_API_KEY}" -eq 64
+        if [ -d /data/separator/models ]; then export TORCH_HOME=/data/separator/models; fi
+        if [ -d /data/npu/npu-cache ]; then export NPU_CACHE_DIR=/data/npu/npu-cache; fi
+        exec nice -n 10 python -m uvicorn app:app --host 127.0.0.1 --port 18002 --no-access-log
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from pathlib import Path; import urllib.request; key=Path('/data/separation/internal.key').read_text().strip(); urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:18002/health',headers={'Authorization':'Bearer '+key}),timeout=5)
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+
+  # 3. Intel NPU 人声分离（没有 NPU 时自动使用 CPU）
   separator-npu:
-    <<: *worker
+    # 分离镜像版本已固定，无需随主程序升级修改。
     image: ghcr.io/xudong7587/haohaochang-separator-npu:1.0.8@sha256:767dfd6f490aa2c0fcbe372acf0bfe415270d523a0df1a06dd7b577070ed377d
-    ports:
-      - "127.0.0.1:18001:8000"
+    volumes:
+      # 【同步目录】冒号左边必须与上面 ktv 的 /data 映射相同。
+      - "./data:/data"
+      # Intel NPU 设备目录，保持原样；没有 NPU 也可以启动。
+      - "/dev/accel:/dev/accel"
+    device_cgroup_rules:
+      - "c 261:* rmw"
+
+    # 以下为自动连接、运行参数和健康检查，无需修改。
+    network_mode: host
     environment:
-      <<: *worker-env
+      SEPARATION_CONCURRENCY: "1"
+      SEPARATION_TIMEOUT_SECONDS: "21600"
+      SEPARATION_SEGMENT: "4"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
       SEPARATION_BACKEND: openvino-npu
       SEPARATION_DEVICE: NPU
       SEPARATION_DATA_DIR: /data/separation/openvino-npu
       NPU_CACHE_DIR: /data/npu-cache
-    volumes:
-      - ${KTV_DATA_DIR:-./data}:/data
-      # 无 Intel NPU 时允许空目录，自动回退 CPU。
-      - /dev/accel:/dev/accel
-    device_cgroup_rules:
-      - "c 261:* rmw"
+    depends_on:
+      ktv:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        until [ -s /data/separation/internal.key ]; do sleep 1; done
+        export SEPARATION_API_KEY="$$(cat /data/separation/internal.key)"
+        test "$${#SEPARATION_API_KEY}" -eq 64
+        if [ -d /data/separator/models ]; then export TORCH_HOME=/data/separator/models; fi
+        if [ -d /data/npu/npu-cache ]; then export NPU_CACHE_DIR=/data/npu/npu-cache; fi
+        exec nice -n 10 python -m uvicorn app:app --host 127.0.0.1 --port 18001 --no-access-log
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from pathlib import Path; import urllib.request; key=Path('/data/separation/internal.key').read_text().strip(); urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:18001/health',headers={'Authorization':'Bearer '+key}),timeout=5)
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s

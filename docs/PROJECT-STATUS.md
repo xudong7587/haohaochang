@@ -1,5 +1,11 @@
 # 开发状态 · v1.1.0
 
+## 公共 Compose 简化与地址池部署修正
+
+两份公共 Compose 改为 services 开头，展开公共参数，直接填写密码、端口和路径，用中文注释标明修改与同步位置；默认目录为同级 data／media／download。移除 .env.example，ARM 生成脚本保留用户注释。三个服务均使用 host 网络，CPU／NPU 分别仅监听 127.0.0.1:18002／18001，不创建默认 Docker 子网，修正用户部署时报 all predefined address pools have been fully subnetted 的问题。分离镜像仍固定原摘要，主程序与 APK 未改动。
+
+CI 通过覆盖文件隔离所有服务的数据映射、主镜像、密码和端口，并断言未创建 Compose 网络；运行验证结果以本次 Actions 为准。NAS 专用打包参数 --nas-only 更新配置与指南附件，不重打 PC 或 APK。
+
 ## 主程序与分离容器拆分
 
 主 Dockerfile 使用 Node slim，保留 Python、FFmpeg 与下载工具；PyTorch／Demucs 和 OpenVINO／NPU 模型由独立容器提供。默认 x86 Compose 启动主程序、CPU、NPU；ARM64 配置启动主程序和 CPU。两份配置锁定 1.0.8 分离镜像及摘要，主程序通过回环端口自动连接。密钥持久保存到 data/separation/internal.key，旧 PC 配置、开关、模型缓存和分离任务目录继续使用。

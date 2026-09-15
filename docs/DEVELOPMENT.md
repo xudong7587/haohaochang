@@ -70,7 +70,7 @@ Python 协议测试需 fastapi==0.115.12、python-multipart==0.0.20 和 httpx，
 
 ## v0.3.0 局域网与在线视频
 
-Compose 的 ktv 使用 Linux host 网络，默认端口 43210、KTV_DISCOVERY_ENABLED=1。CPU／NPU 是独立容器，仅将 18002／18001 绑定到宿主机 loopback；主程序生成并保留 data/separation/internal.key，分离容器读取同一密钥。公司环境测试设置 KTV_LOCAL_ONLY=1，createApp({discovery:false})，仅绑定 localhost。
+Compose 的三个服务均使用 Linux host 网络，不分配 Docker 子网。ktv 默认端口 43210、KTV_DISCOVERY_ENABLED=1；CPU／NPU 是独立容器，分别只监听 127.0.0.1:18002／18001，不使用 ports 映射。主程序生成并保留 data/separation/internal.key，分离容器读取同一密钥。公司环境测试设置 KTV_LOCAL_ONLY=1，createApp({discovery:false})，仅绑定 localhost。
 
 NAS 从 UDP 回复的源 IPv4 推导 PC 地址，检查发现 nonce，再用绑定源 IP 的一次性 challenge 配对；广播不携带工作密钥。发现只支持 RFC1918 IPv4，不跨 VLAN。PC 默认开放工作监听，测试模式显式关闭。在线预览经 NAS 代理，源 URL 仅允许 HTTPS bilivideo.com/cn 域名及其子域，重定向再次校验，凭证不返回浏览器。
 
@@ -122,7 +122,7 @@ B站流帧率可能来自整毫秒时间间隔（62.5 vs 60、30.303 vs 30）；
 
 Android `SongCache` 是当前歌曲专用缓存，复用 Media3 CacheDataSource；停止播放器后取消预取，等待网络写入退出再释放与删除，不能在仍读取时删除。不可用缓存回退直读。租约容忍仅限服务端租约有效期内，认证、接管、后台静音和看门狗仍保留。新增 `SongCacheTest`、RoomSession 网络抖动测试和网页租约回归。
 
-集成分离安装见 [NPU.md](NPU.md)。主镜像 amd64 使用已验证的 OpenVINO runtime 基础层，同时安装 CPU Demucs；arm64 仅装 CPU。PC 继续独立。旧 separator 镜像保留兼容发布用途，NAS 包不再提供独立分离器 Compose。恢复代码后保留任务取消的 taskFetch／taskSignal 逻辑。`tests/bili-credentials.test.js` 使用协议替身，不能把它称为真实长期凭证维护验收。
+分离安装见 [NPU.md](NPU.md)。主程序使用 Node slim，保留 Python、FFmpeg 和下载工具；CPU Demucs 与 Intel NPU OpenVINO 使用固定的独立镜像。x86 Compose 包含三个服务，ARM64 包含主程序和 CPU；PC 继续独立。恢复代码后保留任务取消的 taskFetch／taskSignal 逻辑。`tests/bili-credentials.test.js` 使用协议替身，不能把它称为真实长期凭证维护验收。
 
 ## 多架构发布
 
@@ -134,4 +134,6 @@ Android `SongCache` 是当前歌曲专用缓存，复用 Media3 CacheDataSource�
 
 CPU／NPU 更新使用 `Publish separation runtime (manual)` 工作流，选择一个 backend 并填写独立版本号。它发布 `runtime-<版本>`，拒绝覆盖已有版本，不更新 latest，不修改 Compose。确认设备实测与协议兼容后，再单独更新 `deploy/separation-images.json`、默认 Compose 的固定版本／摘要，并运行 `node scripts/render-compose.mjs` 同步 ARM 配置。普通 UI Release 不执行该工作流。
 
-`sh scripts/check-compose-runtime.sh` 在隔离临时目录使用发给用户的 Compose，关闭 LAN 自动发现，验证自动鉴权、无 NPU 的 CPU 实际分离、以及只重建 ktv 后分离容器 ID 和密钥不变。不能对生产 NAS 运行这个测试脚本。
+公共 Compose 使用直接值与中文注释，无 x-worker、YAML 合并引用或 .env 参数。`node scripts/render-compose.mjs` 保留注释生成 ARM64 文件；`--check` 校验格式与固定镜像。只更新 NAS 配置附件时用 `python scripts/package-release.py --nas-only`，同步该附件的 SHA256SUMS，不重打 PC 或 APK。
+
+`sh scripts/check-compose-runtime.sh` 在隔离临时目录使用发给用户的 Compose，通过测试覆盖文件指定镜像、密码、端口和每个容器的数据目录，关闭 LAN 自动发现。验证不创建任何 Compose 网络、自动鉴权、无 NPU 的 CPU 实际分离、以及只重建 ktv 后分离容器 ID 和密钥不变。不能对生产 NAS 运行这个测试脚本。

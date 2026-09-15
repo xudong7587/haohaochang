@@ -18,7 +18,7 @@
 - 主程序、CPU 和 Intel NPU 分离容器拆开，Compose 自动配置内部地址与鉴权。主程序保留 Python、FFmpeg 和下载工具。
 - CPU／NPU 固定在已经验证的 1.0.8 镜像及摘要；普通 Release 只构建主镜像，以后日常升级只重建 ktv。
 - 网页和 APK 歌手卡片都由照片铺满，名称与歌曲数叠在底部，去掉照片周围的空边。
-- NAS 配置包重新整理，提供 x86 与 ARM64 两份完整 Compose、配置示例和从旧版迁移的说明。
+- NAS 提供 x86 与 ARM64 两份 Compose，均从 `services:` 开头，用中文注释标明密码、端口和目录；直接修改即可，无需额外配置文件。
 
 ## 我需要准备什么？
 
@@ -33,6 +33,8 @@ NAS 主镜像支持 amd64 与 ARM64。PC GPU 分离需要支持 CUDA 的 NVIDIA 
 从 Release 下载 `haohaochang-nas-v1.1.0.zip`，解压后按架构导入 `docker-compose.yaml`（Intel／AMD x86）或 `docker-compose.arm64.yaml`（ARM64）。主程序与分离容器自动连接，电视和 PC 保留自动发现。
 
 设置至少 12 位的管理密码，并映射三个目录：`/data` 保存数据库、任务、设置和模型缓存，`/media` 保存正式曲库，`/download` 暂存导入内容。默认端口为 `43210`，升级时沿用原端口和目录。
+
+按 Compose 中的“必须修改／核对目录”注释填写。默认使用同目录下的 `data`、`media`、`download` 文件夹；如果更改 data 路径，CPU／NPU 的 `/data` 映射也要填写同一路径。三个容器均使用 host 网络，无需分配 Docker 子网，避免默认网络地址池耗尽导致部署失败。
 
 镜像仍为 `ghcr.io/xudong7587/haohaochang:latest`，可公开拉取。启动后打开 `http://NAS-IP:端口/admin`，输入管理密码。从 v1.0.7／v1.0.8 升级需替换 Compose、拉取新版 ktv 并启动整套服务；保留原 data。以后日常只执行 `docker compose pull ktv` 和 `docker compose up -d --no-deps ktv`。完整步骤见 [NAS 安装与升级](docs/NAS安装与升级.md)。
 

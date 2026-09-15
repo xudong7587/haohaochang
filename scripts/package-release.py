@@ -6,7 +6,9 @@ import hashlib
 import argparse
 
 options = argparse.ArgumentParser()
-options.add_argument('--pc-only', action='store_true', help='Build the PC bundle without requiring a signed TV APK')
+selection = options.add_mutually_exclusive_group()
+selection.add_argument('--pc-only', action='store_true', help='Build the PC bundle without requiring a signed TV APK')
+selection.add_argument('--nas-only', action='store_true', help='Refresh NAS configuration and guides without changing PC or APK releases')
 args = options.parse_args()
 
 root = Path(__file__).resolve().parents[1]
@@ -19,13 +21,15 @@ for document in ['VALIDATION.md', 'DEVELOPMENT.md', 'PROJECT-STATUS.md', 'NAS安
 guide = guide.replace('(../pc-worker/README.md)', '(https://github.com/xudong7587/haohaochang-KTV/blob/main/pc-worker/README.md)')
 
 bundles = {
-    f'haohaochang-nas-v{version}.zip': ['docker-compose.yaml', 'docker-compose.arm64.yaml', '.env.example', 'deploy/separation-images.json', 'docs/NAS安装与升级.md', 'docs/NPU.md', f'release/haohaochang-tv-v{version}.apk', 'release/实机测试说明.md'],
+    f'haohaochang-nas-v{version}.zip': ['docker-compose.yaml', 'docker-compose.arm64.yaml', 'deploy/separation-images.json', 'docs/NAS安装与升级.md', 'docs/NPU.md', f'release/haohaochang-tv-v{version}.apk', 'release/实机测试说明.md'],
     f'haohaochang-resource-ai-v{version}.zip': ['pc-worker/open.vbs', 'pc-worker/open.ps1', 'pc-worker/start.cmd', 'pc-worker/start.ps1', 'pc-worker/run.py', 'pc-worker/hardware.py',
         'pc-worker/download_runtime.py', 'pc-worker/desktop.py', 'pc-worker/lan.py', 'pc-worker/version.py', 'pc-worker/updater.py', 'pc-worker/update_source.py', 'pc-worker/update_runner.py', 'pc-worker/tray.ps1', 'pc-worker/README.md', 'separator/app.py', 'separator/clipping.py', 'separator/job_store.py', 'separator/inference.py', 'separator/upload_guard.py', 'separator/requirements.txt',
         'separator/video_encoding.py', 'pc-worker/ui/index.html', 'pc-worker/ui/update.js', 'pc-worker/ui/icon.svg', 'pc-worker/ui/icon.png', 'pc-worker/ui/icon.ico'],
 }
 for name, files in bundles.items():
     if args.pc_only and name != f'haohaochang-resource-ai-v{version}.zip':
+        continue
+    if args.nas_only and name != f'haohaochang-nas-v{version}.zip':
         continue
     with ZipFile(release / name, 'w', ZIP_DEFLATED) as archive:
         hashes = {}
@@ -41,6 +45,9 @@ for name, files in bundles.items():
         assert archive.testzip() is None
         assert not any('worker.json' in item or 'settings.json' in item or '.venv' in item for item in archive.namelist())
     print(name, (release / name).stat().st_size)
+
+if args.nas_only:
+    raise SystemExit(0)
 
 # A fixed-name Release attachment lets clients discover a version without the
 # unauthenticated REST API. Its package URL is pinned to this exact release.
