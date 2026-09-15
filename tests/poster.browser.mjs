@@ -207,12 +207,10 @@ try {
   for (const route of ["/tv"]) {
     await page.goto(base + route);
     await page.locator(".stage-card img").first().waitFor();
-    assert.ok(
-      await page
-        .locator(".stage-card img")
-        .first()
-        .evaluate((i) => i.complete && i.naturalWidth > 0),
-    );
+    await page.waitForFunction(() => {
+      const image = document.querySelector(".stage-card img");
+      return image?.complete && image.naturalWidth > 0;
+    });
   }
   for (const route of ["/play", "/tv"]) {
     await page.goto(base + route);
