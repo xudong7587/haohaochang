@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { api, roomToken } from "./api.js";
 import { Modal } from "./components.jsx";
 import { rankVideos } from "../shared/video-ranking.js";
-import { BiliLogin } from "./bili-login.jsx";
 import { MobileRequests } from "./mobile-requests.jsx";
 import { videoRefreshMode } from "../shared/video-refresh.js";
 import "./online-preview.css";
@@ -128,7 +127,7 @@ export function VideoPreview({
         onReplace
           ? "已提交视频更新，旧资源在新版本验证完成前继续保留。"
           : mobile
-            ? "已优先安排整理，完成后自动加入已点歌曲；画面下载失败会尝试音频与歌词。"
+            ? "已优先安排视频整理，完成后自动加入已点歌曲。"
             : "已加入整理任务：下载 → 按需裁剪与分离 → 入库。可在后台任务查看进度。",
       );
     } catch (e) {
@@ -355,25 +354,7 @@ export function OnlineSongs({
         : null,
     );
   const [directUrl, setDirectUrl] = useState("");
-  const [audioBusy, setAudioBusy] = useState(false),
-    [requestRevision, setRequestRevision] = useState(0);
-  async function requestAudio() {
-    setAudioBusy(true);
-    setError("");
-    try {
-      await api(
-        "/requests",
-        { title: title.trim(), artist: artist.trim(), name },
-        "POST",
-      );
-      setRequestRevision((v) => v + 1);
-      notify("已优先寻找音频与歌词，准备好后自动点歌。");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setAudioBusy(false);
-    }
-  }
+  const [requestRevision, setRequestRevision] = useState(0);
   const searchId = useRef(0);
   useEffect(
     () => () => {
@@ -418,22 +399,6 @@ export function OnlineSongs({
   }
   return (
     <section className="online-songs">
-      <BiliLogin
-        compact
-        canLogin={canLogin}
-        request={(url, body, method) => api(url, body, method, canLogin)}
-        notify={notify}
-      />
-      <div className="section-heading">
-        <div>
-          <h1>找到想唱的那一版。</h1>
-          <p>
-            {mobile
-              ? "优先找 B站视频，试听后点歌；没有合适画面，也可以先用音频和歌词开唱。"
-              : "搜索 B站视频，试听并选取片段，再交给 PC 整理入库。"}
-          </p>
-        </div>
-      </div>
       <form
         className="song-search-fields"
         onSubmit={(e) => {
@@ -496,25 +461,7 @@ export function OnlineSongs({
         </form>
       )}
       {error && <p role="alert">{error}</p>}
-      {mobile && (
-        <div className="mobile-audio-fallback">
-          <p>没找到合适视频？先找音频和歌词，画面可以稍后补齐。</p>
-          <button
-            disabled={busy || audioBusy || !title.trim() || !artist.trim()}
-            onClick={requestAudio}
-          >
-            {audioBusy ? "提交中…" : "先找音频 + 歌词"}
-          </button>
-        </div>
-      )}
-      {mobile && <MobileRequests revision={requestRevision} />}
-      {data && (
-        <p className="note">
-          {data.duration
-            ? `歌词来源标注歌曲长 ${time(data.duration)}，已优先排列时长接近的视频。`
-            : "未取得唯一匹配的歌曲时长，按 B站相关度展示。"}
-        </p>
-      )}
+      <MobileRequests revision={requestRevision} />
       <div className="video-waterfall">
         {data?.results.map((row) => (
           <button

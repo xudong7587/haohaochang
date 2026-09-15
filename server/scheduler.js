@@ -1,3 +1,4 @@
+import { taskProgress } from "./task-progress.js";
 import { cancellableDownload, withTaskSignal } from "./task-cancellation.js";
 import { cleanTaskFiles } from "./task-files.js";
 import { needsPoster } from "./song-poster.js";
@@ -258,6 +259,7 @@ export function createScheduler(
     const payload = JSON.parse(job.payload);
     try {
       const report = (stage) => {
+        taskProgress(store, job.id, null);
         checkCancelled();
         db.prepare("UPDATE jobs SET stage=? WHERE id=?").run(stage, job.id);
         emit("tasks", {});
@@ -365,26 +367,6 @@ export function createScheduler(
         ).run(e.message, job.id);
         return;
       }
-      const fresh = JSON.parse(
-        db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id).payload,
-      );
-      if (job.kind === "download" && fresh.priority === "mobile") {
-        const fallbackJob = addJob("acquire", {
-          title: fresh.title,
-          artist: fresh.artist,
-          priority: "mobile",
-          enqueue: true,
-          name: fresh.name,
-          roomId: fresh.roomId,
-          sourceJobId: job.id,
-          enqueueRooms: mergeRoomTargets(fresh),
-          requestId: fresh.requestId || job.id,
-        });
-        db.prepare(
-          "UPDATE jobs SET status='done',stage='audio-fallback',payload=?,error='' WHERE id=?",
-        ).run(JSON.stringify({ ...fresh, fallbackJob }), job.id);
-        return;
-      }
       db.prepare("UPDATE jobs SET status='failed',error=? WHERE id=?").run(
         e.message.slice(-1800),
         job.id,
@@ -398,6 +380,7 @@ export function createScheduler(
           payload.id,
         );
     } finally {
+      taskProgress(store, job.id, null);
       db.prepare("UPDATE jobs SET finished=? WHERE id=?").run(
         Date.now(),
         job.id,

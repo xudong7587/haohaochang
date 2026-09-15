@@ -151,6 +151,25 @@ try {
   await page.evaluate(() => localStorage.setItem("roomToken", "fixture"));
   await page.goto(base + "/play");
   await page.getByRole("button", { name: "歌名点歌", exact: true }).click();
+  assert.equal(
+    await page.getByRole("textbox", { name: "搜索歌名或歌手" }).count(),
+    0,
+  );
+  assert.equal(await page.getByLabel("按标签筛选").count(), 0);
+  await page.getByRole("button", { name: "精确搜索", exact: true }).click();
+  await page.getByRole("textbox", { name: "搜索歌名或歌手" }).waitFor();
+  await page.getByRole("button", { name: "精确搜索", exact: true }).click();
+  assert.equal(
+    await page.getByRole("textbox", { name: "搜索歌名或歌手" }).count(),
+    0,
+  );
+  assert.equal(
+    await page
+      .locator(".initial-picker")
+      .evaluate((el) => getComputedStyle(el).backgroundColor),
+    "rgba(0, 0, 0, 0)",
+  );
+
   await page.getByRole("button", { name: "首字母 Q", exact: true }).click();
   await page
     .getByRole("button", { name: "选择歌曲 青花瓷", exact: true })

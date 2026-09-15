@@ -39,10 +39,12 @@ test("Bili downloads retry incomplete transfers and handle validated CDN redirec
   const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-bili-lines-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const target = path.join(dir, "video.mp4"),
-    calls = [];
+    calls = [],
+    progress = [];
   const root = "https://test.bilivideo.com";
   await downloadStream(root + "/partial", target, 100, {
     backups: [root + "/redirect"],
+    progress: (percent) => progress.push(percent),
     fetcher: async (url, options) => {
       calls.push(url);
       assert.equal(options.redirect, "manual");
@@ -59,6 +61,9 @@ test("Bili downloads retry incomplete transfers and handle validated CDN redirec
   });
   assert.equal(await readFile(target, "utf8"), "complete");
   assert.equal(calls.length, 3);
+  assert.equal(progress[0], 0);
+  assert.equal(progress.at(-1), 100);
+  assert.ok(progress.some((percent) => percent > 0 && percent < 100));
   assert.deepEqual(await readdir(dir), ["video.mp4"]);
 });
 

@@ -33,7 +33,7 @@ public class UpdatePolicyTest {
   public void downloadHosts() {
     assertTrue(
         UpdatePolicy.allowed(
-            "https://github.com/xudong7587/haohaochang/releases/download/v0.3.11/a.apk", true));
+            "https://github.com/xudong7587/haohaochang-KTV/releases/download/v0.3.11/a.apk", true));
     assertFalse(
         UpdatePolicy.allowed("https://github.com/other/repo/releases/download/v1/a.apk", true));
     assertFalse(

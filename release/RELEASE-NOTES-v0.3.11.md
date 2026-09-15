@@ -18,4 +18,4 @@
 
 本地 137 项 Node 测试、生产构建、曲库、海报和新增编辑器浏览器检查通过。覆盖已有封面替换、上传／取消、无效文件保护、只读预览禁写、移动端布局、歌词来源与候选选择。正式签名 APK、CI 与 Docker 镜像启动检查结果见本次 Actions。未自动部署到真实 NAS。
 
-附件包含 NAS 配置包、PC 整理器、TV APK、独立重命名工具与 SHA-256 校验清单。详细步骤见[使用手册](https://github.com/xudong7587/haohaochang/blob/main/docs/USER-GUIDE.md)。
+附件包含 NAS 配置包、PC 整理器、TV APK、独立重命名工具与 SHA-256 校验清单。详细步骤见[使用手册](https://github.com/xudong7587/haohaochang-KTV/blob/main/docs/USER-GUIDE.md)。

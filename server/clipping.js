@@ -5,6 +5,7 @@ import { probe } from "./media-utils.js";
 import { encodeResource } from "./song-package.js";
 import { checkTaskCancellation } from "./task-cancellation.js";
 import { checkProvider, runProviderJob } from "./separation/protocol.js";
+import { taskProgress } from "./task-progress.js";
 
 export const waitingWorker = (message = "等待局域网 PC 整理器上线") =>
   Object.assign(new Error(message), { code: "WAITING_WORKER" });
@@ -164,6 +165,11 @@ export async function clipOnPc(
         "yuv420p",
       ],
       target,
+      {
+        duration,
+        report: (value) =>
+          taskProgress(store, job.id, { ...value, label: "裁剪视频" }),
+      },
     );
     if (!valid(await probe(target)))
       throw new Error("NAS 裁剪结果时长或音视频轨道不匹配");
@@ -172,5 +178,7 @@ export async function clipOnPc(
   } catch (error) {
     await rm(target, { force: true });
     throw error;
+  } finally {
+    taskProgress(store, job.id, null);
   }
 }

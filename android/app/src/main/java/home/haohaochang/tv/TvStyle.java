@@ -99,7 +99,9 @@ final class TvStyle {
     b.setContentDescription(label);
     b.setAllCaps(false);
     b.setFocusable(true);
-    b.setFocusableInTouchMode(true);
+    b.setFocusableInTouchMode((c.getResources().getConfiguration().uiMode
+        & android.content.res.Configuration.UI_MODE_TYPE_MASK)
+        == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION);
     b.setTextSize(14);
     b.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
     b.setGravity(Gravity.CENTER);

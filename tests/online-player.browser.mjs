@@ -63,16 +63,8 @@ createRoot(document.getElementById('root')).render(<Fixture/>);
 const app = express();
 app.use(express.json());
 const audioRequests = [];
-app.get("/api/requests/status", (_q, r) =>
-  r.json(
-    audioRequests.map((p, i) => ({
-      ...p,
-      id: "request-" + i,
-      status: "queued",
-      stage: "acquire",
-    })),
-  ),
-);
+let statusRows = [];
+app.get("/api/requests/status", (_q, r) => r.json(statusRows));
 app.post("/api/requests", (q, r) => {
   audioRequests.push(q.body);
   r.json({ id: "audio-fixture" });
@@ -444,12 +436,44 @@ try {
     .waitFor();
   assert.equal(submissions.at(-1).client, "mobile");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await page
-    .getByRole("button", { name: "先找音频 + 歌词", exact: true })
-    .click();
-  await page.getByRole("heading", { name: "手机找歌进度" }).waitFor();
-  assert.equal(audioRequests.at(-1).title, "手机测试歌曲");
-  assert.equal(audioRequests.at(-1).artist, "手机测试歌手");
+  assert.equal(
+    await page
+      .getByRole("button", { name: "先找音频 + 歌词", exact: true })
+      .count(),
+    0,
+  );
+  assert.equal(audioRequests.length, 0);
+  assert.equal(await page.locator(".online-current-progress").count(), 0);
+  assert.equal(await page.locator(".bili-login").count(), 0);
+  statusRows = [
+    { id: "done", title: "历史歌曲", status: "done", stage: "done" },
+    {
+      id: "current",
+      title: "当前视频",
+      status: "running",
+      stage: "downloading",
+      progressLabel: "下载画面",
+      percent: 42,
+    },
+  ];
+  await page.getByLabel("当前找歌进度").waitFor();
+  assert.equal(await page.getByText("历史歌曲", { exact: true }).count(), 0);
+  assert.equal(
+    await page
+      .locator(".online-current-progress progress")
+      .getAttribute("value"),
+    "42",
+  );
+  const progressBox = await page
+    .locator(".online-current-progress")
+    .boundingBox();
+  const resultsBox = await page.locator(".video-waterfall").boundingBox();
+  assert.ok(progressBox.y + progressBox.height <= resultsBox.y);
+  statusRows = [];
+  await page.waitForFunction(
+    () => !document.querySelector(".online-current-progress"),
+  );
+
   assert.ok(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

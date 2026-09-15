@@ -58,7 +58,7 @@ v0.3.7 默认保留原视频编码，普通入库不再执行画面转码。只�
 
 界面显示“在线”只表示服务可连接。请用 NAS 实际准备一首普通 MV，确认任务完成并能切换伴奏。模型首次下载失败或任务失败时，可在 NAS 后台重试，详情看整理器任务日志。
 
-完整流程见 [使用手册](https://github.com/xudong7587/haohaochang/blob/main/docs/USER-GUIDE.md)。
+完整流程见 [使用手册](https://github.com/xudong7587/haohaochang-KTV/blob/main/docs/USER-GUIDE.md)。
 
 ## 并发与任务进度
 

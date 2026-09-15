@@ -13,4 +13,4 @@ NAS 镜像：`ghcr.io/xudong7587/haohaochang:latest`，公开拉取，无需登�
 
 本机 RTX 5080 已完成真实分离并回传 NAS；18 组自动测试通过。外站下载可用性、真实音乐音质、4070 Super 与电视硬件仍需实机验收。MTV 候选保存后需确认版本；企业微信/TG 仅提供管理接口，未内置机器人。
 
-[使用手册](https://github.com/xudong7587/haohaochang/blob/master/docs/USER-GUIDE.md) · [模块与开发规划](https://github.com/xudong7587/haohaochang/blob/master/docs/DEVELOPMENT-PLAN.md)
+[使用手册](https://github.com/xudong7587/haohaochang-KTV/blob/master/docs/USER-GUIDE.md) · [模块与开发规划](https://github.com/xudong7587/haohaochang-KTV/blob/master/docs/DEVELOPMENT-PLAN.md)

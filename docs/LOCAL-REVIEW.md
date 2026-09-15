@@ -31,7 +31,7 @@
 - 新增封面预览、B站候选搜索与手动上传，已有封面可替换。取消或失败保留旧封面，音轨与歌词不变。透明图以白底保存。
 - QQ 音乐、网易云音乐与 LRCLIB 可自动选择或单独指定；歌词候选显示版本、歌手、专辑和时长。先预览／选择，再保存，不直接覆盖已有草稿。
 - 137 项 Node 测试、生产构建、曲库与封面浏览器检查通过，PC 更新器 8 项回归通过。实际预览查得 20 张 B站封面，QQ 取得周深 Live 版本的同步歌词；网易云当前网络连接被重置，接口替身与失败后备通过。
-- 用户授权发布本版；[v0.3.11 Release](https://github.com/xudong7587/haohaochang/releases/tag/v0.3.11) 与 Actions 为发布依据。NAS 未自动部署，本地预览仍为 `http://127.0.0.1:3212/admin`。
+- 用户授权发布本版；[v0.3.11 Release](https://github.com/xudong7587/haohaochang-KTV/releases/tag/v0.3.11) 与 Actions 为发布依据。NAS 未自动部署，本地预览仍为 `http://127.0.0.1:3212/admin`。
 
 ---
 # v0.3.10 本地验收（2026-09-10）
@@ -42,7 +42,7 @@
 - TV／PC 应用内更新已实现，首次带更新器的 v0.3.10 需手动安装。正式 APK 持久签名、Release 固定文件名与校验已接入发布流程。
 - 只读预览地址仍为 `http://127.0.0.1:3212/admin`，241 首均有图片。手动 LRC 查找已放行，《裹着心的光》真实查询获得 41 行歌词；只显示草稿，保存仍需正式 NAS。
 - 本地 130 项 Node 测试和生产构建通过，PC 升级／失败恢复 8 项测试通过。详细自动化与实机边界见 `VALIDATION.md`。
-- 发布见 [v0.3.10 Release](https://github.com/xudong7587/haohaochang/releases/tag/v0.3.10)；生产 NAS 未自动部署。下方保留 v0.3.9 阶段记录，状态以本节为准。
+- 发布见 [v0.3.10 Release](https://github.com/xudong7587/haohaochang-KTV/releases/tag/v0.3.10)；生产 NAS 未自动部署。下方保留 v0.3.9 阶段记录，状态以本节为准。
 
 ---
 # 本轮本地验收

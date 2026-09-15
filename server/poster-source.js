@@ -72,7 +72,7 @@ export async function downloadPoster(
       redirect: "manual",
       headers: {
         "User-Agent":
-          "Haohaochang/0.3 (https://github.com/xudong7587/haohaochang)",
+          "Haohaochang/0.3 (https://github.com/xudong7587/haohaochang-KTV)",
         ...(target.hostname.endsWith(".hdslb.com") ||
         target.hostname.endsWith(".biliimg.com")
           ? { Referer: "https://www.bilibili.com/" }

@@ -8,7 +8,7 @@ import urllib.request
 from urllib.parse import urlsplit
 from email.utils import parsedate_to_datetime
 
-REPO = 'xudong7587/haohaochang'
+REPO = 'xudong7587/haohaochang-KTV'
 API = 'https://api.github.com/repos/' + REPO + '/releases/latest'
 INDEX_NAME = 'haohaochang-pc-update.json'
 INDEX_URL = 'https://github.com/' + REPO + '/releases/latest/download/' + INDEX_NAME

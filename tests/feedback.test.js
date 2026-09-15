@@ -178,13 +178,18 @@ test("100 local background jobs do not block online requests; online capacity is
   for (let i = 0; i < 100; i++)
     insert.run("background-" + i, "organize", "{}", "queued", i);
   const request = () =>
-    fetch(`http://127.0.0.1:${server.address().port}/api/requests`, {
+    fetch(`http://127.0.0.1:${server.address().port}/api/online`, {
       method: "POST",
       headers: {
         Authorization: "Bearer feedback-test-password",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ title: "在线歌", artist: "歌手" }),
+      body: JSON.stringify({
+        title: "在线歌",
+        artist: "歌手",
+        url: "https://www.bilibili.com/video/BV1gF4m1K7Aa",
+        client: "mobile",
+      }),
     });
   let response = await request();
   assert.equal(response.status, 200);

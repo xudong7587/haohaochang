@@ -7,6 +7,7 @@ import { stat } from "node:fs/promises";
 import { downloadVideo } from "../media.js";
 import { downloadBiliTracks } from "../bili-download.js";
 import { encodeResource } from "../song-package.js";
+import { taskProgress } from "../task-progress.js";
 
 export async function download(job, payload, context) {
   const {
@@ -38,10 +39,15 @@ export async function download(job, payload, context) {
           get("favorites", {}).cookie,
           payload.quality,
           payload.expectedHeight,
+          {
+            progress: (label, percent) =>
+              taskProgress(store, job.id, { label, percent }),
+          },
         )
       : await withBiliCookie(get("favorites", {}).cookie, dir, (file) =>
           downloadVideo(payload.url, workspace, file, payload.quality),
         );
+    taskProgress(store, job.id, null);
     const original = downloaded.file;
     if (payload.clip) context.report?.("clipping");
     let file = original,

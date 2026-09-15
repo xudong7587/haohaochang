@@ -25,4 +25,4 @@ PC 更新备份用于程序替换或启动失败恢复；断电、磁盘故障�
 
 本地 130 项 Node 测试（含真实 FFmpeg）和前端构建通过，浏览器覆盖曲库、手机、歌词显示、PC 更新入口与 TV 播放接管。PC 更新测试使用临时目录与 localhost 子进程验证升级成功及失败恢复，不修改家庭设备。Android 构建、签名包与镜像构建结果见本次 Actions。
 
-真实 NAS 未自动部署，TV 安装／遥控器和家庭 PC 模型任务仍需实机验收。完整步骤见[使用手册](https://github.com/xudong7587/haohaochang/blob/main/docs/USER-GUIDE.md)。
+真实 NAS 未自动部署，TV 安装／遥控器和家庭 PC 模型任务仍需实机验收。完整步骤见[使用手册](https://github.com/xudong7587/haohaochang-KTV/blob/main/docs/USER-GUIDE.md)。

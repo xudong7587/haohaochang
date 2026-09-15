@@ -1,3 +1,4 @@
+import { taskProgress } from "../server/task-progress.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
@@ -83,7 +84,7 @@ test("mobile requests outrank queued admin work and promote duplicate requests w
   assert.equal(child.priority, "mobile");
   assert.equal(child.requestId, mobile);
 });
-test("failed mobile video becomes an audio request; waiting for the PC does not duplicate the work", async (t) => {
+test("failed mobile video stays retryable without starting audio work; waiting for PC does not duplicate work", async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-mobile-fallback-"));
   const store = openStore(dir);
   const scheduler = createScheduler(
@@ -126,8 +127,15 @@ test("failed mobile video becomes an audio request; waiting for the PC does not 
   const rows = store.db
     .prepare("SELECT * FROM jobs WHERE kind='acquire'")
     .all();
-  assert.equal(rows.length, 1);
-  assert.equal(JSON.parse(rows[0].payload).title, "failed");
+  assert.equal(rows.length, 0);
+  assert.equal(
+    store.db
+      .prepare(
+        "SELECT status FROM jobs WHERE json_extract(payload,'$.title')='failed'",
+      )
+      .get().status,
+    "failed",
+  );
 });
 test("audio candidates keep Bilibili first and retain another provider when its download is unavailable", async () => {
   const calls = [];
@@ -179,6 +187,10 @@ test("phone APIs authenticate, enqueue mobile selections and return progress wit
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
   assert.equal((await call("/requests/status", null, false)).status, 401);
+  assert.equal(
+    (await call("/requests", { title: "测试歌曲", artist: "测试歌手" })).status,
+    410,
+  );
   const response = await call("/online", {
     url: "https://www.bilibili.com/video/BV1gF4m1K7Aa",
     title: "测试歌曲",
@@ -203,4 +215,37 @@ test("phone APIs authenticate, enqueue mobile selections and return progress wit
   assert.equal(rows[0].title, "测试歌曲");
   assert.ok(!JSON.stringify(rows).includes("SECRET"));
   assert.ok(!JSON.stringify(rows).includes("url"));
+  service.store.db
+    .prepare("UPDATE jobs SET status='running',stage='downloading' WHERE id=?")
+    .run(job.id);
+  taskProgress(service.store, job.id, { label: "下载画面", percent: 42 });
+  service.store.db
+    .prepare(
+      "INSERT INTO jobs(id,kind,payload,status,created) VALUES(?,?,?,?,?)",
+    )
+    .run(
+      "another-room",
+      "download",
+      JSON.stringify({
+        title: "other room private title",
+        priority: "mobile",
+        roomId: "other",
+        enqueue: true,
+      }),
+      "running",
+      0,
+    );
+  let progress = await (await call("/requests/status")).json();
+  assert.equal(progress.length, 1);
+  assert.equal(progress[0].id, job.id);
+  assert.equal(progress[0].percent, 42);
+  assert.equal(progress[0].progressLabel, "下载画面");
+  service.store.db
+    .prepare("UPDATE jobs SET status='done' WHERE id=?")
+    .run(job.id);
+  assert.deepEqual(
+    await (await call("/requests/status")).json(),
+    [],
+    "finished history and other rooms stay hidden",
+  );
 });

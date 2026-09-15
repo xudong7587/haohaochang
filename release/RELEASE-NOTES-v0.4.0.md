@@ -12,4 +12,4 @@
 
 附件统一使用 `haohaochang-tv-v0.4.0.apk`、`haohaochang-resource-ai-v0.4.0.zip`、`haohaochang-nas-v0.4.0.zip`、`haohaochang-preprocess-v0.4.0.zip` 和 `SHA256SUMS-v0.4.0.txt`。旧版 TV／PC 更新器写死固定文件名，因此本次请手动下载更新一次。新版可在应用内识别后续版本化附件。正式 APK 沿用持久签名；PC 覆盖时保留配置、环境、模型与任务。
 
-本地检查及未验范围见 [验证记录](https://github.com/xudong7587/haohaochang/blob/v0.4.0/docs/VALIDATION-v0.4.0.md)。真实电视上反馈歌曲的流畅度、HDR 输出和各品牌硬件编码器尚未验收，未部署生产 NAS。
+本地检查及未验范围见 [验证记录](https://github.com/xudong7587/haohaochang-KTV/blob/v0.4.0/docs/VALIDATION-v0.4.0.md)。真实电视上反馈歌曲的流畅度、HDR 输出和各品牌硬件编码器尚未验收，未部署生产 NAS。

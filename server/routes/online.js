@@ -1,10 +1,11 @@
+import { taskStatus } from "../task-status.js";
 import { ensureBiliCredentials } from "../bili-credentials.js";
 import {
   videoQuality,
   previewDownloadHeight,
 } from "../../shared/video-quality.js";
 import { canonicalVideo, onlineSearch } from "../media.js";
-import { canEnqueue, resourceManifest } from "../resource-manifest.js";
+import { resourceManifest } from "../resource-manifest.js";
 
 import { fail, clean } from "../http-utils.js";
 import { searchSongs } from "../online-search.js";
@@ -37,7 +38,6 @@ export function onlineApi({
   addJob,
   work,
   emit,
-  enqueue,
   snapshot,
   isPlaying,
   allowedOrigin,
@@ -90,9 +90,10 @@ export function onlineApi({
   app.get("/api/requests/status", member, (req, res) => {
     const rows = db
       .prepare(
-        "SELECT id,kind,status,stage,payload,error,created FROM jobs WHERE json_extract(payload,'$.priority')='mobile' ORDER BY CASE WHEN status IN ('queued','running','waiting-worker','review') THEN 0 ELSE 1 END, created DESC LIMIT 60",
+        "SELECT id,kind,status,stage,payload,created FROM jobs WHERE status IN ('running','queued','waiting-worker') AND json_extract(payload,'$.priority') IN ('mobile','online') ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'waiting-worker' THEN 1 ELSE 2 END, created",
       )
       .all();
+    const progress = new Map(taskStatus(store).map((row) => [row.id, row]));
     res.set("Cache-Control", "no-store").json(
       rows
         .filter((row) => {
@@ -104,15 +105,23 @@ export function onlineApi({
             (!payload.enqueue && (payload.roomId || "legacy") === req.roomId)
           );
         })
+        .slice(0, 1)
         .map((row) => {
-          const p = JSON.parse(row.payload);
+          const p = JSON.parse(row.payload),
+            detail = progress.get(row.id);
+          const rawPercent =
+            detail?.media_progress?.percent ?? detail?.model_progress;
           return {
+            percent: Number.isFinite(rawPercent)
+              ? Math.max(0, Math.min(100, rawPercent))
+              : null,
+            progressLabel: clean(detail?.media_progress?.label, 60),
             id: row.id,
             requestId: p.requestId || row.id,
-            title: clean(p.title || p.metadata?.title),
-            artist: clean(p.artist || p.metadata?.artist),
+            title: clean(detail?.title || p.title || p.metadata?.title),
+            artist: clean(detail?.artist || p.artist || p.metadata?.artist),
             status: row.status,
-            stage: row.stage || row.kind,
+            stage: detail?.stage || row.stage || row.kind,
             created: row.created,
             message:
               row.status === "review"
@@ -192,37 +201,7 @@ export function onlineApi({
         403,
         "在线搜索已手动关闭，请到“设置与任务 → 在线资源”重新启用。",
       );
-    const title = clean(req.body.title),
-      artist = clean(req.body.artist);
-    if (!title || !artist) throw fail(400, "请填写歌名和歌手");
-    const local = db
-      .prepare(
-        "SELECT * FROM songs WHERE title=? AND artist=? AND status='ready' AND mode IN ('separated','tracks','channels') AND lyrics!=''",
-      )
-      .all(title, artist)
-      .find((song) => canEnqueue(store, song, cache));
-    if (local) {
-      enqueue(local.id, clean(req.body.name) || "家人", req.roomId);
-      return res.json({ id: local.id, local: true });
-    }
-    if (
-      db
-        .prepare(
-          "SELECT COUNT(*) n FROM jobs WHERE status IN ('queued','running','waiting-worker') AND (kind IN ('acquire','download') OR json_extract(payload,'$.priority') IN ('online','mobile'))",
-        )
-        .get().n >= 200
-    )
-      throw fail(429, "在线任务已达到 200 项，请等待部分任务完成");
-    res.json({
-      id: addJob("acquire", {
-        roomId: req.roomId,
-        title,
-        artist,
-        priority: "mobile",
-        enqueue: true,
-        name: clean(req.body.name) || "家人",
-      }),
-    });
+    throw fail(410, "请在在线找歌中选择视频后点歌。");
   });
   app.get("/api/online", member, async (req, res) => {
     if (!get("onlineEnabled", true))

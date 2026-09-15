@@ -30,10 +30,16 @@ final class TvIcon extends Drawable {
   @Override
   public void draw(Canvas canvas) {
     canvas.save();
-    canvas.translate(getBounds().left, getBounds().top);
-    canvas.scale(getBounds().width() / 24f, getBounds().height() / 24f);
+    float edge = Math.min(size, Math.min(getBounds().width(), getBounds().height()));
+    canvas.translate(getBounds().exactCenterX() - edge / 2, getBounds().exactCenterY() - edge / 2);
+    canvas.scale(edge / 24f, edge / 24f);
     paint.setColor(colors.getColorForState(getState(), colors.getDefaultColor()));
     switch (name) {
+      case "sort":
+        line(canvas, 4, 6, 20, 6);
+        line(canvas, 7, 12, 17, 12);
+        line(canvas, 10, 18, 14, 18);
+        break;
       case "trash":
         line(canvas, 4, 6, 20, 6);
         path(canvas, 9, 6, 9, 3, 15, 3, 15, 6);

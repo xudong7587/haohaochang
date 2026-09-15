@@ -16,7 +16,7 @@ export async function findArtistDescription(artist, { fetcher = fetch } = {}) {
     signal: AbortSignal.timeout(4500),
     headers: {
       "User-Agent":
-        "Haohaochang/0.3 (https://github.com/xudong7587/haohaochang)",
+        "Haohaochang/0.3 (https://github.com/xudong7587/haohaochang-KTV)",
       "Accept-Language": "zh-CN,zh",
     },
   });

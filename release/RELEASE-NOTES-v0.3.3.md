@@ -13,4 +13,4 @@
 
 本地 85 项后端测试、12 项 Python 协议／并发测试、五类浏览器检查和 Windows 启动检查通过。本机 RTX 5080 Laptop GPU 使用三个独立的 12 秒合成音频完成真实三路分离，约 11 秒全部结束并通过输出校验；真实歌曲音质和家庭 NAS／电视／音响由用户部署后验收。
 
-[使用手册](https://github.com/xudong7587/haohaochang/blob/main/docs/USER-GUIDE.md) · [验证记录](https://github.com/xudong7587/haohaochang/blob/main/docs/VALIDATION.md)
+[使用手册](https://github.com/xudong7587/haohaochang-KTV/blob/main/docs/USER-GUIDE.md) · [验证记录](https://github.com/xudong7587/haohaochang-KTV/blob/main/docs/VALIDATION.md)

@@ -1,6 +1,12 @@
 import React from "react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import "./initial-picker.css";
-export function InitialPicker({ value, onChange, label = "拼音首字母" }) {
+export function InitialPicker({
+  value,
+  onChange,
+  label = "拼音首字母",
+  children,
+}) {
   return (
     <aside className="initial-picker" aria-label={label}>
       <strong>{label}</strong>
@@ -18,13 +24,18 @@ export function InitialPicker({ value, onChange, label = "拼音首字母" }) {
         ))}
       </div>
       <div className="initial-actions">
-        <button type="button" onClick={() => onChange(value.slice(0, -1))}>
-          退格
+        <button
+          type="button"
+          aria-label="退格"
+          onClick={() => onChange(value.slice(0, -1))}
+        >
+          <ArrowLeft size={18} />
         </button>
-        <button type="button" onClick={() => onChange("")}>
-          清空
+        <button type="button" aria-label="清空" onClick={() => onChange("")}>
+          <Trash2 size={18} />
         </button>
       </div>
+      {children}
     </aside>
   );
 }

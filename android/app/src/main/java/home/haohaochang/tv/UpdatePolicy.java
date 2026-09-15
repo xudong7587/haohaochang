@@ -3,7 +3,7 @@ package home.haohaochang.tv;
 import java.net.URI;
 
 final class UpdatePolicy {
-  static final String REPO = "xudong7587/haohaochang";
+  static final String REPO = "xudong7587/haohaochang-KTV";
 
   static int assetPriority(String name, String tag) {
     if (!tag.matches("v?\\d+\\.\\d+\\.\\d+")) return 0;

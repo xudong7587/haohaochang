@@ -2,6 +2,7 @@ import express from "express";
 import { LEGACY_ROOM } from "./room-registry.js";
 import { jobRoomTargets } from "./room-targets.js";
 import { createPlayerLease } from "./player-lease.js";
+import { selectAmbient } from "./ambient-selection.js";
 import { clampLyricsOffset } from "../shared/lyrics.js";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -21,7 +22,9 @@ function createScopedRoom({
   const { db } = store;
   const scopedKey = (key) =>
     roomId !== LEGACY_ROOM &&
-    (key === "playback" || key.startsWith("lyrics-offset:"))
+    (key === "playback" ||
+      key === "ambient-history" ||
+      key.startsWith("lyrics-offset:"))
       ? `room:${roomId}:${key}`
       : key;
   const get = (key, fallback) =>
@@ -265,6 +268,11 @@ function createScopedRoom({
       type: req.body.type,
       claim: req.body.claim,
     });
+    if (result.freshClaim) {
+      if (snapshot().queue.length && get("playback").paused)
+        revise({ paused: false });
+      if (ambient?.paused) ambient = { ...ambient, paused: false };
+    }
     if (!snapshot().queue.length && !ambient) pickAmbient();
     else if (result.changed) emit();
     res.json({ ok: true, owner: result.owner });
@@ -284,12 +292,14 @@ function createScopedRoom({
     res.json(snapshot());
   });
   function pickAmbient() {
-    const song = db
+    const songs = db
       .prepare(
-        "SELECT * FROM songs WHERE status='ready' AND mode!='instrumental' ORDER BY (id=?) ASC,RANDOM()",
+        "SELECT * FROM songs WHERE status='ready' AND mode!='instrumental'",
       )
-      .all(ambient?.song_id || "")
-      .find((s) => canEnqueue(store, s, cache));
+      .all()
+      .filter((s) => canEnqueue(store, s, cache));
+    const { song, history } = selectAmbient(songs, get("ambient-history", {}));
+    if (song) set("ambient-history", history);
     ambient = song
       ? {
           ...song,

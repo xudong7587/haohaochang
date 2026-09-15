@@ -6,6 +6,8 @@ on:
 permissions:
   contents: read
   packages: write
+env:
+  IMAGE_REPOSITORY: ghcr.io/xudong7587/haohaochang
 jobs:
   publish:
     if: ${{ !contains(github.ref_name, '.rc') }}
@@ -43,7 +45,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Image name
         id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}${{ matrix.suffix }}" >> "$GITHUB_OUTPUT"
+        run: echo "name=${IMAGE_REPOSITORY}${{ matrix.suffix }}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -125,7 +127,7 @@ jobs:
         run: |
           [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
           for suffix in '' '-separator' '-separator-npu'; do
-            image="ghcr.io/${GITHUB_REPOSITORY,,}${suffix}"
+            image="${IMAGE_REPOSITORY}${suffix}"
             sources=("$image:sha-$GITHUB_SHA-amd64")
             if [ "$suffix" != '-separator-npu' ]; then
               sources+=("$image:sha-$GITHUB_SHA-arm64")
@@ -137,6 +139,6 @@ jobs:
             jq -e --argjson expected "$expected" '[.manifests[].platform | select(.os == "linux") | .architecture] | sort | unique == $expected' manifest.json
           done
           for suffix in '' '-separator'; do
-            image="ghcr.io/${GITHUB_REPOSITORY,,}${suffix}"
+            image="${IMAGE_REPOSITORY}${suffix}"
             docker buildx imagetools create -t "$image:latest" "$image:$GITHUB_REF_NAME"
           done

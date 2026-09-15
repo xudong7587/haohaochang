@@ -419,8 +419,13 @@ final class NativePlayback {
   private void layout() {
     int width = root.getWidth(), height = root.getHeight();
     if (width <= 0 || height <= 0) return;
-    int fittedWidth = Math.min(width, Math.round(height * videoRatio));
-    int fittedHeight = Math.min(height, Math.round(width / videoRatio));
+    boolean portrait = activity.getResources().getConfiguration().orientation
+        == android.content.res.Configuration.ORIENTATION_PORTRAIT && height > width;
+    int fittedWidth = portrait ? width : Math.min(width, Math.round(height * videoRatio));
+    int fittedHeight = portrait ? height : Math.min(height, Math.round(width / videoRatio));
+    if (player != null) player.setVideoScalingMode(portrait
+        ? C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        : C.VIDEO_SCALING_MODE_SCALE_TO_FIT);
     surface.setLayoutParams(
         new FrameLayout.LayoutParams(fittedWidth, fittedHeight, Gravity.CENTER));
     picture.setVisibility(

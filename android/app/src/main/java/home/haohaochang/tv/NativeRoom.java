@@ -509,11 +509,11 @@ final class NativeRoom extends FrameLayout implements RoomSession.Listener, Auto
     center.leftMargin = center.rightMargin = dp(full ? 8 : 4);
     mainControls.setLayoutParams(center);
     for (int i = 0; i < mainControls.getChildCount(); i++) {
-      LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(full ? 44 : 36), -1);
+      LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(full ? 44 : 36), dp(full ? 44 : 36));
       if (i == 1) p.leftMargin = p.rightMargin = dp(full ? 8 : 4);
       mainControls.getChildAt(i).setLayoutParams(p);
     }
-    fullscreen.setLayoutParams(new LinearLayout.LayoutParams(dp(full ? 44 : 36), -1));
+    fullscreen.setLayoutParams(new LinearLayout.LayoutParams(dp(full ? 44 : 36), dp(full ? 44 : 36)));
     for (LinearLayout group : new LinearLayout[] {leftAdjust, rightAdjust}) {
       group.setLayoutParams(new LinearLayout.LayoutParams(dp(portrait ? 44 : 132), -1));
       for (int i = 0; i < group.getChildCount(); i++) {

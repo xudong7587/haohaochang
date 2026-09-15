@@ -23,6 +23,7 @@ import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.ProgressBar;
 import java.util.concurrent.ExecutorService;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -57,9 +58,16 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   private boolean closed;
   private final Button more;
   private final Button find;
-  private final Button sort;
+  private final Button sort, exact;
   private boolean randomOrder;
   private final LinearLayout query;
+  private final LinearLayout results, catalogueTools;
+  private final LinearLayout progressRow;
+  private final TextView progressLabel;
+  private final ProgressBar progressBar;
+  private boolean progressLoading;
+  private boolean exactSearch;
+  private int keyboardColumns = 4;
   private int selectedPosition;
   private final LinearLayout initialsPanel;
   private final TextView initialLabel;
@@ -71,7 +79,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     this.activity = activity;
     this.session = session;
     setOrientation(VERTICAL);
-    setBackground(TvStyle.surface(activity, 0x702a203b, 0x98120f1c, 0, 0));
+    setBackgroundColor(android.graphics.Color.TRANSPARENT);
     setPadding(dp(24), dp(16), dp(20), dp(12));
     breadcrumb = TvStyle.text(activity, "我的客厅    /    家庭 KTV", 9, TvStyle.MUTED);
     addView(breadcrumb, new LayoutParams(-1, dp(24)));
@@ -108,7 +116,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
               load();
             });
     TvStyle.subtle(sort);
-    query.addView(sort, new LayoutParams(dp(100), -1));
+
     search.setOnEditorActionListener(
         (v, id, event) -> {
           if (id == EditorInfo.IME_ACTION_SEARCH) {
@@ -117,6 +125,19 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
           }
           return false;
         });
+    progressRow = new LinearLayout(activity);
+    progressRow.setGravity(Gravity.CENTER_VERTICAL);
+    progressLabel = TvStyle.text(activity, "", 11, TvStyle.MUTED);
+    progressLabel.setSingleLine();
+    progressLabel.setEllipsize(TextUtils.TruncateAt.END);
+    progressBar = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal);
+    progressBar.setMax(100);
+    progressBar.setProgressTintList(ColorStateList.valueOf(TvStyle.ACCENT));
+    progressRow.addView(progressLabel, new LayoutParams(0, -1, 1));
+    progressRow.addView(progressBar, new LayoutParams(dp(100), dp(10)));
+    progressRow.setContentDescription("当前找歌进度");
+    addView(progressRow, new LayoutParams(-1, dp(28)));
+    progressRow.setVisibility(GONE);
     grid = new GridView(activity);
     grid.setId(View.generateViewId());
     grid.setFocusable(true);
@@ -142,7 +163,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
           selectedPosition = position;
           return deleteSelection();
         });
-    LinearLayout results = new LinearLayout(activity);
+    results = new LinearLayout(activity);
     addView(results, new LayoutParams(-1, 0, 1));
     initialsPanel = new LinearLayout(activity);
     initialsPanel.setOrientation(VERTICAL);
@@ -181,9 +202,22 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
         line.addView(button, new LayoutParams(0, -1, 1));
       }
     }
+    catalogueTools = new LinearLayout(activity);
+    exact = TvStyle.button(activity, "", "精确搜索", () -> {
+      exactSearch = !exactSearch;
+      query.setVisibility(exactSearch ? VISIBLE : GONE);
+      if (exactSearch) search.requestFocus();
+    });
+    TvStyle.iconOnly(exact, "search");
+    TvStyle.iconOnly(sort, "sort");
+    catalogueTools.addView(exact, new LayoutParams(0, -1, 1));
+    catalogueTools.addView(sort, new LayoutParams(0, -1, 1));
+    initialsPanel.addView(catalogueTools, new LayoutParams(-1, dp(38)));
     results.addView(grid, new LayoutParams(0, -1, 1));
     empty = TvStyle.text(activity, "正在读取…", 16, TvStyle.MUTED);
     empty.setGravity(Gravity.CENTER);
+    empty.setSingleLine();
+    empty.setEllipsize(TextUtils.TruncateAt.END);
     addView(empty, new LayoutParams(-1, dp(28)));
     grid.setEmptyView(empty);
     more =
@@ -199,6 +233,40 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     more.setVisibility(GONE);
   }
 
+  private final Runnable progressPoll = new Runnable() {
+    @Override public void run() {
+      if (closed || progressLoading) return;
+      if (!page.equals("online") || !isShown()) {
+        progressRow.setVisibility(GONE);
+        return;
+      }
+      progressLoading = true;
+      session.read("/api/requests/status", value -> {
+        progressLoading = false;
+        if (closed) return;
+        JSONObject task = value instanceof JSONArray ? ((JSONArray) value).optJSONObject(0) : null;
+        if (!page.equals("online") || task == null) progressRow.setVisibility(GONE);
+        else {
+          String label = task.optString("message", "");
+          if (label.isEmpty()) label = task.optString("progressLabel", "");
+          if (label.isEmpty()) {
+            String stage = task.optString("stage");
+            label = stage.equals("downloading") ? "下载视频" : stage.equals("clipping") ? "裁剪视频"
+                : task.optString("status").equals("queued") ? "等待处理" : "转换播放资源";
+          }
+          boolean known = !task.isNull("percent") && task.has("percent");
+          int percent = Math.max(0, Math.min(100, task.optInt("percent")));
+          progressLabel.setText(task.optString("title") + " · " + label + (known ? " " + percent + "%" : ""));
+          progressBar.setIndeterminate(!known);
+          if (known) progressBar.setProgress(percent);
+          progressRow.setVisibility(VISIBLE);
+        }
+        main.removeCallbacks(this);
+        main.postDelayed(this, 3000);
+      }, true);
+    }
+  };
+
   private int dp(float n) {
     return TvStyle.dp(activity, n);
   }
@@ -206,19 +274,22 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   void compact(boolean value) {
     if (compact == value) return;
     compact = value;
-    setBackground(TvStyle.surface(activity, compact ? 0xf0231b31 : 0x702a203b,
-        compact ? 0xf512101a : 0x98120f1c, 0, 0));
+    setBackgroundColor(android.graphics.Color.TRANSPARENT);
     adapter.notifyDataSetChanged();
     requestLayout();
   }
 
   void show(String page) {
     this.page = page;
+    exactSearch = false;
     artist = "";
     tag = "";
     initialQuery = "";
     search.setText("");
     onlinePage = 1;
+    progressRow.setVisibility(GONE);
+    main.removeCallbacks(progressPoll);
+    main.post(progressPoll);
     load();
   }
 
@@ -233,7 +304,12 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
 
   void focusGrid() {
     if (rows.length() > 0) focusCard(selectedPosition);
-    else search.requestFocusFromTouch();
+    else focusSearch();
+  }
+
+  private void focusSearch() {
+    if (query.isShown()) search.requestFocusFromTouch();
+    else if (exact.isShown()) exact.requestFocusFromTouch();
   }
 
   private void focusCard(int position) {
@@ -257,15 +333,27 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
 
   /** GridView scrolling and selection are explicit even when the TV starts in touch mode. */
   boolean move(int key) {
+    if (catalogueTools.hasFocus()) {
+      if (key == KeyEvent.KEYCODE_DPAD_UP) initialButtons.get(initialButtons.size() - 1).requestFocusFromTouch();
+      else if (key == KeyEvent.KEYCODE_DPAD_DOWN) { focusGrid(); return rows.length() > 0; }
+      else if (key == KeyEvent.KEYCODE_DPAD_LEFT) {
+        if (sort.hasFocus()) exact.requestFocusFromTouch();
+        else return false;
+      } else if (key == KeyEvent.KEYCODE_DPAD_RIGHT) {
+        if (exact.hasFocus() && sort.isShown()) sort.requestFocusFromTouch();
+        else focusGrid();
+      }
+      return true;
+    }
     if (initialsPanel.hasFocus()) {
       int index = initialButtons.indexOf(findFocus());
-      if (key == KeyEvent.KEYCODE_DPAD_LEFT && index % 4 == 0) return false;
-      if (key == KeyEvent.KEYCODE_DPAD_RIGHT && index % 4 == 3) {
+      if (key == KeyEvent.KEYCODE_DPAD_LEFT && index % keyboardColumns == 0) return false;
+      if (key == KeyEvent.KEYCODE_DPAD_RIGHT && index % keyboardColumns == keyboardColumns - 1) {
         focusGrid();
         return true;
       }
-      if (key == KeyEvent.KEYCODE_DPAD_UP && index < 4) {
-        search.requestFocusFromTouch();
+      if (key == KeyEvent.KEYCODE_DPAD_UP && index < keyboardColumns) {
+        if (query.isShown()) search.requestFocusFromTouch();
         return true;
       }
       int next =
@@ -274,8 +362,8 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                   ? -1
                   : key == KeyEvent.KEYCODE_DPAD_RIGHT
                       ? 1
-                      : key == KeyEvent.KEYCODE_DPAD_UP ? -4 : 4);
-      if (next >= initialButtons.size()) return false;
+                      : key == KeyEvent.KEYCODE_DPAD_UP ? -keyboardColumns : keyboardColumns);
+      if (next >= initialButtons.size()) { exact.requestFocusFromTouch(); return true; }
       if (next >= 0) initialButtons.get(next).requestFocusFromTouch();
       return true;
     }
@@ -285,7 +373,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
       if (key == KeyEvent.KEYCODE_DPAD_LEFT) {
         if (position % columns == 0) {
           if (initialsPanel.isShown()) {
-            initialButtons.get(3).requestFocusFromTouch();
+            initialButtons.get(keyboardColumns - 1).requestFocusFromTouch();
             return true;
           }
           return false;
@@ -295,7 +383,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
         if (position % columns < columns - 1 && position + 1 < rows.length())
           focusCard(position + 1);
       } else if (key == KeyEvent.KEYCODE_DPAD_UP) {
-        if (position < columns) search.requestFocusFromTouch();
+        if (position < columns) focusSearch();
         else focusCard(position - columns);
       } else if (key == KeyEvent.KEYCODE_DPAD_DOWN) {
         if (position + columns >= rows.length()) {
@@ -332,9 +420,10 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
 
   private void load() {
     sort.setVisibility(page.equals("songs") || !artist.isEmpty() ? VISIBLE : GONE);
-    sort.setText(randomOrder ? "随机" : "歌名排序");
+    sort.setContentDescription("切换歌名排序或随机");
+    sort.setSelected(randomOrder);
     initialsPanel.setVisibility(getWidth() >= dp(540) && (page.equals("songs") || page.equals("artists")) ? VISIBLE : GONE);
-    query.setVisibility(page.equals("queue") ? GONE : VISIBLE);
+    query.setVisibility(page.equals("queue") || ((page.equals("songs") || page.equals("artists")) && !exactSearch) ? GONE : VISIBLE);
     initialLabel.setText(initialQuery.isEmpty() ? "拼音首字母" : initialQuery);
     int request = ++generation;
     selectedPosition = 0;
@@ -648,17 +737,17 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
               ? "查看歌曲  ›"
               : row.has("tag") ? "打开歌单  ›" : page.equals("queue") ? "点击优先" : "＋ 点歌");
       LayoutParams imageParams =
-          new LayoutParams(artistCard ? dp(compact ? 68 : 84) : -1,
-              artistCard ? dp(compact ? 68 : 84) : compact
+          new LayoutParams(-1,
+              compact
                   ? Math.max(dp(68), Math.min(dp(112), (grid.getColumnWidth() - dp(8)) * 9 / 16)) : dp(102));
       imageParams.gravity = Gravity.CENTER_HORIZONTAL;
-      imageParams.topMargin = artistCard ? dp(9) : 0;
-      imageParams.bottomMargin = artistCard ? dp(9) : 0;
+      imageParams.topMargin = 0;
+      imageParams.bottomMargin = 0;
       image.setLayoutParams(imageParams);
       GradientDrawable cover =
           new GradientDrawable(
               GradientDrawable.Orientation.TL_BR, new int[] {0xff44345d, 0xff241e31});
-      cover.setCornerRadius(dp(artistCard ? 48 : 8));
+      cover.setCornerRadius(dp(8));
       image.setBackground(cover);
       title.setText(artistCard ? row.optString("artist") : row.optString("title"));
       detail.setText(
@@ -740,17 +829,35 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   protected void onMeasure(int widthSpec, int heightSpec) {
     boolean narrow = compact || MeasureSpec.getSize(widthSpec) < dp(540);
     setPadding(dp(compact ? 10 : 24), dp(compact ? 8 : 16), dp(compact ? 10 : 20), dp(compact ? 4 : 12));
-    breadcrumb.setVisibility(compact ? GONE : VISIBLE);
-    description.setVisibility(compact ? GONE : VISIBLE);
-    heading.setVisibility(compact && artist.isEmpty() && tag.isEmpty() ? GONE : VISIBLE);
+    breadcrumb.setVisibility(compact || page.equals("online") ? GONE : VISIBLE);
+    description.setVisibility(compact || page.equals("online") ? GONE : VISIBLE);
+    heading.setVisibility(page.equals("online") || (compact && artist.isEmpty() && tag.isEmpty()) ? GONE : VISIBLE);
     heading.setTextSize(compact ? 14 : 22);
     heading.getLayoutParams().height = dp(compact ? 28 : 34);
-    initialsPanel.setVisibility(!compact && (page.equals("songs") || page.equals("artists")) ? VISIBLE : GONE);
+    boolean portrait = compact && MeasureSpec.getSize(widthSpec) < MeasureSpec.getSize(heightSpec);
+    boolean catalogue = page.equals("songs") || page.equals("artists");
+    initialsPanel.setVisibility(catalogue ? VISIBLE : GONE);
+    results.setOrientation(portrait ? VERTICAL : HORIZONTAL);
+    initialsPanel.setLayoutParams(new LayoutParams(portrait ? -1 : dp(compact ? 112 : 150), portrait ? dp(186) : -1));
+    initialsPanel.setPadding(0, 0, portrait ? 0 : dp(8), 0);
+    grid.setLayoutParams(portrait ? new LayoutParams(-1, 0, 1) : new LayoutParams(0, -1, 1));
+    int columns = portrait ? 7 : 4;
+    if (columns != keyboardColumns) {
+      for (Button key : initialButtons) ((ViewGroup) key.getParent()).removeView(key);
+      initialsPanel.removeViews(1, initialsPanel.getChildCount() - 2);
+      for (int offset = 0; offset < initialButtons.size(); offset += columns) {
+        LinearLayout line = new LinearLayout(activity);
+        initialsPanel.addView(line, initialsPanel.getChildCount() - 1, new LayoutParams(-1, dp(30)));
+        for (int i = offset; i < Math.min(offset + columns, initialButtons.size()); i++)
+          line.addView(initialButtons.get(i), new LayoutParams(0, -1, 1));
+      }
+      keyboardColumns = columns;
+    }
     query.getLayoutParams().height = dp(compact ? 40 : 46);
     search.setTextSize(compact ? 12 : narrow ? 13 : 16);
     find.setTextSize(compact ? 12 : 14);
     sort.setTextSize(compact ? 11 : 14);
-    sort.getLayoutParams().width = dp(compact ? 64 : narrow ? 76 : 100);
+
     find.getLayoutParams().width = dp(compact ? 44 : narrow ? 48 : 72);
     ((LayoutParams) find.getLayoutParams()).leftMargin = dp(compact ? 6 : 10);
     grid.setHorizontalSpacing(dp(compact ? 8 : 12));

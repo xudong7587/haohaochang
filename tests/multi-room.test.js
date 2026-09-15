@@ -125,6 +125,32 @@ test("rooms isolate the same song's queue, controls, offsets, leases and QR cred
         .status,
       200,
     );
+  assert.equal(
+    (await state(a)).playback.paused,
+    false,
+    "new player resumes queued music",
+  );
+  await call("/control", a.token, { action: "pause", entryId: "entry-a" });
+  await call("/player/heartbeat", a.token, {
+    id: "tv-a",
+    type: "tv",
+    claim: true,
+  });
+  assert.equal(
+    (await state(a)).playback.paused,
+    true,
+    "a retried first claim must preserve manual pause",
+  );
+  await call("/player/heartbeat", a.token, {
+    id: "tv-a",
+    type: "tv",
+    claim: false,
+  });
+  assert.equal(
+    (await state(a)).playback.paused,
+    true,
+    "ordinary heartbeats preserve pause",
+  );
   assert.equal((await state(a)).player.id, "tv-a");
   assert.equal((await state(b)).player.id, "web-b");
   assert.equal(

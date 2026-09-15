@@ -263,6 +263,10 @@ final class RoomSession implements AutoCloseable {
   }
 
   void read(String path, Result result) {
+    read(path, result, false);
+  }
+
+  void read(String path, Result result, boolean quiet) {
     if (closed) return;
     reads.execute(
         () -> {
@@ -275,7 +279,10 @@ final class RoomSession implements AutoCloseable {
           } catch (Exception error) {
             main.post(
                 () -> {
-                  if (!closed) listener.error(message(error), auth(error));
+                  if (!closed) {
+                    if (quiet) result.success(null);
+                    else listener.error(message(error), auth(error));
+                  }
                 });
           }
         });

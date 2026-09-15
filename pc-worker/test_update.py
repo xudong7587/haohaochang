@@ -70,9 +70,9 @@ class UpdateTest(unittest.TestCase):
     def test_paths_and_versions(self):
         for name in ('../run.py','/run.py','ui/../../run.py','worker.json','runtime/a.py','data/a.py','ui\\foo.js','A:bad.py','ui/../a.js','run.py.'):
             self.assertFalse(safe_name(name), name)
-        for url in ('http://github.com/xudong7587/haohaochang/releases/download/v1/a', 'https://github.com/other/repo/releases/download/v1/a','https://github.com@evil.com/xudong7587/haohaochang/releases/download/v1/a'):
+        for url in ('http://github.com/xudong7587/haohaochang-KTV/releases/download/v1/a', 'https://github.com/other/repo/releases/download/v1/a','https://github.com@evil.com/xudong7587/haohaochang-KTV/releases/download/v1/a'):
             self.assertFalse(allowed_url(url, True))
-        self.assertTrue(allowed_url('https://github.com/xudong7587/haohaochang/releases/download/v0.3.11/a',True))
+        self.assertTrue(allowed_url('https://github.com/xudong7587/haohaochang-KTV/releases/download/v0.3.11/a',True))
         self.assertGreater(version('0.3.10'), version('0.3.9'))
 
     def test_manifest_and_protected_data(self):

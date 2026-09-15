@@ -22,4 +22,4 @@ APK 使用已有沉浸式窗口内的全屏布局，保留视频、歌词与控�
 
 本地 148 项 Node 测试、生产构建与播放器浏览器检查通过。新增测试覆盖播放中没有周期校时、慢画面不被自动跳转、错误后备保留时间、真实 HTTP 206 分段读取、全屏菜单唤醒与遥控操作。播放器回归包含真实双音频播放、切轨、暂停、自动播放拦截、接管及画面提前结束。真实雷鸟电视的卡顿改善程度仍需安装后确认，平板流畅并不能单独排除电视解码能力或网络差异。
 
-发布与镜像验证结果见 Actions。[完整使用手册](https://github.com/xudong7587/haohaochang/blob/main/docs/USER-GUIDE.md)。
+发布与镜像验证结果见 Actions。[完整使用手册](https://github.com/xudong7587/haohaochang-KTV/blob/main/docs/USER-GUIDE.md)。

@@ -70,11 +70,13 @@ const route = ["/", "/admin"].includes(location.pathname)
     ? "mobile"
     : "tv";
 const SongSelection = route === "tv" ? "button" : React.Fragment;
-function InitialResults({ value, onChange, children }) {
+function InitialResults({ value, onChange, children, tools }) {
   if (route !== "tv") return children;
   return (
     <div className="initial-results-layout">
-      <InitialPicker value={value} onChange={onChange} />
+      <InitialPicker value={value} onChange={onChange}>
+        {tools}
+      </InitialPicker>
       {children}
     </div>
   );
@@ -125,6 +127,7 @@ export function App() {
     ),
     [query, setQuery] = useState(""),
     [artist, setArtist] = useState("");
+  const [exactSearch, setExactSearch] = useState(false);
   const [tag, setTag] = useState("");
   const [initialQuery, setInitialQuery] = useState("");
   const [songSort, setSongSort] = useState("title");
@@ -529,7 +532,7 @@ export function App() {
             <div className="app-version">
               <span>v{admin?.version || buildVersion}</span>
               <a
-                href="https://github.com/xudong7587/haohaochang"
+                href="https://github.com/xudong7587/haohaochang-KTV"
                 target="_blank"
                 rel="noreferrer"
               >
@@ -708,32 +711,21 @@ export function App() {
                   <span className="pill">本地曲库</span>
                 )}
               </div>
-              <div className="library-search">
-                <SearchBox query={query} setQuery={setQuery} />
-                {isWebRoom && (
-                  <button
-                    className="song-sort"
-                    aria-label="切换歌曲排序"
-                    onClick={() =>
-                      setSongSort((value) =>
-                        value === "title" ? "random" : "title",
-                      )
-                    }
+              {!isWebRoom && (
+                <div className="library-search">
+                  <SearchBox query={query} setQuery={setQuery} />
+                  <select
+                    aria-label="按标签筛选"
+                    value={tag}
+                    onChange={(e) => setTag(e.target.value)}
                   >
-                    {songSort === "title" ? "歌名排序" : "随机"}
-                  </button>
-                )}
-                <select
-                  aria-label="按标签筛选"
-                  value={tag}
-                  onChange={(e) => setTag(e.target.value)}
-                >
-                  <option value="">全部标签</option>
-                  {tagOptions.map((t) => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
+                    <option value="">全部标签</option>
+                    {tagOptions.map((t) => (
+                      <option key={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {artist && (
                 <button
                   className="back"
@@ -747,6 +739,39 @@ export function App() {
                 </button>
               )}
               <InitialResults
+                tools={
+                  isWebRoom && (
+                    <div className="catalogue-tools">
+                      <div className="catalogue-tool-buttons">
+                        <button
+                          aria-label="精确搜索"
+                          aria-expanded={exactSearch}
+                          onClick={() => setExactSearch(!exactSearch)}
+                        >
+                          <Search size={19} />
+                        </button>
+                        {tab === "songs" && (
+                          <button
+                            aria-label="切换歌曲排序"
+                            title={
+                              songSort === "title" ? "歌名排序" : "随机排序"
+                            }
+                            onClick={() =>
+                              setSongSort((value) =>
+                                value === "title" ? "random" : "title",
+                              )
+                            }
+                          >
+                            <SlidersHorizontal size={19} />
+                          </button>
+                        )}
+                      </div>
+                      {exactSearch && (
+                        <SearchBox query={query} setQuery={setQuery} />
+                      )}
+                    </div>
+                  )
+                }
                 value={initialQuery}
                 onChange={(value) => {
                   setInitialQuery(value);
@@ -849,6 +874,39 @@ export function App() {
                 <Users size={30} />
               </div>
               <InitialResults
+                tools={
+                  isWebRoom && (
+                    <div className="catalogue-tools">
+                      <div className="catalogue-tool-buttons">
+                        <button
+                          aria-label="精确搜索"
+                          aria-expanded={exactSearch}
+                          onClick={() => setExactSearch(!exactSearch)}
+                        >
+                          <Search size={19} />
+                        </button>
+                        {tab === "songs" && (
+                          <button
+                            aria-label="切换歌曲排序"
+                            title={
+                              songSort === "title" ? "歌名排序" : "随机排序"
+                            }
+                            onClick={() =>
+                              setSongSort((value) =>
+                                value === "title" ? "random" : "title",
+                              )
+                            }
+                          >
+                            <SlidersHorizontal size={19} />
+                          </button>
+                        )}
+                      </div>
+                      {exactSearch && (
+                        <SearchBox query={query} setQuery={setQuery} />
+                      )}
+                    </div>
+                  )
+                }
                 value={initialQuery}
                 onChange={(value) => {
                   setInitialQuery(value);

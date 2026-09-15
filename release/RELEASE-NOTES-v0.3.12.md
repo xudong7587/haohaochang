@@ -24,4 +24,4 @@ APK 首次启动约用 8 秒寻找同一局域网的 NAS，找到后直接进入
 
 真实雷鸟鹏7 FF85S575C-4FAA 的安装、解码、遥控器和家庭 LAN 广播仍需实机确认。本次未自动部署 NAS，也未修改正式曲库。
 
-附件包含 NAS 配置包、PC 整理器、APK、独立重命名工具与 SHA-256 校验清单。[完整使用手册](https://github.com/xudong7587/haohaochang/blob/main/docs/USER-GUIDE.md)。
+附件包含 NAS 配置包、PC 整理器、APK、独立重命名工具与 SHA-256 校验清单。[完整使用手册](https://github.com/xudong7587/haohaochang-KTV/blob/main/docs/USER-GUIDE.md)。

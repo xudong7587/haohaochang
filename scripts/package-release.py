@@ -15,8 +15,8 @@ release.mkdir(exist_ok=True)
 version = json.loads((root / 'package.json').read_text(encoding='utf-8'))['version']
 guide = (root / 'docs/USER-GUIDE.md').read_text(encoding='utf-8')
 for document in ['VALIDATION.md', 'DEVELOPMENT.md', 'PROJECT-STATUS.md']:
-    guide = guide.replace('(' + document + ')', '(https://github.com/xudong7587/haohaochang/blob/main/docs/' + document + ')')
-guide = guide.replace('(../pc-worker/README.md)', '(https://github.com/xudong7587/haohaochang/blob/main/pc-worker/README.md)')
+    guide = guide.replace('(' + document + ')', '(https://github.com/xudong7587/haohaochang-KTV/blob/main/docs/' + document + ')')
+guide = guide.replace('(../pc-worker/README.md)', '(https://github.com/xudong7587/haohaochang-KTV/blob/main/pc-worker/README.md)')
 
 bundles = {
     f'haohaochang-nas-v{version}.zip': ['docker-compose.yaml', 'docs/NPU.md', f'release/haohaochang-tv-v{version}.apk', 'release/实机测试说明.md'],
@@ -48,7 +48,7 @@ pc_archive = release / f'haohaochang-resource-ai-v{version}.zip'
 notes_file = release / f'RELEASE-NOTES-v{version}.md'
 index = dict(schema=1, version=version,
              notes=notes_file.read_text(encoding='utf-8')[:3000] if notes_file.exists() else '',
-             pc=dict(url=f'https://github.com/xudong7587/haohaochang/releases/download/v{version}/{pc_archive.name}',
+             pc=dict(url=f'https://github.com/xudong7587/haohaochang-KTV/releases/download/v{version}/{pc_archive.name}',
                      size=pc_archive.stat().st_size, sha256=hashlib.sha256(pc_archive.read_bytes()).hexdigest()))
 (release / 'haohaochang-pc-update.json').write_text(json.dumps(index, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 

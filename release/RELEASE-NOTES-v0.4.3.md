@@ -16,4 +16,4 @@ v0.4.2 构建失败，未公开为正式 Release；此次修复后以 v0.4.3 发
 
 附件统一为 `haohaochang-nas-v0.4.3.zip`、`haohaochang-tv-v0.4.3.apk`、`haohaochang-resource-ai-v0.4.3.zip`、`haohaochang-preprocess-v0.4.3.zip` 和 `SHA256SUMS-v0.4.3.txt`。客户端附件供新安装或可选更新，TV 原生播放与 PC 处理逻辑保持不变。
 
-本地 162 项 Node 测试、空缓存依赖安装、生产构建和 14 组浏览器回归通过。家庭 NAS、TV 与真实 B站图片仍需升级后验收；发布构建和镜像状态见 [Actions](https://github.com/xudong7587/haohaochang/actions)。
+本地 162 项 Node 测试、空缓存依赖安装、生产构建和 14 组浏览器回归通过。家庭 NAS、TV 与真实 B站图片仍需升级后验收；发布构建和镜像状态见 [Actions](https://github.com/xudong7587/haohaochang-KTV/actions)。

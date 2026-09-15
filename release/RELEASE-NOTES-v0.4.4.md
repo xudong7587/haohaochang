@@ -11,4 +11,4 @@
 
 附件包括版本化的 NAS、TV、PC、重命名工具包，`SHA256SUMS-v0.4.4.txt`，以及供更新器读取的 `haohaochang-pc-update.json`。无需配置 GitHub 令牌。
 
-本地 16 项 PC 更新测试、PC 网页回归和托盘脚本语法检查通过。未操作用户的实际 PC；发布结果以 [Actions](https://github.com/xudong7587/haohaochang/actions) 为准。
+本地 16 项 PC 更新测试、PC 网页回归和托盘脚本语法检查通过。未操作用户的实际 PC；发布结果以 [Actions](https://github.com/xudong7587/haohaochang-KTV/actions) 为准。

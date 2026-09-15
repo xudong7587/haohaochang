@@ -12,4 +12,4 @@
 
 附件统一为 `haohaochang-nas-v0.4.2.zip`、`haohaochang-tv-v0.4.2.apk`、`haohaochang-resource-ai-v0.4.2.zip`、`haohaochang-preprocess-v0.4.2.zip` 和 `SHA256SUMS-v0.4.2.txt`。客户端附件供新安装或可选更新，TV 原生播放与 PC 处理逻辑保持不变。
 
-本地 161 项 Node 测试、生产构建、曲库及在线播放器浏览器回归通过。家庭 NAS、TV 与真实 B站图片仍需升级后验收；发布构建和镜像状态见 [Actions](https://github.com/xudong7587/haohaochang/actions)。
+本地 161 项 Node 测试、生产构建、曲库及在线播放器浏览器回归通过。家庭 NAS、TV 与真实 B站图片仍需升级后验收；发布构建和镜像状态见 [Actions](https://github.com/xudong7587/haohaochang-KTV/actions)。

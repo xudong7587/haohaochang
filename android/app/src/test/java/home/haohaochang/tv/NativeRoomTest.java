@@ -140,6 +140,9 @@ public class NativeRoomTest {
     press(KeyEvent.KEYCODE_DPAD_RIGHT);
     assertTrue(find("歌曲卡片").hasFocus());
     press(KeyEvent.KEYCODE_DPAD_UP);
+    assertTrue(find("精确搜索").hasFocus());
+    press(KeyEvent.KEYCODE_DPAD_CENTER);
+    layout(960, 540);
     assertTrue(find("搜索歌名或歌手").hasFocus());
     press(KeyEvent.KEYCODE_DPAD_RIGHT);
     assertTrue(find("搜索").hasFocus());
@@ -338,7 +341,7 @@ public class NativeRoomTest {
     drain();
     layout(960, 540);
     assertTrue(paths.stream().anyMatch(path -> path.contains("sort=title")));
-    find("搜索").requestFocusFromTouch();
+    find("精确搜索").requestFocusFromTouch();
     press(KeyEvent.KEYCODE_DPAD_RIGHT);
     assertTrue(find("切换歌名排序或随机").hasFocus());
     press(KeyEvent.KEYCODE_DPAD_CENTER);
@@ -516,7 +519,7 @@ public class NativeRoomTest {
   }
 
   @Test
-  public void phoneCatalogueGivesMostOfTheScreenToCards() throws Exception {
+  public void phoneCatalogueKeepsInitialsAndCardsReachable() throws Exception {
     JSONArray songs = new JSONArray();
     for (int i = 0; i < 24; i++) songs.put(RoomApi.object(
         "id", "song-" + i, "title", "歌曲 " + i, "artist", "测试歌手"));
@@ -527,14 +530,17 @@ public class NativeRoomTest {
       layout(size[0], size[1]);
       View grid = find("歌曲卡片");
       double fraction = (double) grid.getWidth() * grid.getHeight() / (size[0] * size[1]);
-      assertTrue("card area " + fraction, fraction > (size[0] < size[1] ? .70 : .60));
-      assertFalse(find("首字母 A").isShown());
-      assertTrue(find("搜索歌名或歌手").getHeight() >= 40);
+      assertTrue("card area " + fraction, fraction > .55);
+      assertTrue(find("首字母 A").isShown());
+      assertTrue(find("精确搜索").isShown());
+      assertFalse(find("搜索歌名或歌手").isShown());
+
       for (String label : new String[] {"暂停", "切歌", "切换原唱伴奏", "全屏播放"}) {
         View control = find(label);
         int[] xy = new int[2];
         control.getLocationInWindow(xy);
         assertTrue(label, control.isShown() && xy[0] >= 0 && xy[0] + control.getWidth() <= size[0]);
+        assertEquals(label + " must stay square", control.getWidth(), control.getHeight());
       }
       java.io.File folder = new java.io.File("build/test-screenshots");
       folder.mkdirs();

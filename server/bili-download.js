@@ -49,6 +49,7 @@ export async function downloadBiliTracks(
   {
     resolve = (...args) => bilibiliProvider.preview(...args),
     transfer = downloadStream,
+    progress = () => {},
   } = {},
 ) {
   quality = videoQuality(quality);
@@ -97,13 +98,19 @@ export async function downloadBiliTracks(
         streams.video,
         path.join(staging, "video.mp4"),
         2 * 1024 ** 3,
-        { backups: streams.videoBackups },
+        {
+          backups: streams.videoBackups,
+          progress: (percent) => progress("下载画面", percent),
+        },
       );
       await transfer(
         streams.audio,
         path.join(staging, "audio.m4a"),
         200 * 1024 ** 2,
-        { backups: streams.audioBackups },
+        {
+          backups: streams.audioBackups,
+          progress: (percent) => progress("下载原唱", percent),
+        },
       );
       const height = await validate(
         path.join(staging, "audio.m4a"),
@@ -122,7 +129,7 @@ export async function downloadStream(
   value,
   target,
   maximum,
-  { backups = [], fetcher = taskFetch } = {},
+  { backups = [], fetcher = taskFetch, progress = () => {} } = {},
 ) {
   let last;
   for (const url of biliStreamCandidates(value, backups)) {
@@ -160,6 +167,7 @@ export async function downloadStream(
         throw new Error("B站轨道超过下载大小限制");
       }
       let bytes = 0;
+      progress(length ? 0 : null);
       await pipeline(
         Readable.fromWeb(response.body),
         new Transform({
@@ -167,6 +175,8 @@ export async function downloadStream(
             clearTimeout(stalled);
             stalled = setTimeout(() => controller.abort(), 30000);
             bytes += chunk.length;
+            if (length)
+              progress(Math.min(99, Math.floor((bytes * 100) / length)));
             callback(
               bytes > maximum ? new Error("B站轨道超过下载大小限制") : null,
               chunk,
@@ -187,6 +197,7 @@ export async function downloadStream(
       )
         throw new Error("B站轨道传输不完整");
       await rename(temporary, target);
+      progress(100);
       return;
     } catch (error) {
       checkTaskCancellation();

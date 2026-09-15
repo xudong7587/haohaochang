@@ -35,7 +35,7 @@ $updateLabel.SetBounds(24,305,570,48)
 $downloadLink = New-Object Windows.Forms.LinkLabel
 $downloadLink.Text = '手动下载更新包'
 $downloadLink.SetBounds(24,410,570,24)
-$downloadLink.Add_LinkClicked({ Start-Process 'https://github.com/xudong7587/haohaochang/releases/latest' })
+$downloadLink.Add_LinkClicked({ Start-Process 'https://github.com/xudong7587/haohaochang-KTV/releases/latest' })
 $buttons = @()
 foreach ($spec in @(@('查看详细任务',24,145), @('检查更新',182,128), @('退出整理器',324,128), @('隐藏窗口',465,128))) {
   $button = New-Object Windows.Forms.Button

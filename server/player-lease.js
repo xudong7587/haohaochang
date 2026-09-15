@@ -48,7 +48,7 @@ export function createPlayerLease({
     const changed = owner?.id !== id || !online();
     if (changed) revision++;
     owner = { id, type: kind, seen: time };
-    return { changed, owner: snapshot() };
+    return { changed, freshClaim, owner: snapshot() };
   }
   return { heartbeat, snapshot, owns: (id) => online() && owner.id === id };
 }

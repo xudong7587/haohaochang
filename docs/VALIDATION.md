@@ -1,3 +1,10 @@
+# v1.0.8 本地验证（2026-09-15）
+
+Node 236 项中 235 通过、1 项 Linux 专属跳过，包含实际下载字节进度、视频失败重试、歌房隔离和持久随机轮次；前端构建通过。浏览器点歌布局、在线单行进度、横竖屏和播放权回归通过。Android 40 项、lint 与 APK 构建通过，按钮增加宽高相等断言。PC 更新器 16 项通过。
+
+USB 手机使用独立 localhost 测试曲库，确认单次触屏操作、顶部无额外黑条、点歌无整体遮罩、竖屏裁切填满、横屏完整画面和暂停按钮正圆。测试后恢复原有旋转设置。没有访问或修改生产 NAS；正式镜像与签名 APK 结果见 v1.0.8 Actions 和 Release。
+
+---
 # v0.3.14 本地验证（2026-09-10）
 
 ## v0.3.14 下载线路、人工选片与任务操作
@@ -42,7 +49,7 @@
 - 封面测试包含管理员认证、候选有效期、旧修订拒绝、已有封面替换、原始图片上传、无效图片保留旧图、取消选择、只读预览禁写、移动端布局与音频不变。B站搜索只生成图片候选，不创建下载任务。
 - 中文歌词测试覆盖 QQ 与网易云响应解析、时间戳、文字实体、来源后备、无时间戳拒绝、歌手／录音版本候选及超大响应／重定向拒绝。浏览器验证多候选不会覆盖草稿，用户选择后才载入，保存请求不携带整份候选列表。
 - 本地真实预览已通过：周深《沉默的羔羊》B站搜索返回 20 张候选；QQ 音乐返回周深 Live 版本的 73 行带时间戳歌词和其他版本候选。网易云在当前公司网络的 TLS 连接被重置，真实连接未通过验收；协议替身和失败后备通过。
-- 本轮在 `codex/cover-picker-lyrics-candidates` 开发，用户授权推送、合并 main 和发布。生产 NAS 未写入；发布结果以 [v0.3.11 Release](https://github.com/xudong7587/haohaochang/releases/tag/v0.3.11) 与同提交 Actions 为准。预览仍是 `http://127.0.0.1:3212/admin`。
+- 本轮在 `codex/cover-picker-lyrics-candidates` 开发，用户授权推送、合并 main 和发布。生产 NAS 未写入；发布结果以 [v0.3.11 Release](https://github.com/xudong7587/haohaochang-KTV/releases/tag/v0.3.11) 与同提交 Actions 为准。预览仍是 `http://127.0.0.1:3212/admin`。
 
 ---
 # v0.3.10 本地验证（2026-09-10）
@@ -117,7 +124,7 @@
 - 真实 FFmpeg 配合模拟分离服务验证 PC 优先、PC/API 并行、PC 离线回退及导入双版本；未执行真实 GPU 模型或收费 API。
 - 前端生产构建、浏览器联动和 stage-check 通过；720p 默认随机原唱、点播伴奏接管及整理预览已检查。
 - PC Python 语法与 PowerShell 启动脚本语法检查通过；首次依赖安装与 4070 Super 推理待实机验证。
-- 功能提交 826aa07 的 GitHub 检查通过，[镜像发布任务](https://github.com/xudong7587/haohaochang/actions/runs/34176288228) 的主服务和分离服务构建、启动检查均成功。
+- 功能提交 826aa07 的 GitHub 检查通过，[镜像发布任务](https://github.com/xudong7587/haohaochang-KTV/actions/runs/34176288228) 的主服务和分离服务构建、启动检查均成功。
 - 本轮交付四端使用说明；旧记录中的 Origin 限制已移除，目前使用密码/客厅凭证验证身份。旧测试数量为对应阶段记录，以本节为准。
 
 网页歌房补充：/play 独立入口、后台新标签打开并复用客厅凭证、模拟反代地址的二维码免密加入和手机掌声上屏通过；16 组回归与生产构建通过。浏览器反代测试使用请求转发模拟，手机 SSE 未在该模拟中转发，真实 Lucky 长连接仍需现场验收。
@@ -147,10 +154,10 @@ CI 配置同步执行 Node、三类浏览器测试、Python 分离协议 9 项�
 本批全程使用隔离数据库、合成媒体与 localhost；未向实际曲库添加示例。真实 NAS／手机／TV 音响、长期播放、音乐 GPU 分离音质和收费 API 尚未重新验收。此前合成 CUDA 样本结果仅为历史记录。
 
 
-发布前 CI：提交 `b59256fad9392bfeff4fc24209e49008e6679b3d` 的 [Validate and build](https://github.com/xudong7587/haohaochang/actions/runs/34250451823) 全部成功：69 项 Node 回归、三类 Chromium 浏览器验收、9 项 Python 协议测试、Docker 主服务构建和 Android debug APK 构建。两次旧失败记录来自播放器测试读取状态时意外授予用户激活；改为不授予激活的 CDP 状态读取后，本地 Chromium／Edge 和 Linux CI 均通过，原生声音授权断言保留。
+发布前 CI：提交 `b59256fad9392bfeff4fc24209e49008e6679b3d` 的 [Validate and build](https://github.com/xudong7587/haohaochang-KTV/actions/runs/34250451823) 全部成功：69 项 Node 回归、三类 Chromium 浏览器验收、9 项 Python 协议测试、Docker 主服务构建和 Android debug APK 构建。两次旧失败记录来自播放器测试读取状态时意外授予用户激活；改为不授予激活的 CDP 状态读取后，本地 Chromium／Edge 和 Linux CI 均通过，原生声音授权断言保留。
 
 
-v0.2.0 发布提交为 `f50c823395981343fcff69bbd8740169b84dc408`，已合并 main，并将 main 设为默认分支，master 保留。该标签的 [完整 CI](https://github.com/xudong7587/haohaochang/actions/runs/34250820363) 和 [两套镜像构建／启动／latest 提升](https://github.com/xudong7587/haohaochang/actions/runs/34250820961) 均成功。APK 从该标签 CI 新构建，清单版本 0.2.0，ZIP 完整性与 SHA256 已检查；未重新使用旧 APK。
+v0.2.0 发布提交为 `f50c823395981343fcff69bbd8740169b84dc408`，已合并 main，并将 main 设为默认分支，master 保留。该标签的 [完整 CI](https://github.com/xudong7587/haohaochang-KTV/actions/runs/34250820363) 和 [两套镜像构建／启动／latest 提升](https://github.com/xudong7587/haohaochang-KTV/actions/runs/34250820961) 均成功。APK 从该标签 CI 新构建，清单版本 0.2.0，ZIP 完整性与 SHA256 已检查；未重新使用旧 APK。
 
 ## v0.3.0 · 2026-09-09
 
@@ -158,7 +165,7 @@ v0.2.0 发布提交为 `f50c823395981343fcff69bbd8740169b84dc408`，已合并 ma
 
 真实公开 B站搜索返回 20 条；视频预览解析得到独立画面/音频流，NAS 代理两路 Range=bytes=0-1023 均返回 206 与 1024 字节。yt-dlp 重复请求曾触发平台 412，改为播放器 API 优先、yt-dlp 后备，并增加缓存与重试提示。此验证不代表所有视频、Cookie、地区或未来平台变化均可用。
 
-PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时长在 0.15 秒容差内且保留音视频轨道；原输入保留，重试复用任务/结果。LAN 发现测试通过内存 UDP 替身及 localhost HTTP 验证，不代表已测试家庭广播、Docker host 网络或 Windows 防火墙。没有做本版本真实音乐 GPU 音质或家庭 TV 音响验收。发布提交 f9739bdfaa1edc73474a6436d9b17068c2a17316 的 [标签 CI](https://github.com/xudong7587/haohaochang/actions/runs/34312286038)、[main CI](https://github.com/xudong7587/haohaochang/actions/runs/34312285811) 和 [两套镜像启动检查及 latest 更新](https://github.com/xudong7587/haohaochang/actions/runs/34312286052) 均全部成功。
+PC 裁剪使用真实 FFmpeg，4 秒合成视频取 1.25–2.75 秒，结果时长在 0.15 秒容差内且保留音视频轨道；原输入保留，重试复用任务/结果。LAN 发现测试通过内存 UDP 替身及 localhost HTTP 验证，不代表已测试家庭广播、Docker host 网络或 Windows 防火墙。没有做本版本真实音乐 GPU 音质或家庭 TV 音响验收。发布提交 f9739bdfaa1edc73474a6436d9b17068c2a17316 的 [标签 CI](https://github.com/xudong7587/haohaochang-KTV/actions/runs/34312286038)、[main CI](https://github.com/xudong7587/haohaochang-KTV/actions/runs/34312285811) 和 [两套镜像启动检查及 latest 更新](https://github.com/xudong7587/haohaochang-KTV/actions/runs/34312286052) 均全部成功。
 
 ## 2026-09-09 · v0.3.1 本地验证
 

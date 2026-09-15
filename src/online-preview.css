@@ -34,3 +34,29 @@
   overscroll-behavior: contain;
   padding: 20px 22px;
 }
+
+.online-current-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.online-current-progress .online-progress-song {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 30%;
+}
+.online-current-progress progress {
+  flex: 1;
+  min-width: 48px;
+  width: 120px;
+  height: 5px;
+  accent-color: #b49bea;
+}
+.online-current-progress small {
+  min-width: 30px;
+  font-variant-numeric: tabular-nums;
+}
