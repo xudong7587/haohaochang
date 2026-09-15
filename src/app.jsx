@@ -263,7 +263,7 @@ export function App() {
     };
   }, [authenticated, refresh, taskRefresh]);
   const navigation = useTvNavigation({
-    enabled: route === "tv" && roomReady,
+    enabled: route === "tv" && !choosingRoom,
     nested: route === "tv" && !isWebRoom,
     tab,
     artist,

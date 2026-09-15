@@ -203,7 +203,8 @@ try {
   assert.ok(feedbackBox.y >= 0 && feedbackBox.y + feedbackBox.height <= 1000);
   await page.screenshot({ path: "test-results/poster/editor-feedback.png" });
   await page.getByRole("button", { name: "关闭歌曲详情", exact: true }).click();
-  for (const route of ["/play", "/tv"]) {
+  // Legacy /tv keeps the recommendation wall; /play opens its permanent stage.
+  for (const route of ["/tv"]) {
     await page.goto(base + route);
     await page.locator(".stage-card img").first().waitFor();
     assert.ok(
@@ -217,6 +218,10 @@ try {
     await page.goto(base + route);
     await page.getByRole("button", { name: "歌名点歌", exact: true }).click();
     await page.locator(".song-poster-card").first().waitFor();
+    await page.waitForFunction(() => {
+      const image = document.querySelector(".song-poster-card img");
+      return image?.complete && image.naturalWidth > 0;
+    });
     const colors = await page.evaluate(() => {
       const luminance = (color) => {
         const rgb = color
