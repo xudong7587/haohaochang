@@ -2,7 +2,7 @@
 
 ## v1.0.7 主容器分离整合（待发布）
 
-统一人声分离页包含 PC、NPU、CPU 状态与开关；PC 仍独立，内部 NPU 和 CPU 自动连接。唯一 Compose 使用 host 网络并映射可选 accel 目录。主镜像包含 CPU Demucs，amd64 同时包含既有 OpenVINO NPU 运行时和模型。沿用 data、曲库、任务与 PC 配置，模型／编译缓存优先使用旧目录。CPU 单任务、2 线程、nice 10，允许 6 小时。开关保留旧配置字段，重试优先恢复已有服务断点。本地 Node 全量 234 项：233 通过、1 项 Linux 专属跳过。分离定向、统一设置页浏览器回归、前端构建通过。Python 协议 16 项（2 跳过）与 NPU 替身 4 项通过；合并镜像和真实 NPU 设备仍待验证。
+统一人声分离页包含 PC、NPU、CPU 状态与开关；PC 仍独立，内部 NPU 和 CPU 自动连接。唯一 Compose 使用 host 网络并映射可选 accel 目录。主镜像包含 CPU Demucs，amd64 同时包含既有 OpenVINO NPU 运行时和模型。沿用 data、曲库、任务与 PC 配置，模型／编译缓存优先使用旧目录。CPU 单任务、2 线程、nice 10，允许 6 小时。开关保留旧配置字段，重试优先恢复已有服务断点。本地 Node 全量 234 项：233 通过、1 项 Linux 专属跳过。分离定向、统一设置页浏览器回归、前端构建通过。Python 协议 16 项（2 跳过）与 NPU 替身 4 项通过；CI 已在 Linux amd64、arm64 合并镜像中通过真实 pretrained htdemucs 短音频分离、无 NPU 回退、内部鉴权与输出校验，旧独立分离镜像也通过兼容构建。首轮完整 CI（网页、Android、Windows 启动器、Python 协议）通过。新版主容器的真实 NPU 设备访问仍待 NAS 验证。
 
 
 ## v1.0.6 本轮补充
