@@ -261,7 +261,7 @@ export function Player({
       clearTimeout(hide);
       clearInterval(interval);
     };
-  }, [full, queue.length > 0]);
+  }, [full, JSON.stringify(queue.map((song) => song.id))]);
   function exitNativeFullscreen() {
     if (document.fullscreenElement)
       fullscreenExit.current = document.exitFullscreen().catch(() => {});
@@ -361,6 +361,9 @@ export function Player({
             event.preventDefault();
             fullscreen();
           }
+        }}
+        onClick={(event) => {
+          if (!full && !event.target.closest("button, a")) fullscreen();
         }}
       >
         <video

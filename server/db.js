@@ -18,6 +18,10 @@ export function openStore(dir) {
       backing INTEGER DEFAULT 0, vocal INTEGER DEFAULT 0, status TEXT DEFAULT 'new', error TEXT DEFAULT '',
       source TEXT DEFAULT 'local', created INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS queue (id TEXT PRIMARY KEY, song_id TEXT NOT NULL REFERENCES songs(id), name TEXT NOT NULL, position INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, token TEXT UNIQUE NOT NULL, created INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS queue_rooms (entry_id TEXT PRIMARY KEY REFERENCES queue(id) ON DELETE CASCADE, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE);
+    CREATE INDEX IF NOT EXISTS queue_rooms_room ON queue_rooms(room_id);
+    CREATE TABLE IF NOT EXISTS task_room_deliveries (job_id TEXT NOT NULL, room_id TEXT NOT NULL, song_id TEXT NOT NULL, PRIMARY KEY(job_id,room_id,song_id));
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, error TEXT DEFAULT '', created INTEGER NOT NULL);
   `);
@@ -131,6 +135,11 @@ export function openStore(dir) {
     set("playback", { paused: false, vocal: false, revision: 0 });
   db.prepare(
     "UPDATE jobs SET status='queued',error='' WHERE status='running'",
+  ).run();
+  // Older versions paused these downloads before fetching or clipping media.
+  // They can now continue on the NAS; separation jobs retain their own policy.
+  db.prepare(
+    "UPDATE jobs SET status='queued',stage='',error='' WHERE status='waiting-worker' AND kind='download' AND (json_extract(payload,'$.onlineSelection')=1 OR json_type(payload,'$.clip')='object')",
   ).run();
   return { db, get, set, configPath };
 }

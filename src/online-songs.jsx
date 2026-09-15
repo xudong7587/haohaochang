@@ -10,7 +10,29 @@ import "./online-preview.css";
 const time = (n) =>
   `${Math.floor((n || 0) / 60)}:${((n || 0) % 60).toFixed(1).padStart(4, "0")}`;
 const mediaUrl = (url) =>
-  url ? `${url}?token=${encodeURIComponent(roomToken)}` : undefined;
+  url
+    ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(roomToken)}`
+    : undefined;
+
+function VideoCover({ row }) {
+  const path = row.coverPath?.startsWith("/api/online/cover?")
+    ? row.coverPath
+    : row.cover
+      ? `/api/online/cover?url=${encodeURIComponent(row.cover.replace(/^\/\//, "https://").replace(/^http:/, "https:"))}`
+      : "";
+  const [failed, setFailed] = useState("");
+  return path && failed !== path ? (
+    <img
+      src={mediaUrl(path)}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(path)}
+    />
+  ) : (
+    <span>视频预览</span>
+  );
+}
 
 export function VideoPreview({
   selection,
@@ -107,7 +129,7 @@ export function VideoPreview({
           ? "已提交视频更新，旧资源在新版本验证完成前继续保留。"
           : mobile
             ? "已优先安排整理，完成后自动加入已点歌曲；画面下载失败会尝试音频与歌词。"
-            : "已加入整理任务：下载 → PC 裁剪与分离 → 入库。可在后台任务查看进度。",
+            : "已加入整理任务：下载 → 按需裁剪与分离 → 入库。可在后台任务查看进度。",
       );
     } catch (e) {
       setError(e.message);
@@ -501,16 +523,7 @@ export function OnlineSongs({
             onClick={() => setSelection({ row, ...data.identity })}
           >
             <div className="video-card-image">
-              {row.cover ? (
-                <img
-                  src={row.cover}
-                  alt=""
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <span>视频预览</span>
-              )}
+              <VideoCover row={row} />
               <span className="video-duration">{time(row.duration)}</span>
             </div>
             <strong>{row.title}</strong>

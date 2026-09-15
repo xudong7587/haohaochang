@@ -43,7 +43,8 @@ final class NativeRoomOverlay extends LinearLayout implements AutoCloseable {
     code.setOrientation(VERTICAL);
     code.setGravity(Gravity.CENTER);
     code.setPadding(dp(8), dp(8), dp(8), dp(6));
-    code.setBackground(TvStyle.shape(context, 0xe6221d2d, 10));
+    code.setBackground(TvStyle.surface(context, 0xf532283f, 0xf21d1826, 12, 0x22eadcff));
+    code.setElevation(dp(3));
     addView(code, new LayoutParams(dp(112), -2));
     qr = new ImageView(context);
     qr.setContentDescription("手机扫码点歌二维码");
@@ -55,7 +56,8 @@ final class NativeRoomOverlay extends LinearLayout implements AutoCloseable {
     queuePanel = new LinearLayout(context);
     queuePanel.setOrientation(VERTICAL);
     queuePanel.setPadding(dp(12), dp(9), dp(12), dp(9));
-    queuePanel.setBackground(TvStyle.shape(context, 0xd9221d2d, 10));
+    queuePanel.setBackground(TvStyle.surface(context, 0xee362a45, 0xee211a2c, 12, 0x20eadcff));
+    queuePanel.setElevation(dp(3));
     queuePanel.setContentDescription("全屏已点歌单");
     LayoutParams list = new LayoutParams(dp(176), -2);
     list.topMargin = dp(10);

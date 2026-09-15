@@ -1,7 +1,11 @@
 import { fail } from "./http-utils.js";
 // Ownership belongs to a page instance. Only its first claim may displace a peer;
 // ordinary heartbeats and delayed claim retries can never reclaim a revoked page.
-export function createPlayerLease({ now = Date.now, lifetime = 15000 } = {}) {
+export function createPlayerLease({
+  now = Date.now,
+  lifetime = 15000,
+  preferTv = true,
+} = {}) {
   let owner = null,
     revision = 0;
   const pages = new Map();
@@ -25,7 +29,7 @@ export function createPlayerLease({ now = Date.now, lifetime = 15000 } = {}) {
     const kind = known?.type || (type === "tv" ? "tv" : "web");
     pages.set(id, { ...known, type: kind, seen: time });
     if (online() && owner.id !== id) {
-      if (owner.type === "tv" && kind !== "tv")
+      if (preferTv && owner.type === "tv" && kind !== "tv")
         throw Object.assign(
           fail(409, "TV 正在播放，此页面仅用于点歌和控制。"),
           { code: "PLAYER_TV_PRIORITY" },

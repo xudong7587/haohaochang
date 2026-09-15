@@ -25,6 +25,7 @@ export function mediaApi({
   enqueue,
   snapshot,
   allowedOrigin,
+  rooms,
 }) {
   app.get("/api/media/:id/:variant", member, async (req, res) => {
     if (
@@ -73,11 +74,13 @@ export function mediaApi({
       (req.hostname === "localhost" || req.hostname === "127.0.0.1"
         ? `http://${lan || req.hostname}:${process.env.PORT || 3210}`
         : `${req.protocol}://${req.get("host")}`);
-    const url = `${base.replace(/\/$/, "")}/control#${get("roomToken")}`;
+    const room = rooms?.byId(req.roomId);
+    const url = `${base.replace(/\/$/, "")}/control#${room?.token || get("roomToken")}`;
     res.json({
       url,
       qr: await QRCode.toDataURL(url, { width: 220, margin: 2 }),
       configured: !!configured,
+      room: room ? { id: room.id, code: room.code } : undefined,
     });
   });
 }

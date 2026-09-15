@@ -29,6 +29,7 @@ final class RoomSession implements AutoCloseable {
   }
 
   final RoomApi api;
+  String deviceType = "tv";
   final String playerId = "tv-" + UUID.randomUUID();
   private final Listener listener;
   private final Handler main = new Handler(Looper.getMainLooper());
@@ -69,7 +70,7 @@ final class RoomSession implements AutoCloseable {
   private void heartbeat() {
     if (closed || !active || beating || revoked) return;
     beating = true;
-    JSONObject body = RoomApi.object("id", playerId, "type", "tv", "claim", claiming);
+    JSONObject body = RoomApi.object("id", playerId, "type", deviceType, "claim", claiming);
     beats.execute(
         () -> {
           try {

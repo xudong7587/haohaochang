@@ -1,3 +1,4 @@
+import { deliverJobSong } from "../room-targets.js";
 import { metadataFromCandidate } from "../../shared/source-candidate.js";
 import { withSongWrite } from "../song-writes.js";
 import { identifyTitle } from "../../shared/catalog.js";
@@ -216,7 +217,7 @@ export async function importJob(job, payload, context) {
           context.report?.("separating");
           await separateSong(store, song, cache);
         }
-        if (payload.enqueue) enqueue(id, payload.name || "在线点歌");
+        deliverJobSong(store, enqueue, job, id);
       },
       { wait: true, jobId: job.id },
     );

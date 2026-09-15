@@ -8,12 +8,23 @@ if (
   !fromHash.startsWith("pair=") &&
   ["/mobile", "/control"].includes(location.pathname)
 ) {
-  localStorage.setItem("roomToken", fromHash);
+  sessionStorage.setItem("controlRoomToken", fromHash);
   history.replaceState(null, "", location.pathname);
 }
-export let roomToken = localStorage.getItem("roomToken") || "";
+export let roomToken =
+  (["/mobile", "/control"].includes(location.pathname)
+    ? sessionStorage.getItem("controlRoomToken")
+    : "") ||
+  localStorage.getItem("roomToken") ||
+  "";
 export let adminToken = sessionStorage.getItem("adminToken") || "";
-export async function api(url, body, method = "GET", isAdmin = false) {
+export async function api(
+  url,
+  body,
+  method = "GET",
+  isAdmin = false,
+  tokenOverride,
+) {
   const binary = typeof Blob !== "undefined" && body instanceof Blob;
   const response = await fetch("/api" + url, {
     method,
@@ -21,7 +32,7 @@ export async function api(url, body, method = "GET", isAdmin = false) {
       "Content-Type": binary
         ? body.type || "application/octet-stream"
         : "application/json",
-      Authorization: `Bearer ${isAdmin ? adminToken : roomToken}`,
+      Authorization: `Bearer ${tokenOverride ?? (isAdmin ? adminToken : roomToken)}`,
     },
     ...(body !== undefined
       ? { body: binary ? body : JSON.stringify(body) }
@@ -36,6 +47,11 @@ export async function api(url, body, method = "GET", isAdmin = false) {
   return result;
 }
 
+export function selectRoom(room) {
+  roomToken = room.token;
+  sessionStorage.setItem("playRoom", JSON.stringify(room));
+}
+
 export function setAdminToken(value) {
   adminToken = value;
 }
@@ -45,6 +61,8 @@ export function acceptLogin(value) {
   sessionStorage.setItem("adminToken", adminToken);
 }
 export function logout() {
+  sessionStorage.removeItem("controlRoomToken");
+  sessionStorage.removeItem("playRoom");
   localStorage.removeItem("roomToken");
   sessionStorage.removeItem("adminToken");
   location.reload();

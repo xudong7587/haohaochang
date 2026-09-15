@@ -32,7 +32,8 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   private final Activity activity;
   private final RoomSession session;
   private final GridView grid;
-  private final TextView heading, empty, description;
+  private final TextView heading, empty, description, breadcrumb;
+  private boolean compact;
   private final EditText search;
   private final Cards adapter = new Cards();
   private final Handler main = new Handler(Looper.getMainLooper());
@@ -70,9 +71,9 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     this.activity = activity;
     this.session = session;
     setOrientation(VERTICAL);
-    setBackgroundColor(0x4d12101b);
+    setBackground(TvStyle.surface(activity, 0x702a203b, 0x98120f1c, 0, 0));
     setPadding(dp(24), dp(16), dp(20), dp(12));
-    TextView breadcrumb = TvStyle.text(activity, "我的客厅    /    家庭 KTV", 9, TvStyle.MUTED);
+    breadcrumb = TvStyle.text(activity, "我的客厅    /    家庭 KTV", 9, TvStyle.MUTED);
     addView(breadcrumb, new LayoutParams(-1, dp(24)));
     heading = TvStyle.text(activity, "今晚，唱点开心的。", 26, TvStyle.INK);
     heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
@@ -202,6 +203,15 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     return TvStyle.dp(activity, n);
   }
 
+  void compact(boolean value) {
+    if (compact == value) return;
+    compact = value;
+    setBackground(TvStyle.surface(activity, compact ? 0xf0231b31 : 0x702a203b,
+        compact ? 0xf512101a : 0x98120f1c, 0, 0));
+    adapter.notifyDataSetChanged();
+    requestLayout();
+  }
+
   void show(String page) {
     this.page = page;
     artist = "";
@@ -323,7 +333,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
   private void load() {
     sort.setVisibility(page.equals("songs") || !artist.isEmpty() ? VISIBLE : GONE);
     sort.setText(randomOrder ? "随机" : "歌名排序");
-    initialsPanel.setVisibility(page.equals("songs") || page.equals("artists") ? VISIBLE : GONE);
+    initialsPanel.setVisibility(getWidth() >= dp(540) && (page.equals("songs") || page.equals("artists")) ? VISIBLE : GONE);
     query.setVisibility(page.equals("queue") ? GONE : VISIBLE);
     initialLabel.setText(initialQuery.isEmpty() ? "拼音首字母" : initialQuery);
     int request = ++generation;
@@ -344,7 +354,7 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                         ? "分类歌单"
                         : page.equals("queue")
                             ? "已点歌曲"
-                            : page.equals("online") ? "在线找歌" : "今晚，唱点开心的。");
+                            : page.equals("online") ? "在线找歌" : "歌名点歌");
     description.setText(
         page.equals("artists")
             ? "从喜欢的歌手，找到想唱的那一首。"
@@ -587,7 +597,8 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
         card = new LinearLayout(activity);
         card.setOrientation(VERTICAL);
         card.setPadding(dp(5), dp(5), dp(5), dp(7));
-        card.setBackground(TvStyle.focus(activity));
+        card.setBackground(TvStyle.card(activity));
+        card.setElevation(dp(2));
         image = new ImageView(activity);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setClipToOutline(true);
@@ -610,9 +621,10 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
         title.setDuplicateParentStateEnabled(true);
         detail.setDuplicateParentStateEnabled(true);
         action.setDuplicateParentStateEnabled(true);
-        title.setTextColor(TvStyle.ink());
-        detail.setTextColor(TvStyle.ink());
-        action.setTextColor(TvStyle.ink());
+        title.setTextColor(TvStyle.INK);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        detail.setTextColor(TvStyle.MUTED);
+        action.setTextColor(TvStyle.ACCENT);
       } else {
         card = (LinearLayout) convert;
         Object[] views = (Object[]) card.getTag();
@@ -622,6 +634,13 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
         action = (TextView) views[3];
       }
       JSONObject row = rows.optJSONObject(position);
+      card.setPadding(dp(compact ? 4 : 5), dp(compact ? 4 : 5), dp(compact ? 4 : 5), dp(compact ? 6 : 7));
+      title.setTextSize(compact ? 12 : 13);
+      title.setPadding(dp(5), dp(compact ? 4 : 8), dp(5), 0);
+      title.setLayoutParams(new LayoutParams(-1, dp(compact ? 24 : 30)));
+      detail.setLayoutParams(new LayoutParams(-1, dp(compact ? 18 : 22)));
+      detail.setTextColor(TvStyle.MUTED);
+      action.setVisibility(compact ? GONE : VISIBLE);
       card.setActivated(grid.hasFocus() && position == selectedPosition);
       boolean artistCard = page.equals("artists") && artist.isEmpty();
       action.setText(
@@ -629,7 +648,9 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
               ? "查看歌曲  ›"
               : row.has("tag") ? "打开歌单  ›" : page.equals("queue") ? "点击优先" : "＋ 点歌");
       LayoutParams imageParams =
-          new LayoutParams(artistCard ? dp(84) : -1, artistCard ? dp(84) : dp(102));
+          new LayoutParams(artistCard ? dp(compact ? 68 : 84) : -1,
+              artistCard ? dp(compact ? 68 : 84) : compact
+                  ? Math.max(dp(68), Math.min(dp(112), (grid.getColumnWidth() - dp(8)) * 9 / 16)) : dp(102));
       imageParams.gravity = Gravity.CENTER_HORIZONTAL;
       imageParams.topMargin = artistCard ? dp(9) : 0;
       imageParams.bottomMargin = artistCard ? dp(9) : 0;
@@ -650,7 +671,9 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
                       : row.optString("artist", row.optString("author", "")));
       card.setContentDescription(title.getText() + "，" + detail.getText());
       String path =
-          artistCard && row.optBoolean("hasPhoto")
+          page.equals("online")
+              ? onlineCoverPath(row)
+              : artistCard && row.optBoolean("hasPhoto")
               ? "/api/artist-photo/"
                   + RoomApi.encode(row.optString("id"))
                   + "?v="
@@ -711,5 +734,37 @@ final class NativeCatalogue extends LinearLayout implements AutoCloseable {
     images.shutdownNow();
     main.removeCallbacksAndMessages(null);
     cache.evictAll();
+  }
+
+  @Override
+  protected void onMeasure(int widthSpec, int heightSpec) {
+    boolean narrow = compact || MeasureSpec.getSize(widthSpec) < dp(540);
+    setPadding(dp(compact ? 10 : 24), dp(compact ? 8 : 16), dp(compact ? 10 : 20), dp(compact ? 4 : 12));
+    breadcrumb.setVisibility(compact ? GONE : VISIBLE);
+    description.setVisibility(compact ? GONE : VISIBLE);
+    heading.setVisibility(compact && artist.isEmpty() && tag.isEmpty() ? GONE : VISIBLE);
+    heading.setTextSize(compact ? 14 : 22);
+    heading.getLayoutParams().height = dp(compact ? 28 : 34);
+    initialsPanel.setVisibility(!compact && (page.equals("songs") || page.equals("artists")) ? VISIBLE : GONE);
+    query.getLayoutParams().height = dp(compact ? 40 : 46);
+    search.setTextSize(compact ? 12 : narrow ? 13 : 16);
+    find.setTextSize(compact ? 12 : 14);
+    sort.setTextSize(compact ? 11 : 14);
+    sort.getLayoutParams().width = dp(compact ? 64 : narrow ? 76 : 100);
+    find.getLayoutParams().width = dp(compact ? 44 : narrow ? 48 : 72);
+    ((LayoutParams) find.getLayoutParams()).leftMargin = dp(compact ? 6 : 10);
+    grid.setHorizontalSpacing(dp(compact ? 8 : 12));
+    grid.setVerticalSpacing(dp(compact ? 8 : 12));
+    grid.setPadding(dp(2), dp(compact ? 10 : 14), dp(2), dp(4));
+    super.onMeasure(widthSpec, heightSpec);
+  }
+
+  static String onlineCoverPath(JSONObject row) {
+    String path = row.optString("coverPath");
+    if (path.startsWith("/api/online/cover?")) return path;
+    String cover = row.optString("cover");
+    if (cover.startsWith("//")) cover = "https:" + cover;
+    if (cover.startsWith("http:")) cover = "https:" + cover.substring(5);
+    return cover.isEmpty() ? "" : "/api/online/cover?url=" + RoomApi.encode(cover);
   }
 }

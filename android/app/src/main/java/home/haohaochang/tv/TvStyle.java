@@ -32,16 +32,41 @@ final class TvStyle {
     return d;
   }
 
+  static GradientDrawable surface(Context c, int top, int bottom, int radius, int edge) {
+    GradientDrawable d = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {top, bottom});
+    d.setCornerRadius(dp(c, radius));
+    if (edge != 0) d.setStroke(dp(c, 1), edge);
+    return d;
+  }
+
+  static GradientDrawable panel(Context c) {
+    return surface(c, 0xff211a30, 0xff15121e, 0, 0);
+  }
+
+  static GradientDrawable footer(Context c) {
+    return surface(c, 0xff2a2238, 0xff181420, 0, 0x16f3eaff);
+  }
+
+  static StateListDrawable card(Context c) {
+    StateListDrawable d = new StateListDrawable();
+    GradientDrawable focused = surface(c, 0xff4a3c63, 0xff30263e, 12, 0);
+    focused.setStroke(dp(c, 2), 0xffc9b3f8);
+    d.addState(new int[] {android.R.attr.state_activated}, focused);
+    d.addState(new int[] {android.R.attr.state_focused}, focused);
+    d.addState(new int[] {android.R.attr.state_pressed}, surface(c, 0xff443651, 0xff302539, 12, 0x60e4d2ff));
+    d.addState(new int[] {}, surface(c, 0xff30283c, 0xff211b2b, 12, 0x20efe3ff));
+    return d;
+  }
+
   static StateListDrawable focus(Context c) {
     StateListDrawable d = new StateListDrawable();
-    GradientDrawable focused = shape(c, 0xff453957, 10);
+    GradientDrawable focused = surface(c, 0xff4b3b64, 0xff33283e, 10, 0);
     focused.setStroke(dp(c, 2), 0xffe1c8ff);
     d.addState(new int[] {android.R.attr.state_focused}, focused);
     d.addState(new int[] {android.R.attr.state_activated}, focused);
-    d.addState(new int[] {android.R.attr.state_pressed}, shape(c, ACCENT, 10));
-    d.addState(new int[] {android.R.attr.state_selected}, shape(c, ACCENT, 10));
-    GradientDrawable normal = shape(c, SURFACE, 10);
-    normal.setStroke(dp(c, 1), BORDER);
+    d.addState(new int[] {android.R.attr.state_pressed}, surface(c, 0xffdfd0ff, 0xffb7a2e6, 10, 0x40ffffff));
+    d.addState(new int[] {android.R.attr.state_selected}, surface(c, 0xffd4c1fa, 0xffb3a0dc, 10, 0x50ffffff));
+    GradientDrawable normal = surface(c, 0xff2d2539, 0xff211b2c, 10, 0x24eee1ff);
     d.addState(new int[] {}, normal);
     return d;
   }
@@ -68,7 +93,7 @@ final class TvStyle {
   }
 
   static Button button(Context c, String text, String label, Runnable action) {
-    Button b = new Button(c);
+    Button b = new TouchButton(c);
     b.setId(View.generateViewId());
     b.setText(text);
     b.setContentDescription(label);
@@ -96,15 +121,25 @@ final class TvStyle {
     button.setCompoundDrawablePadding(dp(button.getContext(), 7));
   }
 
+  static void phoneTab(Button button) {
+    Context c = button.getContext();
+    StateListDrawable states = new StateListDrawable();
+    states.addState(new int[] {android.R.attr.state_selected}, surface(c, 0xff4b3d62, 0xff332840, 8, 0x30ead7ff));
+    states.addState(new int[] {android.R.attr.state_pressed}, surface(c, 0xff5b4778, 0xff40304f, 8, 0x40ead7ff));
+    states.addState(new int[] {}, shape(c, Color.TRANSPARENT, 6));
+    button.setBackground(states);
+  }
+
   static void primary(Button button) {
     Context c = button.getContext();
     StateListDrawable states = new StateListDrawable();
-    GradientDrawable focused = shape(c, PURPLE, 24);
+    GradientDrawable focused = surface(c, 0xff9b80ef, 0xff6750c4, 24, 0);
     focused.setStroke(dp(c, 3), 0xffe1c8ff);
     states.addState(new int[] {android.R.attr.state_focused}, focused);
-    states.addState(new int[] {android.R.attr.state_pressed}, shape(c, 0xff8879ec, 24));
-    states.addState(new int[] {}, shape(c, PURPLE, 24));
+    states.addState(new int[] {android.R.attr.state_pressed}, surface(c, 0xffb79dff, 0xff7b62d8, 24, 0x55ffffff));
+    states.addState(new int[] {}, surface(c, 0xff9a7deb, 0xff6550c4, 24, 0x40efe3ff));
     button.setBackground(states);
+    button.setElevation(dp(c, 3));
     button.setTextColor(Color.WHITE);
   }
 
@@ -118,6 +153,31 @@ final class TvStyle {
     states.addState(new int[] {}, shape(c, Color.TRANSPARENT, 8));
     button.setBackground(states);
     button.setTextColor(INK);
+  }
+
+  /** Direct touch gets a short response; D-pad navigation remains immediate. */
+  private static final class TouchButton extends Button {
+    TouchButton(Context context) { super(context); }
+
+    @Override public boolean onTouchEvent(android.view.MotionEvent event) {
+      int action = event.getActionMasked();
+      if (isEnabled() && (action == android.view.MotionEvent.ACTION_DOWN
+          || action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL)) {
+        boolean motion = android.provider.Settings.Global.getFloat(
+            getContext().getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0;
+        animate().cancel();
+        float scale = motion && action == android.view.MotionEvent.ACTION_DOWN ? .97f : 1f;
+        animate().scaleX(scale).scaleY(scale).setDuration(motion ? 120 : 0)
+            .setInterpolator(new android.view.animation.PathInterpolator(.23f, 1f, .32f, 1f)).start();
+      }
+      return super.onTouchEvent(event);
+    }
+
+    @Override protected void onDetachedFromWindow() {
+      animate().cancel();
+      setScaleX(1); setScaleY(1);
+      super.onDetachedFromWindow();
+    }
   }
 
   static void iconOnly(Button button, String name) {

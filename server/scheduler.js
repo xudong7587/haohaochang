@@ -7,6 +7,7 @@ import { cleanImportedDownloads } from "./download-cleanup.js";
 import { cleanSongVersions } from "./resource-cleanup.js";
 import { songIdFor, currentSong, withSongWrite } from "./song-writes.js";
 import { resourceManifest } from "./resource-manifest.js";
+import { mergeRoomTargets } from "./room-targets.js";
 export function createScheduler(
   dependencies,
   { enabled = true, execute = runJob, onIdle = () => {} } = {},
@@ -34,7 +35,13 @@ export function createScheduler(
             ...(payload.priority === "mobile"
               ? { priority: "mobile", requestId: p.requestId || existing.id }
               : {}),
-            ...(payload.enqueue ? { enqueue: true, name: payload.name } : {}),
+            ...(payload.enqueue
+              ? {
+                  enqueue: true,
+                  name: payload.name,
+                  enqueueRooms: mergeRoomTargets(p, payload),
+                }
+              : {}),
           }),
           existing.id,
         );
@@ -97,6 +104,10 @@ export function createScheduler(
             ...JSON.parse(duplicate.payload),
             enqueue: true,
             name: payload.name,
+            enqueueRooms: mergeRoomTargets(
+              JSON.parse(duplicate.payload),
+              payload,
+            ),
             ambientOnly: false,
           };
           db.prepare("UPDATE jobs SET payload=? WHERE id=?").run(
@@ -266,6 +277,15 @@ export function createScheduler(
           const nextPriority = fresh.priority || priority;
           return addJob(kind, {
             ...child,
+            roomId: child.roomId || fresh.roomId,
+            ...(["import", "prepare", "acquire", "download"].includes(kind) &&
+            fresh.enqueue
+              ? {
+                  sourceJobId: job.id,
+                  enqueue: true,
+                  enqueueRooms: mergeRoomTargets(fresh, child),
+                }
+              : {}),
             ...(nextPriority ? { priority: nextPriority } : {}),
             ...(fresh.requestId ? { requestId: fresh.requestId } : {}),
             ...(nextPriority === "mobile" && fresh.enqueue
@@ -355,6 +375,9 @@ export function createScheduler(
           priority: "mobile",
           enqueue: true,
           name: fresh.name,
+          roomId: fresh.roomId,
+          sourceJobId: job.id,
+          enqueueRooms: mergeRoomTargets(fresh),
           requestId: fresh.requestId || job.id,
         });
         db.prepare(

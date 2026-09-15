@@ -1,3 +1,4 @@
+import { deliverJobSong } from "../room-targets.js";
 import { replaceVideo } from "../video-replacement.js";
 import { acquireSong, findVideo } from "../acquisition.js";
 import { metadata } from "../library.js";
@@ -55,10 +56,7 @@ export async function acquire(job, payload, context) {
       );
     }
     if (result.id) {
-      const latest = JSON.parse(
-        db.prepare("SELECT payload FROM jobs WHERE id=?").get(job.id).payload,
-      );
-      if (latest.enqueue) enqueue(result.id, latest.name || "在线点歌");
+      deliverJobSong(store, enqueue, job, result.id);
       addJob("find-video", {
         id: result.id,
         title: result.title,

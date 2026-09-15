@@ -376,19 +376,18 @@ test("PC clip transport validates real A/V duration, persists checkpoints and re
   assert.equal(await clipOnPc(store, job, payload, input, dir), file);
   assert.equal(submits, 1);
   store.set("ai", {});
-  await assert.rejects(
-    clipOnPc(store, { id: "waiting" }, payload, input, dir),
-    (e) => e.code === "WAITING_WORKER",
-  );
+  const local = await clipOnPc(store, { id: "offline" }, payload, input, dir);
+  assert.ok(Math.abs((await probe(local)).duration - 1.5) < 0.15);
+  assert.equal((await probe(local)).audio.length, 1);
 });
 
-test("online selection records identity, does not enqueue and waits for PC without writing library fixtures", async (t) => {
+test("online selection records identity and queues without requiring PC or writing library fixtures", async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ktv-online-api-"));
   const service = createApp({
     dataDir: path.join(dir, "db"),
     roots: [path.join(dir, "media")],
     adminToken: "test-only-password",
-    worker: true,
+    worker: false,
     discovery: false,
   });
   const { store } = service;
@@ -427,17 +426,9 @@ test("online selection records identity, does not enqueue and waits for PC witho
   assert.equal(p.artist, "周杰伦");
   assert.equal(p.enqueue, false);
   assert.equal(p.onlineSelection, true);
-  for (let i = 0; i < 20; i++) {
-    if (
-      store.db.prepare("SELECT status FROM jobs WHERE id=?").get(id).status ===
-      "waiting-worker"
-    )
-      break;
-    await new Promise((r) => setTimeout(r, 10));
-  }
   assert.equal(
     store.db.prepare("SELECT status FROM jobs WHERE id=?").get(id).status,
-    "waiting-worker",
+    "queued",
   );
   assert.equal((await (await submit({})).json()).id, id);
 

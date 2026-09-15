@@ -8,6 +8,8 @@ import { canEnqueue, resourceManifest } from "../resource-manifest.js";
 
 import { fail, clean } from "../http-utils.js";
 import { searchSongs } from "../online-search.js";
+import { onlineCoverApi } from "../online-cover.js";
+import { jobRoomTargets } from "../room-targets.js";
 import { previewSessions } from "../online-preview.js";
 import { clipRange } from "../clipping.js";
 import { biliLoginStatus } from "../bili-login.js";
@@ -37,14 +39,17 @@ export function onlineApi({
   emit,
   enqueue,
   snapshot,
+  isPlaying,
   allowedOrigin,
 }) {
   const previews = previewSessions();
+  onlineCoverApi({ app, member });
   app.post("/api/admin/library/:id/refresh-video", admin, (req, res) => {
     const song = currentSong(store, req.params.id);
     assertSongIdle(store, song.id);
     checkRevision(song, req.body.expectedRevision);
     if (
+      isPlaying?.(song.id) ||
       snapshot?.().ambient?.song_id === song.id ||
       db.prepare("SELECT id FROM queue WHERE song_id=?").get(song.id)
     )
@@ -82,33 +87,43 @@ export function onlineApi({
       }),
     });
   });
-  app.get("/api/requests/status", member, (_req, res) => {
+  app.get("/api/requests/status", member, (req, res) => {
     const rows = db
       .prepare(
         "SELECT id,kind,status,stage,payload,error,created FROM jobs WHERE json_extract(payload,'$.priority')='mobile' ORDER BY CASE WHEN status IN ('queued','running','waiting-worker','review') THEN 0 ELSE 1 END, created DESC LIMIT 60",
       )
       .all();
     res.set("Cache-Control", "no-store").json(
-      rows.map((row) => {
-        const p = JSON.parse(row.payload);
-        return {
-          id: row.id,
-          requestId: p.requestId || row.id,
-          title: clean(p.title || p.metadata?.title),
-          artist: clean(p.artist || p.metadata?.artist),
-          status: row.status,
-          stage: row.stage || row.kind,
-          created: row.created,
-          message:
-            row.status === "review"
-              ? "需要管理员核对歌曲或补充歌词"
-              : row.status === "failed"
-                ? "暂未完成，请稍后重试或联系管理员"
-                : row.status === "waiting-worker"
-                  ? "等待 PC 整理器连接"
-                  : "",
-        };
-      }),
+      rows
+        .filter((row) => {
+          const payload = JSON.parse(row.payload);
+          return (
+            jobRoomTargets(store, payload).some(
+              (target) => target.roomId === req.roomId,
+            ) ||
+            (!payload.enqueue && (payload.roomId || "legacy") === req.roomId)
+          );
+        })
+        .map((row) => {
+          const p = JSON.parse(row.payload);
+          return {
+            id: row.id,
+            requestId: p.requestId || row.id,
+            title: clean(p.title || p.metadata?.title),
+            artist: clean(p.artist || p.metadata?.artist),
+            status: row.status,
+            stage: row.stage || row.kind,
+            created: row.created,
+            message:
+              row.status === "review"
+                ? "需要管理员核对歌曲或补充歌词"
+                : row.status === "failed"
+                  ? "暂未完成，请稍后重试或联系管理员"
+                  : row.status === "waiting-worker"
+                    ? "等待 PC 整理器连接"
+                    : "",
+          };
+        }),
     );
   });
   let loginCache;
@@ -187,7 +202,7 @@ export function onlineApi({
       .all(title, artist)
       .find((song) => canEnqueue(store, song, cache));
     if (local) {
-      enqueue(local.id, clean(req.body.name) || "家人");
+      enqueue(local.id, clean(req.body.name) || "家人", req.roomId);
       return res.json({ id: local.id, local: true });
     }
     if (
@@ -200,6 +215,7 @@ export function onlineApi({
       throw fail(429, "在线任务已达到 200 项，请等待部分任务完成");
     res.json({
       id: addJob("acquire", {
+        roomId: req.roomId,
         title,
         artist,
         priority: "mobile",
@@ -238,6 +254,7 @@ export function onlineApi({
     )
       throw fail(429, "在线任务已达到 200 项，请等待部分任务完成");
     const payload = {
+      roomId: req.roomId,
       url: canonicalVideo(req.body.url),
       quality: videoQuality(req.body.quality),
       title: clean(req.body.title) || "在线歌曲",
