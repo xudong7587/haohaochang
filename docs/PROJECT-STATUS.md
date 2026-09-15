@@ -1,4 +1,4 @@
-# 开发状态 · v1.1.0（发布验证）
+# 开发状态 · v1.1.0
 
 ## 主程序与分离容器拆分
 
@@ -8,7 +8,9 @@
 
 网页歌手卡片清除原来的照片外边距，统一 3:2 填满；APK 用图片铺满卡片、底部渐变叠加标题和歌曲数，焦点轮廓保留。所有附件按 1.1.0 重新生成，用户明确要求通过 USB 覆盖安装正式签名 APK。
 
-本地 Node 238 项中 237 通过、1 项 Linux 专属跳过，生产前端构建及网页卡片三种尺寸检查通过；本机分离配置／持久密钥与 ARM 保留旧 NPU 开关的配置回归通过。Android 41 项单测、lint 和构建通过，覆盖三种尺寸歌星照片填满卡片；USB 竖屏确认图片铺满，横屏尚未完成实机验证，手机旋转设置已恢复。云端 Android、Windows、Python 协议通过，实际 Compose 仍在验证，生产 NAS 未改动。
+本地 Node 238 项中 237 通过、1 项 Linux 专属跳过，生产前端构建及网页卡片三种尺寸检查通过；本机分离配置／持久密钥与 ARM 保留旧 NPU 开关的配置回归通过。Android 41 项单测、lint 和构建通过，覆盖三种尺寸歌星照片填满卡片；USB 竖屏确认图片铺满，横屏尚未完成实机验证，手机旋转设置已恢复。正式签名 APK 1.1.0 已通过 USB 覆盖安装，保留应用数据。
+
+云端 Android、Windows、Python 协议通过；[amd64 与 ARM64 主镜像验证](https://github.com/xudong7587/haohaochang-KTV/actions/runs/34943911456) 通过实际发布 Compose 的持久密钥鉴权、真实 pretrained htdemucs 分离、无 NPU 回退，以及只重建主程序后 CPU／NPU 容器 ID 与密钥保持不变。主容器验证不含 PyTorch／OpenVINO，仍可执行 Python、FFmpeg 和图片处理。首次 CI 的配置二次转义问题已改为独立覆盖文件；测试目录清理由容器处理自身生成的 root 文件。正式镜像标签与附件以 [v1.1.0 Release](https://github.com/xudong7587/haohaochang-KTV/releases/tag/v1.1.0) 和对应 Actions 为准，生产 NAS 与实际 NPU 驱动访问仍待部署后确认。
 
 ---
 
